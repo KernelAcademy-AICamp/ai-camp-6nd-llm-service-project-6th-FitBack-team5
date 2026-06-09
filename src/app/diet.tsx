@@ -116,9 +116,32 @@ interface Meal {
 }
 
 // 목표 (PRD: 칼로리 = 체중 × 활동계수, 단백질 = 체중 × 1.5g)
+// 탄·지방 목표는 칼로리를 탄 50% / 단 20% / 지 30%로 배분해 산출 (탄·지 4·9kcal/g)
 const CALORIE_GOAL = 1860;
-const PROTEIN_GOAL = 93;
+const CARB_GOAL = 233; // ≈ CALORIE_GOAL × 0.5 / 4
+const PROTEIN_GOAL = 93; // ≈ 체중 × 1.5g (PRD)
+const FAT_GOAL = 62; // ≈ CALORIE_GOAL × 0.3 / 9
 const BURNED_KCAL = 420; // 운동 데이터 연계 (가데이터)
+
+// ── 운동 데이터 연계 (가데이터) ─────────────────────────────
+// 플로우 4단계: 운동 데이터(운동량·부위·목표·빈도)를 식단과 결합.
+// 실제 운동 데이터 연동 전까지 UI 표현용 가데이터.
+const WORKOUT_LINK: {
+  icon: React.ComponentProps<typeof MaterialIcons>['name'];
+  label: string;
+  value: string;
+  sub: string;
+}[] = [
+  { icon: 'local-fire-department', label: '운동량', value: `${BURNED_KCAL}`, sub: 'kcal 소모' },
+  { icon: 'fitness-center', label: '근력 사용', value: '5,200kg', sub: '총 볼륨' },
+];
+
+// 탄단지 표시 정의 (순서: 탄 → 단 → 지)
+const MACROS = [
+  { key: 'carb', label: '탄수화물', short: '탄', goal: CARB_GOAL, color: D.warning },
+  { key: 'protein', label: '단백질', short: '단', goal: PROTEIN_GOAL, color: D.primary },
+  { key: 'fat', label: '지방', short: '지', goal: FAT_GOAL, color: D.success },
+] as const;
 
 const initialMeals: Meal[] = [
   { id: '1', mealType: '아침', name: '시리얼 + 우유 + 바나나', kcal: 380, carb: 62, protein: 12, fat: 8, time: '08:10', inputMethod: 'manual' },
@@ -143,6 +166,7 @@ function currentMealType(): MealType {
   return '저녁'; // 가데이터: 시간대 기본 끼니 (라이브 시각 미사용)
 }
 
+
 // ── 공통 컴포넌트 ───────────────────────────────────────────
 function ProgressBar({ ratio, color = D.primary }: { ratio: number; color?: string }) {
   return (
@@ -151,6 +175,56 @@ function ProgressBar({ ratio, color = D.primary }: { ratio: number; color?: stri
     </View>
   );
 }
+
+function MacroBar({
+  label,
+  value,
+  goal,
+  color,
+}: {
+  label: string;
+  value: number;
+  goal: number;
+  color: string;
+}) {
+  const pct = Math.round((value / goal) * 100);
+  return (
+    <View style={styles.macroItem}>
+      <View style={styles.macroHead}>
+        <Txt variant="body" weight="600">
+          {label}
+        </Txt>
+        <Txt variant="caption" color={D.gray500}>
+          {value} / {goal} g · {pct}%
+        </Txt>
+      </View>
+      <ProgressBar ratio={value / goal} color={color} />
+    </View>
+  );
+}
+
+// 부족 ← 적정 → 과다 밸런스 미터 (순섭취/목표 비율을 0~1.5 구간에 매핑)
+function BalanceMeter({ ratio }: { ratio: number }) {
+  const pos = Math.min(Math.max(ratio / 1.5, 0), 1) * 100;
+  return (
+    <View style={styles.meterWrap}>
+      <View style={styles.meterTrackWrap}>
+        <View style={styles.meterTrack}>
+          <View style={[styles.meterSeg, { flex: 60, backgroundColor: '#F3D6D3' }]} />
+          <View style={[styles.meterSeg, { flex: 10, backgroundColor: '#CDE9D8' }]} />
+          <View style={[styles.meterSeg, { flex: 30, backgroundColor: '#F4E5C3' }]} />
+        </View>
+        <View style={[styles.meterMarker, { left: `${pos}%` }]} />
+      </View>
+      <View style={styles.meterLabels}>
+        <Txt variant="label" color={D.gray500}>부족</Txt>
+        <Txt variant="label" color={D.gray500}>적정</Txt>
+        <Txt variant="label" color={D.gray500}>과다</Txt>
+      </View>
+    </View>
+  );
+}
+
 
 function PrimaryButton({
   label,
@@ -421,6 +495,7 @@ export default function DietScreen() {
   const over = remaining < 0;
   const net = totals.kcal - BURNED_KCAL;
   const proteinPct = Math.round((totals.protein / PROTEIN_GOAL) * 100);
+  const netRatio = net / CALORIE_GOAL;
 
   const feedback = useMemo(() => {
     if (totals.protein < PROTEIN_GOAL * 0.9) {
@@ -475,77 +550,99 @@ export default function DietScreen() {
             <ProgressBar ratio={totals.kcal / CALORIE_GOAL} color={over ? D.warning : D.primary} />
           </Card>
 
-          {/* 단백질 목표 + 탄단지 */}
+          {/* 탄단지 균형 */}
           <Card>
-            <Txt variant="label" color={D.gray500}>
-              단백질 목표
-            </Txt>
-            <View style={styles.macroHead}>
-              <Txt variant="body" weight="600">
-                단백질
+            <View style={styles.macroCardHead}>
+              <Txt variant="label" color={D.gray500}>
+                탄단지 균형
               </Txt>
-              <Txt variant="body" weight="600" color={D.gray700}>
-                {totals.protein} / {PROTEIN_GOAL} g
+              <Txt variant="label" color={D.gray500}>
+                목표 대비
               </Txt>
             </View>
-            <ProgressBar ratio={totals.protein / PROTEIN_GOAL} />
-            <View style={styles.macroSub}>
-              <Txt variant="caption" color={D.gray500}>
-                탄수화물 {totals.carb} g
+            {MACROS.map((m) => (
+              <MacroBar
+                key={m.key}
+                label={m.label}
+                value={totals[m.key]}
+                goal={m.goal}
+                color={m.color}
+              />
+            ))}
+          </Card>
+
+          {/* ★ 핵심: 운동 데이터 연계 + 운동 대비 식단 통합 분석 (플로우 4~5단계) */}
+          <Card>
+            {/* 운동 데이터 연계 */}
+            <View style={styles.workoutHeadLeft}>
+              <MaterialIcons name="link" size={16} color={D.primary} />
+              <Txt variant="label" weight="600" color={D.gray700}>
+                운동 데이터 연계
               </Txt>
-              <Txt variant="caption" color={D.gray500}>
-                지방 {totals.fat} g
+            </View>
+            <View style={styles.workoutGrid}>
+              {WORKOUT_LINK.map((w) => (
+                <View key={w.label} style={styles.workoutItem}>
+                  <View style={styles.workoutIconBox}>
+                    <MaterialIcons name={w.icon} size={16} color={D.primary} />
+                  </View>
+                  <View style={styles.workoutText}>
+                    <Txt variant="body" weight="600" numberOfLines={1}>
+                      {w.value}
+                    </Txt>
+                    <Txt variant="label" color={D.gray500} numberOfLines={1}>
+                      {w.label}
+                    </Txt>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            {/* 연계 → 분석 구분 */}
+            <View style={styles.sectionDivider} />
+
+            {/* 운동 대비 식단 통합 분석 */}
+            <View style={styles.scoreHeadLeft}>
+              <Txt variant="label" color={D.gray500}>
+                운동 대비 식단
+              </Txt>
+            </View>
+
+            <BalanceMeter ratio={netRatio} />
+
+            <View style={styles.factorGroup}>
+              <View style={styles.factorLine}>
+                <Txt variant="caption" color={D.gray700}>
+                  에너지 밸런스
+                </Txt>
+                <Txt variant="caption" color={D.gray500}>
+                  순섭취 {net > 0 ? '+' : ''}
+                  {net} / {CALORIE_GOAL.toLocaleString()} kcal
+                </Txt>
+              </View>
+              <View style={styles.factorLine}>
+                <Txt variant="caption" color={D.gray700}>
+                  단백질 회복
+                </Txt>
+                <Txt variant="caption" color={D.gray500}>
+                  {totals.protein} / {PROTEIN_GOAL} g · {proteinPct}%
+                </Txt>
+              </View>
+            </View>
+
+            {/* 코치 피드백 */}
+            <View style={styles.aiCard}>
+              <View style={styles.aiHead}>
+                <MaterialIcons name="auto-awesome" size={18} color={D.primary} />
+                <Txt variant="caption" weight="600" color={D.primary}>
+                  코치
+                </Txt>
+              </View>
+              <Txt variant="body" color={D.gray700} style={styles.aiText}>
+                {feedback}
               </Txt>
             </View>
           </Card>
-
-          {/* 운동 - 식단 밸런스 */}
-          <Card>
-            <Txt variant="label" color={D.gray500}>
-              운동 - 식단 밸런스
-            </Txt>
-            <View style={styles.balanceRow}>
-              <View style={styles.balanceItem}>
-                <Txt variant="h2">{totals.kcal.toLocaleString()}</Txt>
-                <Txt variant="label" color={D.gray500}>
-                  섭취
-                </Txt>
-              </View>
-              <Txt variant="h2" color={D.gray300}>
-                −
-              </Txt>
-              <View style={styles.balanceItem}>
-                <Txt variant="h2">{BURNED_KCAL}</Txt>
-                <Txt variant="label" color={D.gray500}>
-                  운동 소모
-                </Txt>
-              </View>
-              <Txt variant="h2" color={D.gray300}>
-                =
-              </Txt>
-              <View style={styles.balanceItem}>
-                <Txt variant="h2" color={D.gray900}>
-                  {net > 0 ? `+${net}` : net}
-                </Txt>
-                <Txt variant="label" color={D.gray500}>
-                  순 섭취
-                </Txt>
-              </View>
-            </View>
-          </Card>
-
-          {/* AI 코치 */}
-          <View style={styles.aiCard}>
-            <View style={styles.aiHead}>
-              <MaterialIcons name="auto-awesome" size={18} color={D.primary} />
-              <Txt variant="caption" weight="600" color={D.primary}>
-                AI 코치
-              </Txt>
-            </View>
-            <Txt variant="body" color={D.gray700} style={styles.aiText}>
-              {feedback}
-            </Txt>
-          </View>
 
           {/* 오늘 기록 */}
           <Txt variant="label" color={D.gray500} style={styles.listHead}>
@@ -604,11 +701,46 @@ const styles = StyleSheet.create({
 
   // macro
   macroHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  macroSub: { flexDirection: 'row', gap: S.md, marginTop: S.xs },
+  macroCardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  macroItem: { gap: S.xs, marginTop: S.xs },
 
-  // balance
-  balanceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: S.xs },
-  balanceItem: { alignItems: 'center', gap: S.xs, flex: 1 },
+  // 운동 데이터 연계
+  workoutHeadLeft: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+  workoutGrid: { flexDirection: 'row', gap: S.sm, marginTop: S.xs },
+  workoutItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  workoutIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: R.full,
+    backgroundColor: D.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workoutText: { gap: 0 },
+  sectionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line, marginVertical: S.sm },
+
+  // 운동 대비 식단
+  scoreHeadLeft: { gap: S.xs },
+
+  // 밸런스 미터
+  meterWrap: { gap: S.xs, marginTop: S.sm },
+  meterTrackWrap: { position: 'relative', justifyContent: 'center' },
+  meterTrack: { flexDirection: 'row', height: 10, borderRadius: R.full, overflow: 'hidden', gap: 2 },
+  meterSeg: { height: '100%' },
+  meterMarker: {
+    position: 'absolute',
+    top: -3,
+    width: 4,
+    height: 16,
+    borderRadius: 2,
+    backgroundColor: D.gray700,
+    transform: [{ translateX: -2 }],
+  },
+  meterLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+
+  // 점수 요인
+  factorGroup: { gap: S.xs, marginTop: S.xs },
+  factorLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 
   // AI card
   aiCard: {
