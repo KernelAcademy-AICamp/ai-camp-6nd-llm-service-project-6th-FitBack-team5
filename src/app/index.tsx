@@ -23,7 +23,7 @@ function statusBadgeColor(status: MembershipStatus) {
 
 function MembershipCard({ item }: { item: Membership }) {
   // free(자유이용권)는 횟수 개념이 없다. session/class만 횟수를 노출.
-  // 남은 횟수는 visits 연동 단계에서 계산 예정 — 지금은 총 횟수만 표시.
+  // 남은 횟수 = max_visits - 사용(visits) 수. useMemberships()에서 집계해 전달.
   const showVisits = item.type !== 'free';
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
@@ -37,7 +37,9 @@ function MembershipCard({ item }: { item: Membership }) {
       </View>
       {showVisits && (
         <ThemedText type="default">
-          {item.maxVisits != null ? `총 ${item.maxVisits}회` : '무제한'}
+          {item.maxVisits != null
+            ? `남은 ${item.remainingVisits} / ${item.maxVisits}회`
+            : '무제한'}
         </ThemedText>
       )}
       <ThemedText type="small">만료일 · {item.endDate}</ThemedText>

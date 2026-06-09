@@ -113,16 +113,16 @@ npm run db:build      # = node scripts/build-setup-sql.js
 (`npm run db:push` 는 적용 전에 자동으로 재생성하므로 보통 따로 실행할 필요는 없습니다.)
 새 마이그레이션은 `08_...` 처럼 **번호를 이어서** 만들면 스크립트가 자동으로 순서에 포함합니다.
 
-## 검토 보류 사항 (합의 필요)
+## 결정 사항 (확정)
 
-타입 문서를 스키마로 옮기며 아래는 합리적 기본값으로 정했습니다. 팀 합의로 바꿀 수 있습니다:
+타입 문서를 스키마로 옮기며 아래 항목은 팀 확인을 거쳐 확정했습니다:
 
-- **나이**: "20대/30대" 연령대가 아니라 **만나이 정수**(age, 1~120)로 저장.
-- **enum 영문 슬러그화**: `exercise_level`(beginner/intermediate/advanced), `mood`(good/normal/tired),
+- **나이**: ✅ **만나이 정수**(age, 1~120)로 저장. 연령대(20대/30대)는 정수에서 파생.
+- **enum 영문 슬러그**: ✅ `exercise_level`(beginner/intermediate/advanced), `mood`(good/normal/tired),
   `intensity`(easy/normal/hard), `fitness_goal`(muscle_gain/fat_loss/endurance). 한글은 UI에서 매핑.
-- **남은 횟수**: `memberships` 에는 사용 횟수 컬럼이 없습니다. "남은 N회"는 `visits` 연동 시 계산 예정 —
-  현재 화면은 "총 N회"만 표시.
-- **회원권 상태**: `active`/`expired` 만 `end_date` 로 파생. `paused`(일시중지)는 컬럼 없음 (필요 시 추가).
+- **남은 횟수**: ✅ **visits 연동 구현됨** — `useMemberships()` 가 `visits(count)` 집계로 사용 횟수를 구해
+  session/class 회원권에 "남은 X/Y회"를 계산합니다 (free는 무제한).
+- **회원권 상태**: ✅ `active`/`expired` 만 `end_date` 로 파생. `paused`(일시중지)는 미도입 (필요 시 컬럼 추가).
 
 ## 관련 코드
 

@@ -7,7 +7,7 @@ export type MembershipType = 'free' | 'session' | 'class';
 export type MembershipPeriod = 'month' | '3month' | '6month' | '12month';
 export type MembershipStatus = 'active' | 'expired';
 
-/** Raw row as stored in public.memberships (snake_case). */
+/** Raw row from public.memberships (snake_case) + visit-count aggregate. */
 export interface MembershipRow {
   id: string;
   user_id: string;
@@ -19,6 +19,8 @@ export interface MembershipRow {
   type: MembershipType;
   max_visits: number | null;
   created_at: string;
+  // PostgREST aggregate over the visits FK → [{ count: N }] (empty-safe).
+  visits: { count: number }[];
 }
 
 /** View model consumed by the membership screen (camelCase). */
@@ -31,6 +33,9 @@ export interface Membership {
   startDate: string;
   endDate: string;
   maxVisits: number | null;
+  usedVisits: number;
+  /** max_visits - used, clamped at 0. null when unlimited (free, or no cap). */
+  remainingVisits: number | null;
   status: MembershipStatus;
 }
 
@@ -45,6 +50,9 @@ function deriveStatus(endDate: string): MembershipStatus {
 }
 
 function toMembership(row: MembershipRow): Membership {
+  const usedVisits = row.visits?.[0]?.count ?? 0;
+  const remainingVisits =
+    row.max_visits != null ? Math.max(0, row.max_visits - usedVisits) : null;
   return {
     id: row.id,
     name: row.name,
@@ -54,14 +62,17 @@ function toMembership(row: MembershipRow): Membership {
     startDate: row.start_date,
     endDate: row.end_date,
     maxVisits: row.max_visits,
+    usedVisits,
+    remainingVisits,
     status: deriveStatus(row.end_date),
   };
 }
 
 /**
- * Loads the current user's memberships. RLS already scopes rows to the
- * signed-in user; the explicit user_id filter keeps the query key honest and
- * the result tidy. Disabled until a session exists.
+ * Loads the current user's memberships with their visit counts. The count
+ * comes from the visits FK aggregate (`visits(count)`), so "남은 횟수"
+ * = max_visits - used. RLS scopes both memberships and visits to the
+ * signed-in user. Disabled until a session exists.
  */
 export function useMemberships() {
   const user = useCurrentUser();
@@ -72,7 +83,7 @@ export function useMemberships() {
       if (!user) return [];
       const { data, error } = await supabase
         .from('memberships')
-        .select('*')
+        .select('*, visits(count)')
         .eq('user_id', user.id)
         .order('end_date', { ascending: false });
       if (error) throw error;
