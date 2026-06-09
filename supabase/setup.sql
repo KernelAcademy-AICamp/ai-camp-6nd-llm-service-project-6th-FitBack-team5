@@ -230,34 +230,35 @@ create policy "memberships: delete own" on public.memberships
   for delete using (auth.uid() = user_id);
 
 -- ============================================================
--- Seed (가데이터): attach to the test account = the first auth user.
--- Idempotent: skips if the test user already has memberships, or if no
--- user exists yet. Dates assume "today" ~ 2026-06-09 so the screen shows
--- a mix of active (2) and expired (1) cards.
+-- Seed (가데이터): give EVERY auth user the same 3 sample memberships.
+-- Idempotent per account: an account that already has any membership is
+-- skipped, so re-running only seeds newly-created accounts. Dates assume
+-- "today" ~ 2026-06-09 so each account shows active (2) + expired (1).
 -- ============================================================
 do $$
 declare
-  test_user_id uuid;
+  u record;
+  seeded integer := 0;
 begin
-  select id into test_user_id from auth.users order by created_at asc limit 1;
+  for u in select id from auth.users loop
+    if exists (select 1 from public.memberships where user_id = u.id) then
+      continue; -- already seeded for this account
+    end if;
 
-  if test_user_id is null then
-    raise notice 'memberships seed skipped: no auth.users row yet (create the test account first).';
-    return;
+    insert into public.memberships (user_id, name, cost, period, start_date, end_date, type, max_visits)
+    values
+      (u.id, '강남 PT 30회',   1800000, '6month', date '2026-04-01', date '2026-10-01', 'session', 30),
+      (u.id, '요가 1개월권',     120000, 'month',  date '2026-06-01', date '2026-07-01', 'free',    null),
+      (u.id, '필라테스 10회',    350000, '3month', date '2026-02-01', date '2026-05-01', 'class',   10);
+
+    seeded := seeded + 1;
+  end loop;
+
+  if seeded = 0 then
+    raise notice 'memberships seed: nothing to do (no users yet, or all accounts already seeded).';
+  else
+    raise notice 'memberships seed: inserted 3 rows each for % account(s).', seeded;
   end if;
-
-  if exists (select 1 from public.memberships where user_id = test_user_id) then
-    raise notice 'memberships seed skipped: test user already has memberships.';
-    return;
-  end if;
-
-  insert into public.memberships (user_id, name, cost, period, start_date, end_date, type, max_visits)
-  values
-    (test_user_id, '강남 PT 30회',   1800000, '6month', date '2026-04-01', date '2026-10-01', 'session', 30),
-    (test_user_id, '요가 1개월권',     120000, 'month',  date '2026-06-01', date '2026-07-01', 'free',    null),
-    (test_user_id, '필라테스 10회',    350000, '3month', date '2026-02-01', date '2026-05-01', 'class',   10);
-
-  raise notice 'memberships seed inserted for user %', test_user_id;
 end $$;
 
 
