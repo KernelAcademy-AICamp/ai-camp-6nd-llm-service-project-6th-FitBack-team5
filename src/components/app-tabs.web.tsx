@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import {
   Tabs,
   TabList,
@@ -6,12 +7,19 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+import { MaxContentWidth } from '@/constants/theme';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+// design.md §9 바텀 네비게이션 — 활성 #6675FF / 비활성 #D1D5DB, 배경 #FFFFFF, 상단 구분선 0.5px
+const NAV = {
+  active: '#6675FF',
+  inactive: '#9CA3AF',
+  surface: '#FFFFFF',
+  line: 'rgba(0,0,0,0.07)',
+} as const;
+
+type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
 export default function AppTabs() {
   return (
@@ -20,13 +28,13 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="index" href="/" asChild>
-            <TabButton>회원권</TabButton>
+            <TabButton icon="card-membership">회원권</TabButton>
           </TabTrigger>
           <TabTrigger name="diet" href="/diet" asChild>
-            <TabButton>식단</TabButton>
+            <TabButton icon="restaurant">식단</TabButton>
           </TabTrigger>
           <TabTrigger name="workout" href="/workout" asChild>
-            <TabButton>홈트</TabButton>
+            <TabButton icon="fitness-center">홈트</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -34,18 +42,14 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+type TabButtonProps = TabTriggerSlotProps & { icon: IconName };
+
+export function TabButton({ children, isFocused, icon, ...props }: TabButtonProps) {
+  const color = isFocused ? NAV.active : NAV.inactive;
   return (
-    <Pressable
-      {...props}
-      style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
+    <Pressable {...props} style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
+      <MaterialIcons name={icon} size={24} color={color} />
+      <Text style={[styles.label, { color }]}>{children}</Text>
     </Pressable>
   );
 }
@@ -53,9 +57,7 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
 export function CustomTabList(props: TabListProps) {
   return (
     <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        {props.children}
-      </ThemedView>
+      <View style={styles.innerContainer}>{props.children}</View>
     </View>
   );
 }
@@ -66,32 +68,32 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     width: '100%',
-    padding: Spacing.three,
-    justifyContent: 'center',
+    backgroundColor: NAV.surface,
+    borderTopWidth: 0.5,
+    borderTopColor: NAV.line,
     alignItems: 'center',
-    flexDirection: 'row',
   },
   innerContainer: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.five,
+    width: '100%',
+    maxWidth: MaxContentWidth,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    gap: Spacing.two,
-    flexGrow: 1,
-    maxWidth: MaxContentWidth,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   tabButton: {
     flex: 1,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  tabButtonView: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 4,
+  },
+  pressed: { opacity: 0.6 },
+  label: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
+    letterSpacing: -0.3,
   },
 });

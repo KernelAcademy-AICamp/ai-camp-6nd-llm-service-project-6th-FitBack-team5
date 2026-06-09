@@ -7,11 +7,15 @@ export default function AppTabs() {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
+  // design.md §9 바텀 네비게이션 — 활성 Primary #6675FF
+  const PRIMARY = '#6675FF';
+
   return (
     <NativeTabs
       backgroundColor={colors.background}
       indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+      tintColor={PRIMARY}
+      labelStyle={{ selected: { color: PRIMARY } }}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>회원권</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
