@@ -50,33 +50,7 @@ create policy "memberships: delete own" on public.memberships
   for delete using (auth.uid() = user_id);
 
 -- ============================================================
--- Seed (가데이터): give EVERY auth user the same 3 sample memberships.
--- Idempotent per account: an account that already has any membership is
--- skipped, so re-running only seeds newly-created accounts. Dates assume
--- "today" ~ 2026-06-09 so each account shows active (2) + expired (1).
+-- 시드(데모 데이터)는 여기서 넣지 않습니다.
+-- 08_seed_demo_data.sql 이 전 테이블(memberships 포함)을 한 번에 채웁니다:
+--   seed_demo_data_for_user() 함수 + 신규 계정 자동 트리거 + 기존 계정 백필.
 -- ============================================================
-do $$
-declare
-  u record;
-  seeded integer := 0;
-begin
-  for u in select id from auth.users loop
-    if exists (select 1 from public.memberships where user_id = u.id) then
-      continue; -- already seeded for this account
-    end if;
-
-    insert into public.memberships (user_id, name, cost, period, start_date, end_date, type, max_visits)
-    values
-      (u.id, '강남 PT 30회',   1800000, '6month', date '2026-04-01', date '2026-10-01', 'session', 30),
-      (u.id, '요가 1개월권',     120000, 'month',  date '2026-06-01', date '2026-07-01', 'free',    null),
-      (u.id, '필라테스 10회',    350000, '3month', date '2026-02-01', date '2026-05-01', 'class',   10);
-
-    seeded := seeded + 1;
-  end loop;
-
-  if seeded = 0 then
-    raise notice 'memberships seed: nothing to do (no users yet, or all accounts already seeded).';
-  else
-    raise notice 'memberships seed: inserted 3 rows each for % account(s).', seeded;
-  end if;
-end $$;

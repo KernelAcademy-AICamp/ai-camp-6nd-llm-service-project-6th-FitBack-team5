@@ -68,7 +68,7 @@ npm run db:push   # setup.sql 재생성 후 pg 로 적용 (멱등 — 여러 번
 ```
 supabase/
 ├── README.md          # 이 문서
-├── setup.sql          # 01~07 통합본 (AUTO-GENERATED, 직접 수정 금지)
+├── setup.sql          # 01~08 통합본 (AUTO-GENERATED, 직접 수정 금지)
 └── migrations/        # ← 원본(source of truth). 번호 순서대로 실행.
     ├── 01_init_profiles.sql
     ├── 02_extend_profiles.sql
@@ -76,7 +76,8 @@ supabase/
     ├── 04_centers.sql
     ├── 05_visits.sql
     ├── 06_exercise_records.sql
-    └── 07_user_preferences.sql
+    ├── 07_user_preferences.sql
+    └── 08_seed_demo_data.sql
 ```
 
 ## 마이그레이션 목록
@@ -85,11 +86,12 @@ supabase/
 |---|------|--------|------|
 | 01 | `01_init_profiles.sql` | `profiles` | 사용자 프로필 + `role`(member/admin) + `is_admin()` 헬퍼 + 가입 시 자동 생성 트리거 + 자가승격 방지 |
 | 02 | `02_extend_profiles.sql` | `profiles`(확장) | 건강·기본정보 8컬럼 추가 (age, gender, height, weight, exercise_level, injury_history, medical_conditions, avoid_exercise_parts) |
-| 03 | `03_memberships.sql` | `memberships` | 회원권(type: free/session/class, period, max_visits) **+ 모든 계정에 시드 3건** |
+| 03 | `03_memberships.sql` | `memberships` | 회원권(type: free/session/class, period, max_visits) + RLS *(시드는 08로 이동)* |
 | 04 | `04_centers.sql` | `centers` | 센터/지점 (membership FK, GPS 위·경도) |
 | 05 | `05_visits.sql` | `visits` | 센터 방문 기록 (체크인/아웃, 기분, 메모, 상태) |
 | 06 | `06_exercise_records.sql` | `exercise_records` | 운동 기록 (강도/시간/메모 + `auto_data` **jsonb**: distance/calories/speed/source) |
 | 07 | `07_user_preferences.sql` | `user_preferences` | 선호 설정 — **Phase 2**용. 테이블 구조만 생성, 기능 미활성화 |
+| 08 | `08_seed_demo_data.sql` | (전 테이블 시드) | 데모 데이터 — `seed_demo_data_for_user()` 함수 + 신규 계정 자동 트리거 + 기존 계정 백필(리셋). ⚠️ 개발용 |
 
 **의존성** 때문에 번호 순서가 중요합니다: `profiles → memberships → centers/visits → exercise_records`.
 (centers/visits 는 memberships FK, exercise_records 는 visits FK)
