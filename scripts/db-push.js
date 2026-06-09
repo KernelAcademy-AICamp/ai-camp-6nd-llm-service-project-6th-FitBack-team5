@@ -1,23 +1,20 @@
 #!/usr/bin/env node
 /**
- * Applies supabase/setup.sql to your Supabase Postgres using psql.
+ * Applies supabase/setup.sql to your Supabase Postgres using node-postgres (pg).
+ * No psql / Homebrew needed — just `npm install`.
  *
  * Reads SUPABASE_DB_URL from the environment or .env. Get it from the Supabase
  * dashboard → Project Settings → Database → Connection string (URI). It contains
  * your DB password, so it lives in .env (gitignored), never in the repo.
  *
- * Requires the `psql` client on PATH (macOS: `brew install libpq` then
- * `brew link --force libpq`).
- *
  * Usage:  npm run db:push   (rebuilds setup.sql first, then applies it)
  */
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
 const root = path.join(__dirname, '..');
 const envPath = path.join(root, '.env');
-const setupSql = path.join(root, 'supabase', 'setup.sql');
+const setupSqlPath = path.join(root, 'supabase', 'setup.sql');
 
 function readEnvVar(key) {
   if (process.env[key]) return process.env[key];
@@ -46,19 +43,30 @@ if (!dbUrl) {
   process.exit(1);
 }
 
+let Client;
 try {
-  execFileSync('psql', ['--version'], { stdio: 'ignore' });
+  ({ Client } = require('pg'));
 } catch {
-  console.error('✗ psql 을 찾을 수 없습니다. PostgreSQL 클라이언트를 설치하세요.');
-  console.error('  macOS: brew install libpq && brew link --force libpq');
+  console.error('✗ pg 패키지를 찾을 수 없습니다. 먼저 의존성을 설치하세요:  npm install');
   process.exit(1);
 }
 
-console.log('→ Applying supabase/setup.sql …');
-try {
-  execFileSync('psql', [dbUrl, '-v', 'ON_ERROR_STOP=1', '-f', setupSql], { stdio: 'inherit' });
-  console.log('✓ Done.');
-} catch {
-  // psql already printed the error; exit non-zero without a noisy stack trace.
-  process.exit(1);
-}
+const sql = fs.readFileSync(setupSqlPath, 'utf8');
+
+(async () => {
+  // Supabase requires TLS. rejectUnauthorized:false avoids cert-chain hiccups
+  // on direct connections; the link is still encrypted.
+  const client = new Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
+  try {
+    console.log('→ Connecting to Supabase …');
+    await client.connect();
+    console.log('→ Applying supabase/setup.sql …');
+    await client.query(sql); // setup.sql is idempotent; safe to re-run.
+    console.log('✓ Done.');
+  } catch (err) {
+    console.error('✗ 적용 실패:', err.message);
+    process.exitCode = 1;
+  } finally {
+    await client.end().catch(() => {});
+  }
+})();

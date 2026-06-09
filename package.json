@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "pg": "^8.21.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
