@@ -1,64 +1,30 @@
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  type Membership,
+  type MembershipStatus,
+  useMemberships,
+} from '@/features/membership/useMemberships';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
-
-type MembershipStatus = 'active' | 'expired' | 'paused';
-
-interface Membership {
-  id: string;
-  name: string;
-  totalSessions: number | null;
-  remainingSessions: number | null;
-  expiresAt: string;
-  status: MembershipStatus;
-}
-
-const dummyMemberships: Membership[] = [
-  {
-    id: '1',
-    name: 'PT 30회',
-    totalSessions: 30,
-    remainingSessions: 23,
-    expiresAt: '2026-12-31',
-    status: 'active',
-  },
-  {
-    id: '2',
-    name: '요가 1개월권',
-    totalSessions: null,
-    remainingSessions: null,
-    expiresAt: '2026-07-15',
-    status: 'active',
-  },
-  {
-    id: '3',
-    name: '필라테스 10회',
-    totalSessions: 10,
-    remainingSessions: 0,
-    expiresAt: '2026-05-30',
-    status: 'expired',
-  },
-];
 
 const statusLabels: Record<MembershipStatus, string> = {
   active: '사용중',
   expired: '만료',
-  paused: '일시중지',
 };
 
 function statusBadgeColor(status: MembershipStatus) {
-  if (status === 'active') return '#22c55e';
-  if (status === 'paused') return '#f59e0b';
-  return '#9ca3af';
+  return status === 'active' ? '#22c55e' : '#9ca3af';
 }
 
 function MembershipCard({ item }: { item: Membership }) {
-  const isSession = item.totalSessions !== null;
+  // free(자유이용권)는 횟수 개념이 없다. session/class만 횟수를 노출.
+  // 남은 횟수는 visits 연동 단계에서 계산 예정 — 지금은 총 횟수만 표시.
+  const showVisits = item.type !== 'free';
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
       <View style={styles.cardHeader}>
@@ -69,12 +35,12 @@ function MembershipCard({ item }: { item: Membership }) {
           </ThemedText>
         </View>
       </View>
-      {isSession && (
+      {showVisits && (
         <ThemedText type="default">
-          남은 {item.remainingSessions} / {item.totalSessions}회
+          {item.maxVisits != null ? `총 ${item.maxVisits}회` : '무제한'}
         </ThemedText>
       )}
-      <ThemedText type="small">만료일 · {item.expiresAt}</ThemedText>
+      <ThemedText type="small">만료일 · {item.endDate}</ThemedText>
     </ThemedView>
   );
 }
@@ -99,6 +65,9 @@ function AuthFooter() {
 }
 
 export default function MembershipScreen() {
+  const { data: memberships, isLoading, isError, error } = useMemberships();
+  const isEmpty = !isLoading && !isError && (memberships?.length ?? 0) === 0;
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -106,7 +75,23 @@ export default function MembershipScreen() {
         <ScrollView
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}>
-          {dummyMemberships.map((m) => (
+          {isLoading && (
+            <View style={styles.stateBox}>
+              <ActivityIndicator />
+            </View>
+          )}
+          {isError && (
+            <ThemedView type="backgroundElement" style={styles.card}>
+              <ThemedText type="default">회원권을 불러오지 못했어요.</ThemedText>
+              <ThemedText type="small">{(error as Error)?.message ?? '알 수 없는 오류'}</ThemedText>
+            </ThemedView>
+          )}
+          {isEmpty && (
+            <ThemedView type="backgroundElement" style={styles.card}>
+              <ThemedText type="default">등록된 회원권이 없어요.</ThemedText>
+            </ThemedView>
+          )}
+          {memberships?.map((m) => (
             <MembershipCard key={m.id} item={m} />
           ))}
         </ScrollView>
@@ -131,6 +116,10 @@ const styles = StyleSheet.create({
   list: {
     gap: Spacing.three,
     paddingBottom: Spacing.three,
+  },
+  stateBox: {
+    paddingVertical: Spacing.four,
+    alignItems: 'center',
   },
   card: {
     padding: Spacing.three,
