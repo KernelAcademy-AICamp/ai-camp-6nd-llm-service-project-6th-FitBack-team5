@@ -1,25 +1,47 @@
 # FitBack — Supabase DB
 
 Phase 1 데이터 모델(타입 정의 문서 기반)의 마이그레이션 모음입니다.
-이 프로젝트는 **Supabase SQL Editor 수동 실행** 방식을 씁니다 (Supabase CLI 미사용).
+**팀은 공유 Supabase 프로젝트 1개**를 함께 쓰며, Phase 1 스키마·시드는 **이미 적용돼 있습니다.**
+적용은 **SQL Editor 수동 실행** 기준입니다 (`db:push` 자동화는 아래 *자동 적용* 주의 참고).
 
-## 빠른 시작 (팀원용)
+## 팀원 합류 (공유 프로젝트 — 대부분 여기)
 
-처음 세팅하거나 새 Supabase 프로젝트에 적용할 때:
+DB는 이미 적용돼 있으니 **마이그레이션을 다시 실행하지 마세요.** 합류 절차만 하면 됩니다:
+
+1. `git pull`
+2. `npm install`
+3. `.env` 만들기 — `.env.example` 복사 후 아래 값을 **팀 채널에서 받아** 채웁니다:
+   - `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` (공유 프로젝트 값)
+   - `EXPO_PUBLIC_DEV_TEST_EMAIL`, `EXPO_PUBLIC_DEV_TEST_PASSWORD` (공유 테스트 계정)
+   - `SUPABASE_DB_URL` 은 **불필요** (마이그레이션을 직접 적용할 사람만 필요)
+4. `npm run web` → 로그인(자동 채우기) → 공유 데이터(회원권 등) 표시
+   > 🔒 URL·anon key·계정은 보안상 레포에 없습니다(`.env` 는 gitignore).
+
+**새 테스트 계정을 직접 만들면** 그 계정엔 회원권 시드가 없습니다. SQL Editor에서
+[03_memberships.sql](migrations/03_memberships.sql) 을 다시 Run 하면 됩니다
+(멱등 — 회원권 없는 계정에만 3건 추가). 자주 만든다면 "새 계정 자동 시드 트리거" 도입을 고려하세요.
+
+---
+
+## 새 Supabase 프로젝트에 처음 적용 (리드 / 로컬 분리용)
+
+새 프로젝트에 스키마를 처음 올릴 때:
 
 1. **테스트 계정 먼저 생성** — Supabase 대시보드 → Authentication → Users → **Add user**
-   (Auto Confirm User 체크). `memberships` 시드(가데이터)는 **모든 계정**에 3건씩 들어갑니다.
-   > 계정 없이 실행해도 됩니다. 그 경우 시드는 조용히 skip되고 테이블만 만들어집니다.
-2. **마이그레이션 적용** — 두 방법 중 하나:
-   - **(A) 자동 — `npm run db:push`** ← 권장. 한 번 셋업하면 한 줄로 적용 (아래 *자동 적용* 참고)
-   - **(B) 수동 — SQL Editor**: 대시보드 → SQL Editor 에 [setup.sql](setup.sql) 전체를 붙여넣고 Run
-     (또는 `migrations/01 … 07` 을 **번호 순서대로** 하나씩)
+   (Auto Confirm User 체크). `memberships` 시드는 **모든 계정**에 3건씩 들어갑니다.
+   > 계정 없이 실행해도 됩니다. 그 경우 시드는 skip되고 테이블만 만들어집니다.
+2. **마이그레이션 적용** — **SQL Editor**: 대시보드 → SQL Editor 에 [setup.sql](setup.sql) 전체를
+   붙여넣고 Run (또는 `migrations/01 … 07` 을 **번호 순서대로**). `npm run db:push` 는 아래 주의 참고.
 3. **앱 확인** — `.env` 채운 뒤 `npm run web` → 로그인 → 회원권 3건(사용중 2 · 만료 1)이 보이면 성공.
 
-> 모든 마이그레이션은 **멱등**합니다(`if not exists` / `drop policy if exists`). 여러 번 실행해도 안전하고,
-> 시드는 계정에 이미 회원권이 있으면 다시 넣지 않습니다(새 계정만 추가됨).
+> 모든 마이그레이션은 **멱등**입니다(`if not exists` / `drop policy if exists`). 여러 번 실행해도 안전하고,
+> 시드는 계정에 이미 회원권이 있으면 다시 넣지 않습니다(새 계정만 추가).
 
 ## 자동 적용 (`npm run db:push`)
+
+> ⚠️ **현재 미검증.** 공유 프로젝트의 pooler 호스트(`aws-0`/`aws-1`…)가 확정되지 않아 아직 한 번도
+> 연결에 성공하지 못했습니다. 호스트가 확정되기 전까지는 위 **SQL Editor 방법**을 쓰세요.
+> (호스트만 맞추면 바로 동작하도록 스크립트는 준비돼 있습니다.)
 
 Node `pg` 패키지로 [setup.sql](setup.sql) 을 DB에 직접 적용합니다 (psql·SQL Editor 불필요, 크로스플랫폼).
 
