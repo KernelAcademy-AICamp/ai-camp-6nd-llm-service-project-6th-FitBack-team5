@@ -70,3 +70,121 @@ export function formatNumber(n: number): string {
 export function won(n: number): string {
   return `₩${formatNumber(n)}`;
 }
+
+// ── spec: 회원권 위험 통계 ────────────────────────────────
+export type RiskLevel = 'danger' | 'warning' | 'safe' | 'neutral';
+
+export const RISK_COLORS: Record<RiskLevel, string> = {
+  danger: '#EF4444',
+  warning: '#F97316',
+  safe: '#10B981',
+  neutral: '#6B7280',
+};
+
+// 색 단독 의존 금지(접근성): 아이콘 + 텍스트 라벨 + 색 3중 표기.
+export const RISK_META: Record<RiskLevel, { icon: string; label: string }> = {
+  danger: { icon: '🔴', label: '위험' },
+  warning: { icon: '🟠', label: '주의' },
+  safe: { icon: '🟢', label: '안전' },
+  neutral: { icon: '⚪', label: '일반' },
+};
+
+const WEEKS_PER_MONTH = 4.3;
+
+export interface RiskInfo {
+  level: RiskLevel;
+  hasSessions: boolean;
+  totalSessions: number | null;
+  usedSessions: number;
+  remainingSessions: number | null;
+  remainingDays: number;
+  costPerSession: number;
+  valueUsed: number;
+  valueAtRisk: number;
+  /** 만료 전 다 쓰려면 주당 필요한 방문(횟수제만, 올림). */
+  requiredWeeklyPace: number | null;
+  sessionFilledRatio: number; // 사용/전체 (0~1)
+  periodFilledRatio: number; // 경과/전체 기간 (0~1)
+}
+
+/** spec 3장: 페이스 기반 위험. 분모 0 가드. free(횟수 없음)는 neutral. */
+export function computeRisk(m: Membership, visitsThisMonth: number): RiskInfo {
+  const remainingDays = Math.max(0, daysLeft(m.endDate));
+  const hasSessions = m.maxVisits != null;
+  const total = m.maxVisits;
+  const used = m.usedVisits;
+  const remaining = m.remainingVisits;
+  const costPerSession = hasSessions && total ? Math.round(m.cost / total) : 0;
+  const valueUsed = hasSessions && total ? Math.round(used * (m.cost / total)) : 0;
+  const valueAtRisk =
+    hasSessions && total && remaining != null ? Math.round(remaining * (m.cost / total)) : 0;
+
+  const startMs = Date.parse(`${m.startDate}T00:00:00Z`);
+  const endMs = Date.parse(`${m.endDate}T00:00:00Z`);
+  const totalSpan = Math.max(1, (endMs - startMs) / 86_400_000);
+  const periodFilledRatio = Math.min(1, Math.max(0, (totalSpan - remainingDays) / totalSpan));
+  const sessionFilledRatio = hasSessions && total ? Math.min(1, Math.max(0, used / total)) : 0;
+
+  let level: RiskLevel;
+  let requiredWeeklyPace: number | null = null;
+
+  if (remainingDays <= 0) {
+    level = 'danger'; // 만료
+  } else if (!hasSessions) {
+    level = 'neutral'; // 자유이용권: 못 쓰는 횟수 개념 없음
+  } else if (remaining === 0) {
+    level = 'safe'; // 다 씀
+  } else {
+    const requiredPace = (remaining as number) / (remainingDays / 7);
+    const actualPace = visitsThisMonth / WEEKS_PER_MONTH;
+    const ratio = requiredPace > 0 ? actualPace / requiredPace : 1;
+    requiredWeeklyPace = Math.ceil(requiredPace);
+    if (ratio < 0.7) level = 'danger';
+    else if (ratio < 1.0) level = 'warning';
+    else level = 'safe';
+  }
+
+  return {
+    level,
+    hasSessions,
+    totalSessions: total,
+    usedSessions: used,
+    remainingSessions: remaining,
+    remainingDays,
+    costPerSession,
+    valueUsed,
+    valueAtRisk,
+    requiredWeeklyPace,
+    sessionFilledRatio,
+    periodFilledRatio,
+  };
+}
+
+export interface RiskSummary {
+  danger: number;
+  warning: number;
+  safe: number;
+  neutral: number;
+  totalAtRisk: number;
+}
+
+export function summarize(risks: RiskInfo[]): RiskSummary {
+  const s: RiskSummary = { danger: 0, warning: 0, safe: 0, neutral: 0, totalAtRisk: 0 };
+  for (const r of risks) {
+    s[r.level] += 1;
+    s.totalAtRisk += r.valueAtRisk;
+  }
+  return s;
+}
+
+const RISK_ORDER: Record<RiskLevel, number> = { danger: 0, warning: 1, neutral: 2, safe: 3 };
+
+/** 위험순 정렬: danger→warning→neutral→safe, 같은 레벨은 손실액 큰 순. */
+export function sortByRisk<T>(items: T[], riskOf: (t: T) => RiskInfo): T[] {
+  return [...items].sort((a, b) => {
+    const ra = riskOf(a);
+    const rb = riskOf(b);
+    if (RISK_ORDER[ra.level] !== RISK_ORDER[rb.level]) return RISK_ORDER[ra.level] - RISK_ORDER[rb.level];
+    return rb.valueAtRisk - ra.valueAtRisk;
+  });
+}

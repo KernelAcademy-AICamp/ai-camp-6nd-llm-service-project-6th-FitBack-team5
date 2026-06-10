@@ -14,8 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { HomeDashboard, SummaryCard } from '@/features/membership/HomeDashboard';
+import { computeRisk, sortByRisk, summarize } from '@/features/membership/dashboard';
 import { MembershipForm } from '@/features/membership/MembershipForm';
+import { MembershipStatsCard, SummaryHeader } from '@/features/membership/MembershipStatsCard';
 import { useMemberships } from '@/features/membership/useMemberships';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { supabase } from '@/lib/supabase';
@@ -51,7 +52,17 @@ export default function MembershipScreen() {
   const { data: memberships, isLoading, isError, error } = useMemberships();
   const { data: stats } = useMonthlyStats();
   const [showForm, setShowForm] = useState(false);
-  const isEmpty = !isLoading && !isError && (memberships?.length ?? 0) === 0;
+
+  const list = memberships ?? [];
+  const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
+  const withRisk = list.map((m) => ({
+    m,
+    risk: computeRisk(m, visitsOf(m.id)),
+    visits: visitsOf(m.id),
+  }));
+  const sorted = sortByRisk(withRisk, (x) => x.risk); // spec: 위험순 정렬
+  const summary = summarize(withRisk.map((x) => x.risk));
+  const isEmpty = !isLoading && !isError && list.length === 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -68,12 +79,19 @@ export default function MembershipScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-          {/* PART 2: 이번달 통계(전체) + 센터 가기 */}
-          <HomeDashboard onGoCenter={notifyGoCenter} />
+          {/* spec 요약 헤더 (위험/주의/안전 집계 + 총 위험 금액) */}
+          {!isLoading && !isError && list.length > 0 ? (
+            <SummaryHeader summary={summary} count={list.length} />
+          ) : null}
 
-          <ThemedText type="subtitle" style={styles.listHeading}>
-            회원권 목록
-          </ThemedText>
+          {/* 센터 가기 (PART 3 진입점) */}
+          <Pressable
+            onPress={notifyGoCenter}
+            style={({ pressed }) => [styles.centerBtn, pressed && styles.centerBtnPressed]}>
+            <ThemedText type="subtitle" style={styles.centerBtnLabel}>
+              🏃 센터 가기
+            </ThemedText>
+          </Pressable>
 
           {isLoading && (
             <View style={styles.stateBox}>
@@ -93,9 +111,9 @@ export default function MembershipScreen() {
             </ThemedView>
           )}
 
-          {/* 회원권마다 독립 현황 카드 (정비용·남은기간·회당비용·회원권 활용 신호등) */}
-          {memberships?.map((m) => (
-            <SummaryCard key={m.id} m={m} monthlyVisits={stats?.byMembership[m.id] ?? 0} />
+          {/* 위험순 회원권 카드 */}
+          {sorted.map((x) => (
+            <MembershipStatsCard key={x.m.id} m={x.m} risk={x.risk} monthlyVisits={x.visits} />
           ))}
         </ScrollView>
 
@@ -146,7 +164,14 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingBottom: Spacing.three,
   },
-  listHeading: { marginTop: Spacing.two },
+  centerBtn: {
+    backgroundColor: '#22c55e',
+    borderRadius: Spacing.two,
+    paddingVertical: Spacing.four,
+    alignItems: 'center',
+  },
+  centerBtnPressed: { opacity: 0.85 },
+  centerBtnLabel: { color: '#fff' },
   stateBox: {
     paddingVertical: Spacing.four,
     alignItems: 'center',
