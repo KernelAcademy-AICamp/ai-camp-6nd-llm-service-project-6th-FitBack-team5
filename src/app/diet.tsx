@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { useProfile } from '@/features/auth/useProfile';
+import { useFoodSearch, type FoodSearchResult } from '@/features/diet/foodSearch';
 import {
   MOCK_CONTEXT,
   calorieTargetFromProfile,
@@ -406,7 +407,7 @@ function RecordModal({
     }, 1200);
   }
 
-  function pickFood(food: (typeof FAKE_RESULTS)[number]) {
+  function pickFood(food: FoodSearchResult) {
     setDraft({
       mealType: currentMealType(),
       name: food.name,
@@ -419,8 +420,14 @@ function RecordModal({
     setStep('review');
   }
 
-  const q = searchInput.trim();
-  const searchResults = q ? FAKE_RESULTS.filter((f) => f.name.includes(q)) : FAKE_RESULTS;
+  // 검색어 디바운스(350ms) 후 식약처 DB 검색
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+  const search = useFoodSearch(debouncedQuery);
+  const searchResults = search.data ?? [];
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={close}>
@@ -558,14 +565,15 @@ function RecordModal({
                   />
                 </View>
                 <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                  {searchResults.map((f) => (
-                    <Pressable key={f.name} onPress={() => pickFood(f)} style={styles.searchItem}>
+                  {searchResults.map((f, i) => (
+                    <Pressable key={`${f.name}-${i}`} onPress={() => pickFood(f)} style={styles.searchItem}>
                       <View style={styles.flex1}>
                         <Txt variant="body" weight="600">
                           {f.name}
                         </Txt>
                         <Txt variant="caption" color={D.gray500}>
                           탄 {f.carb}g · 단 {f.protein}g · 지 {f.fat}g
+                          {f.servingSize ? ` · ${f.servingSize}` : ''}
                         </Txt>
                       </View>
                       <Txt variant="body" weight="600" color={D.primary}>
@@ -573,9 +581,27 @@ function RecordModal({
                       </Txt>
                     </Pressable>
                   ))}
-                  {searchResults.length === 0 && (
+                  {search.isFetching && (
+                    <View style={styles.searchEmpty}>
+                      <ActivityIndicator color={D.primary} />
+                    </View>
+                  )}
+                  {!search.isFetching && search.isError && (
+                    <Txt variant="caption" color={D.error} style={styles.searchEmpty}>
+                      검색 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.
+                    </Txt>
+                  )}
+                  {!search.isFetching &&
+                    !search.isError &&
+                    debouncedQuery.length >= 2 &&
+                    searchResults.length === 0 && (
+                      <Txt variant="caption" color={D.gray500} style={styles.searchEmpty}>
+                        검색 결과가 없어요.
+                      </Txt>
+                    )}
+                  {debouncedQuery.length < 2 && (
                     <Txt variant="caption" color={D.gray500} style={styles.searchEmpty}>
-                      검색 결과가 없어요.
+                      음식 이름을 2자 이상 입력하면 검색해요.
                     </Txt>
                   )}
                 </ScrollView>
@@ -1274,7 +1300,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: D.line,
   },
-  searchEmpty: { textAlign: 'center', paddingVertical: S.xl },
+  searchEmpty: { textAlign: 'center', paddingVertical: S.xl, alignItems: 'center' },
 
   analyzing: { alignItems: 'center', gap: S.sm, paddingVertical: S.xxl },
 
