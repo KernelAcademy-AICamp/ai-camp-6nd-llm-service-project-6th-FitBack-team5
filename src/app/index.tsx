@@ -1,9 +1,11 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MembershipForm } from '@/features/membership/MembershipForm';
 import {
   type Membership,
   type MembershipStatus,
@@ -68,15 +70,24 @@ function AuthFooter() {
 
 export default function MembershipScreen() {
   const { data: memberships, isLoading, isError, error } = useMemberships();
+  const [showForm, setShowForm] = useState(false);
   const isEmpty = !isLoading && !isError && (memberships?.length ?? 0) === 0;
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedText type="title">내 회원권</ThemedText>
-        <ScrollView
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}>
+        <View style={styles.titleRow}>
+          <ThemedText type="title">내 회원권</ThemedText>
+          <Pressable
+            onPress={() => setShowForm(true)}
+            style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
+            <ThemedText type="smallBold" style={styles.addButtonLabel}>
+              + 회원권 추가
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
           {isLoading && (
             <View style={styles.stateBox}>
               <ActivityIndicator />
@@ -91,14 +102,28 @@ export default function MembershipScreen() {
           {isEmpty && (
             <ThemedView type="backgroundElement" style={styles.card}>
               <ThemedText type="default">등록된 회원권이 없어요.</ThemedText>
+              <ThemedText type="small">오른쪽 위 “+ 회원권 추가”로 등록해 보세요.</ThemedText>
             </ThemedView>
           )}
           {memberships?.map((m) => (
             <MembershipCard key={m.id} item={m} />
           ))}
         </ScrollView>
+
         <AuthFooter />
       </SafeAreaView>
+
+      <Modal
+        visible={showForm}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowForm(false)}>
+        <ThemedView style={styles.modalRoot}>
+          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+            <MembershipForm onClose={() => setShowForm(false)} />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -115,6 +140,19 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     gap: Spacing.three,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  addButton: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.two,
+    backgroundColor: '#111',
+  },
+  addButtonPressed: { opacity: 0.8 },
+  addButtonLabel: { color: '#fff' },
   list: {
     gap: Spacing.three,
     paddingBottom: Spacing.three,
@@ -157,4 +195,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(127,127,127,0.4)',
   },
   authButtonPressed: { opacity: 0.6 },
+  modalRoot: { flex: 1 },
+  modalSafe: { flex: 1 },
 });
