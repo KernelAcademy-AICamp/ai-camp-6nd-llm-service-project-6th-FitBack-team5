@@ -25,7 +25,12 @@ const TYPES: { value: MembershipType; label: string; desc: string }[] = [
 ];
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  // 로컬 기준 오늘 (UTC 변환으로 날짜가 밀리지 않게 직접 조합)
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

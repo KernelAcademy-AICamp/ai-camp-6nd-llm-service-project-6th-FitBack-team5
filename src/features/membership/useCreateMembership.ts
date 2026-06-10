@@ -22,17 +22,19 @@ const PERIOD_MONTHS: Record<MembershipPeriod, number> = {
   '12month': 12,
 };
 
-/** end_date = start_date + period months. Both 'YYYY-MM-DD'. */
+/** end_date = start_date + period months. Both 'YYYY-MM-DD'.
+ * UTC로 다뤄야 toISOString()이 타임존만큼 날짜를 밀지 않는다. */
 export function computeEndDate(startDate: string, period: MembershipPeriod): string {
-  const d = new Date(`${startDate}T00:00:00`);
-  d.setMonth(d.getMonth() + PERIOD_MONTHS[period]);
+  const d = new Date(`${startDate}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + PERIOD_MONTHS[period]);
   return d.toISOString().slice(0, 10);
 }
 
-/** 'YYYY-MM-DD' that actually parses to that calendar date. */
+/** 'YYYY-MM-DD' that actually parses to that calendar date.
+ * UTC 파싱이라 round-trip 비교가 로컬 타임존 영향을 받지 않는다. */
 export function isValidDate(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const d = new Date(`${s}T00:00:00`);
+  const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 }
 
