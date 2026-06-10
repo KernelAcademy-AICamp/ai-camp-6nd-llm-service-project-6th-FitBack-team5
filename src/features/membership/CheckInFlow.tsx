@@ -8,6 +8,7 @@ import { Spacing } from '@/constants/theme';
 import { ExerciseRecordForm } from '@/features/membership/ExerciseRecordForm';
 import { useCenter } from '@/features/membership/useCenter';
 import { useCreateVisit } from '@/features/membership/useCreateVisit';
+import { useRoute } from '@/features/membership/useRoute';
 import { useWeather } from '@/features/membership/useWeather';
 import type { Membership } from '@/features/membership/useMemberships';
 
@@ -97,9 +98,11 @@ export function CheckInFlow({
   const [phone, setPhone] = useState(false);
   const [clothes, setClothes] = useState(false);
   const [gps, setGps] = useState<{ phase: GpsPhase; km?: number }>({ phase: 'idle' });
+  const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null);
   const { mutate, isPending, error } = useCreateVisit();
   const { data: center } = useCenter(selectedId);
   const { data: weather } = useWeather(center?.latitude, center?.longitude);
+  const { data: route } = useRoute(origin?.lat, origin?.lng, center?.latitude, center?.longitude);
 
   const selected = memberships.find((m) => m.id === selectedId) ?? null;
 
@@ -136,6 +139,25 @@ export function CheckInFlow({
       cancelled = true;
     };
   }, [step, center]);
+
+  // 출발 단계: 현재 위치를 origin으로 잡아 센터까지 경로를 조회.
+  useEffect(() => {
+    if (step !== 'depart') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const pos = await Location.getCurrentPositionAsync({});
+        if (!cancelled) setOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      } catch {
+        /* 위치 실패 시 경로 생략 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
 
   function checkIn() {
     if (!selected) return;
@@ -203,6 +225,11 @@ export function CheckInFlow({
             {weather ? (
               <ThemedText type="small" style={styles.dim}>
                 🌡️ {center?.name ?? '센터'} · {weather.desc} {weather.temp}°C
+              </ThemedText>
+            ) : null}
+            {route ? (
+              <ThemedText type="small" style={styles.dim}>
+                🚗 센터까지 약 {route.distanceKm.toFixed(1)}km · {route.durationMin}분
               </ThemedText>
             ) : null}
             <ThemedText type="default">파이팅! 한 걸음이면 도착이에요 🙌</ThemedText>
