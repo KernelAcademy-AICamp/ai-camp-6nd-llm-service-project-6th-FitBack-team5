@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View }
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
 import {
   computeEndDate,
   isValidDate,
@@ -25,21 +26,35 @@ const TYPES: { value: MembershipType; label: string; desc: string }[] = [
 ];
 
 function todayISO(): string {
-  // 로컬 기준 오늘 (UTC 변환으로 날짜가 밀리지 않게 직접 조합)
   const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  required,
+  error,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  error?: string | null;
+  children: ReactNode;
+}) {
   return (
     <View style={styles.field}>
-      <ThemedText type="small" style={styles.fieldLabel}>
-        {label}
-      </ThemedText>
+      <View style={styles.labelRow}>
+        <ThemedText type="small" style={styles.fieldLabel}>
+          {label}
+        </ThemedText>
+        {required ? <ThemedText style={styles.required}> *</ThemedText> : null}
+      </View>
       {children}
+      {error ? (
+        <ThemedText type="small" style={styles.errorText}>
+          {error}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -51,25 +66,34 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   const [startDate, setStartDate] = useState(todayISO());
   const [type, setType] = useState<MembershipType>('free');
   const [maxVisits, setMaxVisits] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const { mutate, isPending, error } = useCreateMembership();
+  const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
 
   const showVisits = type !== 'free'; // STEP 5: session/class만 횟수 입력
   const costNum = Number(cost);
   const visitsNum = Number(maxVisits);
   const dateOk = isValidDate(startDate);
+  const nameOk = name.trim().length > 0;
+  const costOk = cost.length > 0 && !Number.isNaN(costNum) && costNum >= 0;
+  const visitsOk =
+    !showVisits || (maxVisits.length > 0 && Number.isInteger(visitsNum) && visitsNum > 0);
 
-  const canSubmit =
-    name.trim().length > 0 &&
-    cost.length > 0 &&
-    !Number.isNaN(costNum) &&
-    costNum >= 0 &&
-    dateOk &&
-    (!showVisits || (maxVisits.length > 0 && Number.isInteger(visitsNum) && visitsNum > 0)) &&
-    !isPending;
+  const canSubmit = nameOk && costOk && dateOk && visitsOk && !isPending;
+
+  const nameError = touched.name && !nameOk ? '회원권명을 입력해 주세요. (필수)' : null;
+  const costError = touched.cost && !costOk ? '비용을 숫자로 입력해 주세요. (필수)' : null;
+  const visitsError =
+    touched.maxVisits && showVisits && !visitsOk ? '횟수를 1 이상 입력해 주세요. (필수)' : null;
 
   function handleSubmit() {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      // 빈 칸 그대로 누르면 어떤 항목이 필수인지 메시지로 표시
+      setTouched({ name: true, cost: true, startDate: true, maxVisits: true });
+      return;
+    }
     mutate(
       { name, cost: costNum, period, startDate, type, maxVisits: showVisits ? visitsNum : null },
       { onSuccess: onClose },
@@ -87,24 +111,26 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         {/* STEP 3: 회원권 기본 정보 */}
-        <Field label="회원권명">
+        <Field label="회원권명" required error={nameError}>
           <TextInput
             value={name}
             onChangeText={setName}
+            onBlur={() => touch('name')}
             placeholder="예: 강남 PT 30회"
             placeholderTextColor="#9aa"
-            style={styles.input}
+            style={[styles.input, nameError && styles.inputError]}
           />
         </Field>
 
-        <Field label="비용 (원)">
+        <Field label="비용 (원)" required error={costError}>
           <TextInput
             value={cost}
             onChangeText={setCost}
+            onBlur={() => touch('cost')}
             keyboardType="numeric"
             placeholder="예: 360000"
             placeholderTextColor="#9aa"
-            style={styles.input}
+            style={[styles.input, costError && styles.inputError]}
           />
         </Field>
 
@@ -121,15 +147,11 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
           </View>
         </Field>
 
-        <Field label="시작일 (YYYY-MM-DD)">
-          <TextInput
-            value={startDate}
-            onChangeText={setStartDate}
-            placeholder="2026-06-10"
-            placeholderTextColor="#9aa"
-            autoCapitalize="none"
-            style={[styles.input, !dateOk && startDate.length > 0 && styles.inputError]}
-          />
+        {/* STEP 3: 시작일 — 휠 날짜 선택기 */}
+        <Field label="시작일" required>
+          <Pressable onPress={() => setPickerOpen(true)} style={styles.input}>
+            <ThemedText type="default">{startDate}</ThemedText>
+          </Pressable>
           {dateOk && (
             <ThemedText type="small" style={styles.hint}>
               만료일 · {computeEndDate(startDate, period)} (자동 계산)
@@ -159,27 +181,28 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
 
         {/* STEP 5: 형태별 추가 정보 — 횟수 */}
         {showVisits && (
-          <Field label={type === 'session' ? '계약 횟수' : '횟수'}>
+          <Field label={type === 'session' ? '계약 횟수' : '횟수'} required error={visitsError}>
             <TextInput
               value={maxVisits}
               onChangeText={setMaxVisits}
+              onBlur={() => touch('maxVisits')}
               keyboardType="numeric"
               placeholder="예: 30"
               placeholderTextColor="#9aa"
-              style={styles.input}
+              style={[styles.input, visitsError && styles.inputError]}
             />
           </Field>
         )}
 
         {error && (
-          <ThemedText type="small" style={styles.error}>
+          <ThemedText type="small" style={styles.errorText}>
             저장 실패: {(error as Error).message}
           </ThemedText>
         )}
 
         <Pressable
           onPress={handleSubmit}
-          disabled={!canSubmit}
+          disabled={isPending}
           style={({ pressed }) => [
             styles.submit,
             !canSubmit && styles.submitDisabled,
@@ -194,6 +217,17 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
           )}
         </Pressable>
       </ScrollView>
+
+      <DateWheelPicker
+        visible={pickerOpen}
+        value={startDate}
+        onConfirm={(d) => {
+          setStartDate(d);
+          touch('startDate');
+          setPickerOpen(false);
+        }}
+        onCancel={() => setPickerOpen(false)}
+      />
     </ThemedView>
   );
 }
@@ -213,7 +247,10 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   field: { gap: Spacing.two },
+  labelRow: { flexDirection: 'row', alignItems: 'center' },
   fieldLabel: { opacity: 0.7 },
+  required: { color: '#d33', fontWeight: '700' },
+  errorText: { color: '#d33' },
   input: {
     borderWidth: 1,
     borderColor: 'rgba(127,127,127,0.4)',
@@ -223,6 +260,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111',
     backgroundColor: '#fff',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   inputError: { borderColor: '#d33' },
   hint: { opacity: 0.7 },
@@ -235,10 +274,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(127,127,127,0.4)',
   },
-  segmentActive: {
-    backgroundColor: 'rgba(34,197,94,0.15)',
-    borderColor: '#22c55e',
-  },
+  segmentActive: { backgroundColor: 'rgba(34,197,94,0.15)', borderColor: '#22c55e' },
   typeCol: { gap: Spacing.two },
   typeOption: {
     flexDirection: 'row',
@@ -249,10 +285,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(127,127,127,0.4)',
   },
-  typeOptionActive: {
-    backgroundColor: 'rgba(34,197,94,0.12)',
-    borderColor: '#22c55e',
-  },
+  typeOptionActive: { backgroundColor: 'rgba(34,197,94,0.12)', borderColor: '#22c55e' },
   radioOuter: {
     width: 20,
     height: 20,
@@ -262,14 +295,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#22c55e',
-  },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e' },
   typeTextCol: { flex: 1, gap: 2 },
-  error: { color: '#d33' },
   submit: {
     marginTop: Spacing.two,
     backgroundColor: '#111',
