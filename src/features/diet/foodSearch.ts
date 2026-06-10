@@ -18,7 +18,8 @@ interface FoodSearchResponse {
 }
 
 async function searchFoods(query: string): Promise<FoodSearchResult[]> {
-  const { data, error } = await supabase.functions.invoke<FoodSearchResponse>('food', {
+  // 함수는 Supabase에 'food-search' 이름으로 배포돼 있으나, 검색+분석 모두 처리하는 통합 함수다.
+  const { data, error } = await supabase.functions.invoke<FoodSearchResponse>('food-search', {
     body: { action: 'search', query },
   });
   if (error) throw error;

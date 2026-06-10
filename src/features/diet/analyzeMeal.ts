@@ -22,7 +22,8 @@ export interface AnalyzeInput {
 }
 
 async function analyzeMealText({ text, grams }: AnalyzeInput): Promise<AnalyzedMeal> {
-  const { data, error } = await supabase.functions.invoke<AnalyzeResponse>('food', {
+  // 통합 함수가 'food-search' 이름으로 배포돼 있어 같은 함수의 analyze 액션을 호출한다.
+  const { data, error } = await supabase.functions.invoke<AnalyzeResponse>('food-search', {
     body: { action: 'analyze', text, grams },
   });
   if (error) throw error;

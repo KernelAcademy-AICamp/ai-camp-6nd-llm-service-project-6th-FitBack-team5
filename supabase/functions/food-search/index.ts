@@ -1,18 +1,18 @@
-// Edge Function: food
-// 식단 기능용 통합 함수. body.action 으로 분기한다.
+// Edge Function: food-search (식단 기능용 통합 함수)
+// Supabase에 'food-search' 이름으로 배포됨. 검색+분석을 body.action 으로 분기한다.
 //   action='search'  : { query }      → 식품영양성분DB 검색 결과 리스트(100g 기준)
-//   action='analyze' : { text }       → 자연어 식단 → Claude 추출 + DB 정확일치 보정 → 합산
+//   action='analyze' : { text, grams? } → 자연어 식단 → Claude 추출 + DB 정확일치 보정 → 합산
 //
 // 데이터: 공공데이터포털 식품의약품안전처_식품영양성분DB정보(15127578)
 //   엔드포인트 apis.data.go.kr/1471000/FoodNtrCpntDbInfo02/getFoodNtrCpntDbInq02
 //   필드(100g=SERVING_SIZE 기준): FOOD_NM_KR, AMT_NUM1=열량, AMT_NUM3=단백질, AMT_NUM4=지방, AMT_NUM6=탄수화물
 //
-// 배포:    npx supabase functions deploy food
+// 배포:    npx supabase functions deploy food-search
 // secrets: npx supabase secrets set FOOD_SAFETY_API_KEY=... ANTHROPIC_API_KEY=...
 //
 // 앱 호출:
-//   supabase.functions.invoke('food', { body: { action: 'search', query: '닭가슴살' } })
-//   supabase.functions.invoke('food', { body: { action: 'analyze', text: '치킨 2조각, 현미밥 한공기' } })
+//   supabase.functions.invoke('food-search', { body: { action: 'search', query: '닭가슴살' } })
+//   supabase.functions.invoke('food-search', { body: { action: 'analyze', text: '치킨 2조각, 현미밥 한공기' } })
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
