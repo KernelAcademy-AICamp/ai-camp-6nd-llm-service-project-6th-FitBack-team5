@@ -9,10 +9,11 @@ import {
   Text,
   TextInput,
   View,
+  type DimensionValue,
   type TextStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { useProfile } from '@/features/auth/useProfile';
 import {
@@ -134,6 +135,25 @@ function currentMealType(): MealType {
   return '저녁'; // 가데이터: 시간대 기본 끼니 (라이브 시각 미사용)
 }
 
+// 부족 매크로별 추천 식품 + 보충량(g) — 기록 후 AI 식단 추천에 사용 (가데이터)
+const FOOD_REC: Record<'protein' | 'carb' | 'fat', { name: string; amount: number }[]> = {
+  protein: [
+    { name: '닭가슴살', amount: 35 },
+    { name: '그릭요거트', amount: 10 },
+    { name: '계란', amount: 6 },
+  ],
+  carb: [
+    { name: '현미밥', amount: 45 },
+    { name: '바나나', amount: 27 },
+    { name: '고구마', amount: 28 },
+  ],
+  fat: [
+    { name: '아보카도', amount: 15 },
+    { name: '견과류', amount: 14 },
+    { name: '땅콩버터', amount: 8 },
+  ],
+};
+
 // 운동 대비 섭취 상태 (순섭취/목표 비율 → 부족/적정/과다)
 function balanceStatus(ratio: number): { label: string; color: string; desc: string } {
   if (ratio < 0.9)
@@ -180,14 +200,13 @@ function BalanceMeter({ ratio, showMarker }: { ratio: number; showMarker: boolea
   const pos = Math.min(Math.max(ratio / 1.5, 0), 1) * 100;
   return (
     <View style={styles.meterWrap}>
-      <View style={styles.meterTrackWrap}>
-        <View style={styles.meterTrack} />
-        {showMarker && <View style={[styles.meterMarker, { left: `${pos}%` }]} />}
+      <View style={styles.meterTrack}>
+        {showMarker && <View style={[styles.meterFill, { width: `${pos}%` }]} />}
       </View>
       <View style={styles.meterLabels}>
-        <Txt variant="label" color={D.gray500}>부족</Txt>
-        <Txt variant="label" color={D.gray500}>적정</Txt>
-        <Txt variant="label" color={D.gray500}>과다</Txt>
+        <Txt variant="label" color="#999999">부족</Txt>
+        <Txt variant="label" color="#999999">적정</Txt>
+        <Txt variant="label" color="#999999">과다</Txt>
       </View>
     </View>
   );
@@ -217,6 +236,59 @@ function SemiGauge({ pct }: { pct: number }) {
       </Svg>
       <View style={styles.gaugeLabel}>
         <Txt variant="h1">{Math.round(pct)}%</Txt>
+      </View>
+    </View>
+  );
+}
+
+// 스크롤 상단 페이드 — 콘텐츠가 날짜 스트립 아래로 부드럽게 사라지도록 bg색→투명 그라데이션
+function FadeTop() {
+  return (
+    <View pointerEvents="none" style={styles.fadeTop}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id="fadeTop" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={D.bgBase} stopOpacity={1} />
+            <Stop offset="1" stopColor={D.bgBase} stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#fadeTop)" />
+      </Svg>
+    </View>
+  );
+}
+
+// 칼로리 그라데이션 바 — 보라→시안 fill + 활동 전/후 점선 마커
+function CalorieBar({ consumed, goal, burned }: { consumed: number; goal: number; burned: number }) {
+  const scale = goal + burned; // 활동 후(최대)
+  const fill = Math.min(Math.max(consumed / scale, 0), 1);
+  const beforePos = Math.min(Math.max(goal / scale, 0), 1); // 활동 전 위치
+  return (
+    <View>
+      <View style={styles.calBarWrap}>
+        <View style={styles.calTrack}>
+          <Svg width="100%" height="100%">
+            <Defs>
+              <LinearGradient id="calGrad" x1="0" y1="0" x2="1" y2="0">
+                <Stop offset="0" stopColor="#8E9BFF" />
+                <Stop offset="1" stopColor="#6675FF" />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width={`${(fill * 100).toFixed(1)}%`} height="100%" rx="6" fill="url(#calGrad)" />
+          </Svg>
+        </View>
+        <View style={[styles.calMarker, { left: `${(beforePos * 100).toFixed(1)}%` as DimensionValue }]} />
+        <View style={[styles.calMarker, { left: '100%' }]} />
+      </View>
+      <View style={styles.calLabels}>
+        <View style={[styles.calLabelAnchor, { left: `${(beforePos * 100).toFixed(1)}%` as DimensionValue }]}>
+          <Txt variant="label" color="#999999" style={styles.calLabelCentered}>
+            활동 전
+          </Txt>
+        </View>
+        <Txt variant="label" color="#999999" style={styles.calLabelRight}>
+          활동 후
+        </Txt>
       </View>
     </View>
   );
@@ -284,39 +356,14 @@ function MealRow({ item }: { item: Meal }) {
   );
 }
 
-// ── 기록 플로우 모달 ────────────────────────────────────────
-type RecordStep = 'method' | 'text' | 'analyzing' | 'review';
-
-function MethodButton({
-  icon,
-  title,
-  desc,
-  onPress,
-}: {
-  icon: React.ComponentProps<typeof MaterialIcons>['name'];
-  title: string;
-  desc: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.methodBtn, pressed && { backgroundColor: D.primaryLight }]}>
-      <View style={styles.methodIconBox}>
-        <MaterialIcons name={icon} size={24} color={D.primary} />
-      </View>
-      <View style={styles.methodText}>
-        <Txt variant="body" weight="600">
-          {title}
-        </Txt>
-        <Txt variant="caption" color={D.gray500}>
-          {desc}
-        </Txt>
-      </View>
-      <MaterialIcons name="chevron-right" size={24} color={D.gray300} />
-    </Pressable>
-  );
-}
+// ── 기록 모달 (전체 화면 + 탭) ──────────────────────────────
+type RecTab = 'image' | 'text' | 'search';
+type RecStep = 'input' | 'analyzing' | 'review';
+const REC_TABS: { key: RecTab; label: string; icon: React.ComponentProps<typeof MaterialIcons>['name'] }[] = [
+  { key: 'image', label: '사진 촬영', icon: 'photo-camera' },
+  { key: 'text', label: '텍스트 입력', icon: 'edit' },
+  { key: 'search', label: '검색', icon: 'search' },
+];
 
 function RecordModal({
   visible,
@@ -327,14 +374,17 @@ function RecordModal({
   onClose: () => void;
   onSave: (meal: Omit<Meal, 'id' | 'time'>) => void;
 }) {
-  const [step, setStep] = useState<RecordStep>('method');
+  const [tab, setTab] = useState<RecTab>('image');
+  const [step, setStep] = useState<RecStep>('input');
   const [textInput, setTextInput] = useState('');
-  const [focused, setFocused] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
   const [draft, setDraft] = useState<Omit<Meal, 'id' | 'time'> | null>(null);
 
   function close() {
-    setStep('method');
+    setTab('image');
+    setStep('input');
     setTextInput('');
+    setSearchInput('');
     setDraft(null);
     onClose();
   }
@@ -342,132 +392,198 @@ function RecordModal({
   function analyze(method: InputMethod, nameHint?: string) {
     setStep('analyzing');
     const picked = FAKE_RESULTS[nameHint ? nameHint.length % FAKE_RESULTS.length : 0];
-    const result: Omit<Meal, 'id' | 'time'> = {
-      mealType: currentMealType(),
-      name: nameHint?.trim() || picked.name,
-      kcal: picked.kcal,
-      carb: picked.carb,
-      protein: picked.protein,
-      fat: picked.fat,
-      inputMethod: method,
-    };
     setTimeout(() => {
-      setDraft(result);
+      setDraft({
+        mealType: currentMealType(),
+        name: nameHint?.trim() || picked.name,
+        kcal: picked.kcal,
+        carb: picked.carb,
+        protein: picked.protein,
+        fat: picked.fat,
+        inputMethod: method,
+      });
       setStep('review');
     }, 1200);
   }
 
+  function pickFood(food: (typeof FAKE_RESULTS)[number]) {
+    setDraft({
+      mealType: currentMealType(),
+      name: food.name,
+      kcal: food.kcal,
+      carb: food.carb,
+      protein: food.protein,
+      fat: food.fat,
+      inputMethod: 'manual',
+    });
+    setStep('review');
+  }
+
+  const q = searchInput.trim();
+  const searchResults = q ? FAKE_RESULTS.filter((f) => f.name.includes(q)) : FAKE_RESULTS;
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <View style={styles.sheetHeader}>
-            <Txt variant="h2">{step === 'review' ? 'AI 분석 결과' : '식단 기록'}</Txt>
-            <Pressable onPress={close} hitSlop={12} style={styles.closeBtn}>
-              <MaterialIcons name="close" size={24} color={D.gray500} />
-            </Pressable>
-          </View>
+    <Modal visible={visible} animationType="slide" onRequestClose={close}>
+      <SafeAreaView style={styles.recScreen} edges={['top', 'bottom', 'left', 'right']}>
+        {/* 헤더 */}
+        <View style={styles.recHeader}>
+          <Pressable onPress={() => (step === 'review' ? setStep('input') : close())} hitSlop={8} style={styles.recHeaderBtn}>
+            <MaterialIcons name={step === 'review' ? 'arrow-back' : 'close'} size={24} color={D.gray900} />
+          </Pressable>
+          <Txt variant="h2">{step === 'review' ? 'AI 분석 결과' : '식단 기록'}</Txt>
+          <View style={styles.recHeaderBtn} />
+        </View>
 
-          {step === 'method' && (
-            <View style={styles.methodList}>
-              <Txt variant="caption" color={D.gray500}>
-                어떻게 기록할까요?
+        {step === 'review' && draft ? (
+          <ScrollView contentContainerStyle={styles.reviewBody} showsVerticalScrollIndicator={false}>
+            <View style={styles.reviewCard}>
+              <Txt variant="h2" style={styles.center}>
+                {draft.name}
               </Txt>
-              <MethodButton icon="photo-camera" title="사진 촬영" desc="음식을 촬영하면 AI가 인식해요." onPress={() => analyze('image')} />
-              <MethodButton icon="photo-library" title="갤러리 업로드" desc="저장된 사진을 불러와요." onPress={() => analyze('image')} />
-              <MethodButton icon="edit" title="텍스트 입력" desc="음식명을 직접 입력해요." onPress={() => setStep('text')} />
-            </View>
-          )}
-
-          {step === 'text' && (
-            <View style={styles.methodList}>
-              <Txt variant="caption" color={D.gray500}>
-                무엇을 드셨어요?
-              </Txt>
-              <TextInput
-                value={textInput}
-                onChangeText={setTextInput}
-                placeholder="예: 김치찌개, 공깃밥"
-                placeholderTextColor={D.gray300}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                style={[
-                  styles.input,
-                  focused && { borderColor: D.primary, borderWidth: 1.5, backgroundColor: D.primaryLight },
-                ]}
-                autoFocus
-                onSubmitEditing={() => textInput.trim() && analyze('manual', textInput)}
-              />
-              <PrimaryButton label="AI 분석" disabled={!textInput.trim()} onPress={() => analyze('manual', textInput)} />
-            </View>
-          )}
-
-          {step === 'analyzing' && (
-            <View style={styles.analyzing}>
-              <ActivityIndicator size="large" color={D.primary} />
-              <Txt variant="body">AI가 음식을 분석하고 있어요</Txt>
-              <Txt variant="caption" color={D.gray500}>
-                음식 인식 · 칼로리 추정 · 탄단지 분석
-              </Txt>
-            </View>
-          )}
-
-          {step === 'review' && draft && (
-            <ScrollView contentContainerStyle={styles.reviewBody} showsVerticalScrollIndicator={false}>
-              <View style={styles.reviewCard}>
-                <Txt variant="h2" style={styles.center}>
-                  {draft.name}
+              <View style={styles.estimateRow}>
+                <MaterialIcons name="info-outline" size={14} color={D.gray500} />
+                <Txt variant="caption" color={D.gray500}>
+                  추정값이에요. 확인 후 저장하세요.
                 </Txt>
-                <View style={styles.estimateRow}>
-                  <MaterialIcons name="info-outline" size={14} color={D.gray500} />
-                  <Txt variant="caption" color={D.gray500}>
-                    추정값이에요. 확인 후 저장하세요.
-                  </Txt>
-                </View>
-                <View style={styles.reviewKcal}>
-                  <Txt variant="display" color={D.primary} style={{ fontSize: 44, lineHeight: 52 }}>
-                    {draft.kcal}
-                  </Txt>
-                  <Txt variant="caption" color={D.gray500}>
-                    kcal
-                  </Txt>
-                </View>
-                <View style={styles.reviewMacros}>
-                  <ReviewMacro label="탄수화물" value={draft.carb} />
-                  <ReviewMacro label="단백질" value={draft.protein} />
-                  <ReviewMacro label="지방" value={draft.fat} />
-                </View>
               </View>
+              <View style={styles.reviewKcal}>
+                <Txt variant="display" color={D.primary} style={styles.reviewKcalNum}>
+                  {draft.kcal}
+                </Txt>
+                <Txt variant="caption" color={D.gray500}>
+                  kcal
+                </Txt>
+              </View>
+              <View style={styles.reviewMacros}>
+                <ReviewMacro label="탄수화물" value={draft.carb} />
+                <ReviewMacro label="단백질" value={draft.protein} />
+                <ReviewMacro label="지방" value={draft.fat} />
+              </View>
+            </View>
 
-              <Txt variant="caption" color={D.gray500}>
-                끼니
-              </Txt>
-              <View style={styles.chipRow}>
-                {MEAL_TYPES.map((t) => {
-                  const selected = draft.mealType === t;
-                  return (
-                    <Pressable
-                      key={t}
-                      onPress={() => setDraft({ ...draft, mealType: t })}
-                      style={[
-                        styles.mealChip,
-                        selected
-                          ? { backgroundColor: D.primaryLight, borderColor: D.primary }
-                          : { backgroundColor: D.surface, borderColor: D.line },
-                      ]}>
-                      <Txt variant="caption" weight="600" color={selected ? D.primary : D.gray700}>
-                        {t}
+            <Txt variant="caption" color={D.gray500}>
+              끼니
+            </Txt>
+            <View style={styles.chipRow}>
+              {MEAL_TYPES.map((t) => {
+                const selected = draft.mealType === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => setDraft({ ...draft, mealType: t })}
+                    style={[
+                      styles.mealChip,
+                      selected
+                        ? { backgroundColor: D.primaryLight, borderColor: D.primary }
+                        : { backgroundColor: D.surface, borderColor: D.line },
+                    ]}>
+                    <Txt variant="caption" weight="600" color={selected ? D.primary : D.gray700}>
+                      {t}
+                    </Txt>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <PrimaryButton label="저장하기" onPress={() => draft && (onSave(draft), close())} />
+          </ScrollView>
+        ) : step === 'analyzing' ? (
+          <View style={styles.analyzing}>
+            <ActivityIndicator size="large" color={D.primary} />
+            <Txt variant="body">AI가 음식을 분석하고 있어요</Txt>
+            <Txt variant="caption" color={D.gray500}>
+              음식 인식 · 칼로리 추정 · 탄단지 분석
+            </Txt>
+          </View>
+        ) : (
+          <>
+            {/* 탭 */}
+            <View style={styles.recTabBar}>
+              {REC_TABS.map((t) => {
+                const active = tab === t.key;
+                const color = active ? D.primary : D.gray500;
+                return (
+                  <Pressable key={t.key} onPress={() => setTab(t.key)} style={styles.recTab}>
+                    <MaterialIcons name={t.icon} size={18} color={color} />
+                    <Txt variant="caption" weight={active ? '700' : '500'} color={color}>
+                      {t.label}
+                    </Txt>
+                    {active && <View style={styles.recTabIndicator} />}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* 탭 내용 */}
+            {tab === 'image' && (
+              <View style={styles.photoArea}>
+                <Pressable onPress={() => analyze('image')} style={styles.photoBtn}>
+                  <MaterialIcons name="photo-camera" size={40} color={D.primary} />
+                </Pressable>
+                <Txt variant="body" weight="600">
+                  사진으로 기록하기
+                </Txt>
+                <Txt variant="caption" color={D.gray500} style={styles.center}>
+                  음식을 촬영하면 AI가 칼로리·탄단지를 분석해요.
+                </Txt>
+              </View>
+            )}
+
+            {tab === 'text' && (
+              <View style={styles.tabForm}>
+                <TextInput
+                  value={textInput}
+                  onChangeText={setTextInput}
+                  placeholder={'먹은 음식을 입력하세요.\n(예: 치킨 2조각, 현미밥 한공기, 사과 1개)'}
+                  placeholderTextColor={D.gray300}
+                  style={styles.textArea}
+                  multiline
+                  autoFocus
+                />
+                <PrimaryButton label="AI 분석" disabled={!textInput.trim()} onPress={() => analyze('manual', textInput)} />
+              </View>
+            )}
+
+            {tab === 'search' && (
+              <View style={styles.tabForm}>
+                <View style={styles.searchBar}>
+                  <MaterialIcons name="search" size={20} color={D.gray500} />
+                  <TextInput
+                    value={searchInput}
+                    onChangeText={setSearchInput}
+                    placeholder="음식 이름 검색"
+                    placeholderTextColor={D.gray300}
+                    style={styles.searchInput}
+                    autoFocus
+                  />
+                </View>
+                <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  {searchResults.map((f) => (
+                    <Pressable key={f.name} onPress={() => pickFood(f)} style={styles.searchItem}>
+                      <View style={styles.flex1}>
+                        <Txt variant="body" weight="600">
+                          {f.name}
+                        </Txt>
+                        <Txt variant="caption" color={D.gray500}>
+                          탄 {f.carb}g · 단 {f.protein}g · 지 {f.fat}g
+                        </Txt>
+                      </View>
+                      <Txt variant="body" weight="600" color={D.primary}>
+                        {f.kcal} kcal
                       </Txt>
                     </Pressable>
-                  );
-                })}
+                  ))}
+                  {searchResults.length === 0 && (
+                    <Txt variant="caption" color={D.gray500} style={styles.searchEmpty}>
+                      검색 결과가 없어요.
+                    </Txt>
+                  )}
+                </ScrollView>
               </View>
-
-              <PrimaryButton label="저장하기" onPress={() => draft && (onSave(draft), close())} />
-            </ScrollView>
-          )}
-        </View>
-      </View>
+            )}
+          </>
+        )}
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -642,9 +758,6 @@ export default function DietScreen() {
   const addMeal = useAddMeal(selectedDate);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const isToday = selectedDate === isoOf(new Date());
-  const selDate = parseIso(selectedDate);
-  const dateLabel = `${selDate.getMonth() + 1}월 ${selDate.getDate()}일 ${DOW_KO[selDate.getDay()]}요일`;
 
   // 가이드 목표 — 회원 신체정보(profiles) 기반. 단백질=체중×1.5g, 칼로리=TDEE×목표보정.
   const { data: profile } = useProfile();
@@ -682,25 +795,39 @@ export default function DietScreen() {
     ((totals.protein / target.protein + totals.carb / target.carb + totals.fat / target.fat) / 3) * 100,
   );
 
+  // 매크로 비중에 따른 한 줄 코멘트 (목표 대비 가장 높은 매크로 기준)
+  const macroHint = ((): string => {
+    if (!hasLog) return '오늘 식단을 기록해주세요.';
+    const rp = totals.protein / target.protein;
+    const rc = totals.carb / target.carb;
+    const rf = totals.fat / target.fat;
+    if (rp >= rc && rp >= rf) return '단백질을 잘 챙기고 있어요!';
+    if (rc >= rf) return '탄수화물 양이 좀 높아요.';
+    return '지방 비중이 좀 높아요.';
+  })();
+
   const calorieGoal = target.kcal;
   const remaining = calorieGoal - totals.kcal;
   const over = remaining < 0;
   const net = totals.kcal - BURNED_KCAL;
   const netRatio = net / calorieGoal;
   const energyStatus = balanceStatus(netRatio);
-  const proteinRemain = Math.max(0, target.protein - totals.protein);
-  const proteinDone = proteinRemain === 0;
 
-  // 사용자 상태별 추천 (첫 식사 → 단백질 / 유산소 → 탄수화물 / 근력 → 단백질)
-  const coach = ((): { headline: string; foods: string[] } => {
-    if (proteinDone)
-      return { headline: '오늘 단백질 목표를 채웠어요. 충분히 회복할 수 있어요.', foods: [] };
-    if (!hasLog)
-      return { headline: '첫 식사는 가벼운 단백질 식단 추천드려요', foods: ['닭가슴살', '그릭요거트', '계란'] };
-    if (MOCK_CONTEXT.part === 'cardio')
-      return { headline: '유산소 운동엔 탄수화물로 에너지를 채워보세요', foods: ['현미밥', '바나나', '고구마'] };
-    return { headline: '근력 운동 회복엔 단백질 식단 추천드려요', foods: ['닭가슴살', '소고기', '두부'] };
-  })();
+  // 부족 영양소 (목표 - 섭취) — 결손 큰 상위 2개를 함께 고려해 균형 추천
+  const deficits = [
+    { key: 'protein' as const, label: '단백질', g: Math.max(0, target.protein - totals.protein) },
+    { key: 'carb' as const, label: '탄수화물', g: Math.max(0, target.carb - totals.carb) },
+    { key: 'fat' as const, label: '지방', g: Math.max(0, target.fat - totals.fat) },
+  ];
+  const topKeys = new Set(
+    deficits
+      .filter((d) => d.g > 0)
+      .sort((a, b) => b.g - a.g)
+      .slice(0, 2)
+      .map((d) => d.key),
+  );
+  const deficitLines = deficits.filter((d) => topKeys.has(d.key)); // 매크로 순서(단·탄·지) 유지
+  const recFoods = deficitLines.flatMap((d) => FOOD_REC[d.key].slice(0, 2)); // 각 영양소당 2개씩 균형
 
   function handleSave(meal: Omit<Meal, 'id' | 'time'>) {
     addMeal.mutate(meal);
@@ -714,28 +841,15 @@ export default function DietScreen() {
           onSelect={setSelectedDate}
           onOpenCalendar={() => setCalendarOpen(true)}
         />
+        <View style={styles.scrollWrap}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Txt variant="h1">{isToday ? '오늘의 식단' : '식단 기록'}</Txt>
-            <Txt variant="caption" color={D.gray500}>
-              {dateLabel}
-            </Txt>
-          </View>
-
           {/* ① 운동 맞춤 식단 가이드 — 회복 달성률 + 목표 매크로 + 운동 대비 섭취 상태 */}
-          <Card>
-            <View style={styles.aiHead}>
-              <MaterialIcons name="auto-awesome" size={16} color={D.primary} />
-              <Txt variant="label" weight="600" color={D.primary}>
-                운동 맞춤 식단 가이드
-              </Txt>
-            </View>
-
+          <Card style={styles.guideCard}>
             <View style={styles.guideHeadRow}>
               <View style={styles.flex1}>
-                <Txt variant="h2">회복 목표 달성률</Txt>
+                <Txt variant="h1">오늘의 식단 목표</Txt>
                 <Txt variant="caption" color={D.gray500}>
-                  {hasLog ? '꾸준히 채워가고 있어요' : '오늘 식단을 기록해주세요.'}
+                  {macroHint}
                 </Txt>
               </View>
               <SemiGauge pct={recoveryPct} />
@@ -751,6 +865,7 @@ export default function DietScreen() {
             <View style={styles.sectionDivider} />
 
             {/* 운동 대비 섭취 상태 */}
+            <View style={styles.statusGroup}>
             <View style={styles.statusHead}>
               <Txt variant="caption" color={D.gray700}>
                 운동 대비 섭취 상태
@@ -773,56 +888,112 @@ export default function DietScreen() {
             <Txt variant="caption" color={D.gray500}>
               {hasLog ? energyStatus.desc : '식단을 기록하면 운동 대비 섭취 상태를 알려드려요.'}
             </Txt>
+            </View>
           </Card>
 
-          {/* ② 코칭 — 사용자 상태별 추천 문구 + 추천 식품 */}
-          <Card>
-            <Txt variant="body" weight="600">
-              {coach.headline}
-            </Txt>
-            {coach.foods.length > 0 && (
+          {/* ② 기록 전: 오늘의 식단 가이드 / 기록 후: 부족 영양소 기반 AI 식단 추천 */}
+          <Card style={styles.aiRecCard}>
+            {!hasLog ? (
+              // 상태 1 — 목표 제시 + 기록 유도
               <>
-                <Txt variant="caption" color={D.gray500}>
-                  식단으로 추천드려요
+                <Txt variant="body" weight="600">
+                  오늘의 식단 가이드
                 </Txt>
+                <Txt variant="caption" color={D.gray500}>
+                  오늘 운동 기준 목표예요.
+                </Txt>
+                <Txt variant="caption" color={D.gray700}>
+                  단백질 {target.protein}g · 탄수화물 {target.carb}g · 지방 {target.fat}g
+                </Txt>
+                <Txt variant="caption" color={D.gray500}>
+                  첫 식사를 기록하면 부족한 영양소를 분석해드려요.
+                </Txt>
+              </>
+            ) : deficitLines.length > 0 ? (
+              // 상태 2 — 부족 영양소(상위 2개) 분석 + 균형 잡힌 추천
+              <>
+                <View style={styles.aiHead}>
+                  <MaterialIcons name="auto-awesome" size={16} color={D.primary} />
+                  <Txt variant="label" weight="600" color={D.primary}>
+                    AI 식단 추천
+                  </Txt>
+                </View>
+                <Txt variant="caption" color={D.gray500}>
+                  다음 식사에서 채워보세요.
+                </Txt>
+                <View style={styles.deficitList}>
+                  {deficitLines.map((d) => (
+                    <Txt key={d.key} variant="body" weight="700">
+                      {d.label} {d.g}g 부족
+                    </Txt>
+                  ))}
+                </View>
                 <View style={styles.foodChipWrap}>
-                  {coach.foods.map((f) => (
-                    <View key={f} style={styles.foodChip}>
-                      <MaterialIcons name="add" size={14} color={D.gray500} />
+                  {recFoods.map((f) => (
+                    <View key={f.name} style={styles.foodChip}>
                       <Txt variant="label" weight="600" color={D.gray700}>
-                        {f}
+                        {f.name}
+                      </Txt>
+                      <Txt variant="label" weight="400" color={D.gray500}>
+                        +{f.amount}g
                       </Txt>
                     </View>
                   ))}
                 </View>
               </>
+            ) : (
+              // 모든 목표 달성
+              <>
+                <View style={styles.aiHead}>
+                  <MaterialIcons name="auto-awesome" size={16} color={D.primary} />
+                  <Txt variant="label" weight="600" color={D.primary}>
+                    AI 식단 추천
+                  </Txt>
+                </View>
+                <Txt variant="body" weight="600">
+                  오늘 목표 영양소를 모두 채웠어요!
+                </Txt>
+              </>
             )}
           </Card>
 
-          {/* ③ 오늘 섭취 칼로리 */}
+          {/* ③ 오늘 섭취 칼로리 — 타이틀을 카드 밖으로 (오늘 기록과 동일 패턴) */}
+          <Txt variant="body" weight="600" color={D.gray700} style={styles.kcalTitle}>
+            오늘 섭취 칼로리
+          </Txt>
           <Card>
             <View style={styles.kcalHead}>
-              <Txt variant="caption" color={D.gray500}>
-                오늘 섭취 칼로리
-              </Txt>
-              <Txt variant="caption" color={over ? D.warning : D.gray500}>
-                {over
-                  ? `${(-remaining).toLocaleString()} 칼로리 초과`
-                  : `${remaining.toLocaleString()} 칼로리 남았어요`}
-              </Txt>
+              <View style={styles.flex1}>
+                <Txt variant="body" color={D.gray500}>
+                  {over
+                    ? `${(-remaining).toLocaleString()}kcal 초과예요`
+                    : `${remaining.toLocaleString()}kcal 더 먹어도 돼요`}
+                </Txt>
+                <View style={styles.kcalBig}>
+                  <Txt variant="h1" weight="700">
+                    {totals.kcal.toLocaleString()}
+                  </Txt>
+                  <Txt variant="body" color={D.gray500}>
+                    {' '}
+                    / {calorieGoal.toLocaleString()}kcal
+                  </Txt>
+                  <MaterialIcons name="info" size={16} color={D.gray300} style={styles.infoIcon} />
+                </View>
+              </View>
+              <Pressable
+                onPress={() => setModalOpen(true)}
+                style={({ pressed }) => [
+                  styles.addBtn,
+                  { backgroundColor: pressed ? D.primaryPressed : D.primary },
+                ]}>
+                <MaterialIcons name="add" size={24} color="#FFFFFF" />
+              </Pressable>
             </View>
-            <View style={styles.kcalBig}>
-              <Txt variant="h1">{totals.kcal.toLocaleString()}</Txt>
-              <Txt variant="caption" color={D.gray500}>
-                {' '}
-                / {calorieGoal.toLocaleString()} kcal
-              </Txt>
-            </View>
-            <ProgressBar ratio={totals.kcal / calorieGoal} color={over ? D.warning : D.primary} />
+            <CalorieBar consumed={totals.kcal} goal={calorieGoal} burned={BURNED_KCAL} />
           </Card>
 
           {/* ④ 오늘 기록 */}
-          <Txt variant="label" color={D.gray500} style={styles.listHead}>
+          <Txt variant="body" weight="600" color={D.gray700} style={styles.listHead}>
             오늘 기록 {meals.length}
           </Txt>
           <Card style={hasLog ? styles.listCard : undefined}>
@@ -864,16 +1035,9 @@ export default function DietScreen() {
             )}
           </Card>
         </ScrollView>
+          <FadeTop />
+        </View>
 
-        {/* 식단 기록 (화면 내 유일한 Primary CTA) */}
-        <Pressable
-          onPress={() => setModalOpen(true)}
-          style={({ pressed }) => [styles.fab, { backgroundColor: pressed ? D.primaryPressed : D.primary }]}>
-          <MaterialIcons name="add" size={22} color="#FFFFFF" />
-          <Txt variant="body" weight="600" color="#FFFFFF">
-            식단 기록
-          </Txt>
-        </Pressable>
       </SafeAreaView>
 
       <RecordModal visible={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} />
@@ -892,8 +1056,12 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, width: '100%', maxWidth: 800, alignSelf: 'center' },
 
   // 날짜 스트립 (하단 선 없음, 아래 영역과 24px 간격)
-  dateStrip: { flexGrow: 0, backgroundColor: D.bgBase, marginBottom: S.md },
+  dateStrip: { flexGrow: 0, backgroundColor: D.bgBase },
   dateStripContent: { paddingHorizontal: S.sm, alignItems: 'center' },
+
+  // 스크롤 영역 + 상단 페이드
+  scrollWrap: { flex: 1, position: 'relative' },
+  fadeTop: { position: 'absolute', top: 0, left: 0, right: 0, height: S.md, zIndex: 2 },
   dateItem: {
     width: DATE_ITEM_W,
     minHeight: 52,
@@ -920,8 +1088,7 @@ const styles = StyleSheet.create({
   calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   calCell: { width: `${100 / 7}%`, alignItems: 'center', justifyContent: 'center', paddingVertical: S.xs },
   calDay: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  scroll: { paddingHorizontal: SIDE, paddingTop: 0, paddingBottom: NAV_HEIGHT + S.xxl + S.md, gap: S.md },
-  header: { gap: S.xs, marginBottom: S.xs },
+  scroll: { paddingHorizontal: SIDE, paddingTop: S.md, paddingBottom: NAV_HEIGHT + S.xxl + S.md, gap: S.md },
   flex1: { flex: 1 },
 
   card: {
@@ -936,6 +1103,9 @@ const styles = StyleSheet.create({
 
   // 가이드 헤더
   aiHead: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+  guideCard: { padding: S.lg, gap: 12 },
+  // 운동 대비 섭취 상태 카드 ↔ 이 카드 사이 여백 8px (스크롤 gap 16 - 8)
+  aiRecCard: { marginTop: -S.sm },
   guideHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
 
   // 반원형 게이지
@@ -943,7 +1113,7 @@ const styles = StyleSheet.create({
   gaugeLabel: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' },
 
   // 목표 매크로
-  macroRow: { flexDirection: 'row', gap: S.sm, marginTop: S.xs },
+  macroRow: { flexDirection: 'row', gap: S.sm, marginTop: S.sm },
   macroCol: { flex: 1, gap: 2 },
   macroValueRow: { flexDirection: 'row', alignItems: 'baseline' },
   macroBar: { marginTop: S.xs },
@@ -952,28 +1122,21 @@ const styles = StyleSheet.create({
   track: { height: 6, borderRadius: R.full, backgroundColor: D.gray100, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: R.full },
 
-  sectionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line, marginVertical: S.xs },
+  sectionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line, marginVertical: S.sm },
 
   // 운동 대비 섭취 상태
+  statusGroup: { gap: S.sm },
   statusHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusPill: { paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.full },
 
   // 밸런스 미터
-  meterWrap: { gap: S.xs, marginTop: S.xs },
-  meterTrackWrap: { position: 'relative', justifyContent: 'center' },
-  meterTrack: { height: 10, borderRadius: R.full, backgroundColor: D.gray100 },
-  meterMarker: {
-    position: 'absolute',
-    top: -3,
-    width: 4,
-    height: 16,
-    borderRadius: 2,
-    backgroundColor: D.primary,
-    transform: [{ translateX: -2 }],
-  },
+  meterWrap: { gap: S.sm, marginTop: 0 },
+  meterTrack: { height: 10, borderRadius: R.full, backgroundColor: D.gray100, overflow: 'hidden' },
+  meterFill: { height: '100%', borderRadius: R.full, backgroundColor: D.gray300 },
   meterLabels: { flexDirection: 'row', justifyContent: 'space-between' },
 
-  // 코칭 — 추천 식품 칩
+  // 코칭 — 부족 영양소 + 추천 식품 칩
+  deficitList: { gap: 2 },
   foodChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs },
   foodChip: {
     flexDirection: 'row',
@@ -988,11 +1151,44 @@ const styles = StyleSheet.create({
   },
 
   // 칼로리
-  kcalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  kcalBig: { flexDirection: 'row', alignItems: 'baseline' },
+  kcalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: S.sm },
+  kcalBig: { flexDirection: 'row', alignItems: 'flex-end', marginTop: S.xs },
+  infoIcon: { marginLeft: S.xs, marginBottom: 3 },
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+
+  // 칼로리 그라데이션 바
+  calBarWrap: { position: 'relative', marginTop: S.sm },
+  calTrack: { height: 12, borderRadius: R.full, backgroundColor: D.gray100, overflow: 'hidden' },
+  calMarker: {
+    position: 'absolute',
+    top: -2,
+    width: 0,
+    height: 16,
+    borderLeftWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: D.gray300,
+  },
+  calLabels: { position: 'relative', height: 16, marginTop: S.xs },
+  calLabelAnchor: { position: 'absolute' },
+  // '활동 전'은 마커에서 왼쪽으로(우측정렬), '활동 후'는 오른쪽 끝 → 겹침 방지
+  calLabelCentered: { width: 40, textAlign: 'right', marginLeft: -40, paddingRight: 4 },
+  calLabelRight: { position: 'absolute', right: 0 },
 
   // list
-  listHead: { marginTop: S.xs, marginLeft: S.xs },
+  listHead: { marginTop: S.xs, marginLeft: S.xs, marginBottom: -S.sm },
+  // 섹션 위 여백 32px (스크롤 gap 16 + marginTop 16)
+  kcalTitle: { marginTop: S.md, marginLeft: S.xs, marginBottom: -S.sm },
   listCard: { paddingVertical: 0 },
   listState: { alignItems: 'center', justifyContent: 'center', gap: S.sm, paddingVertical: S.lg },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line },
@@ -1004,75 +1200,85 @@ const styles = StyleSheet.create({
   mealMacros: { paddingBottom: S.md, paddingLeft: S.xs },
 
   // FAB
-  fab: {
-    position: 'absolute',
-    bottom: NAV_HEIGHT + S.md,
-    right: SIDE,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.xs,
-    height: 52,
-    paddingHorizontal: S.lg,
-    borderRadius: R.full,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-  },
 
   // 모달
-  backdrop: { flex: 1, backgroundColor: 'rgba(17,24,39,0.45)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: D.surface,
-    borderTopLeftRadius: R.modal,
-    borderTopRightRadius: R.modal,
-    padding: S.lg,
-    paddingBottom: S.xxl,
-    gap: S.md,
-    width: '100%',
-    maxWidth: 800,
-    alignSelf: 'center',
-    maxHeight: '88%',
-  },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  closeBtn: { padding: S.xs },
-
-  methodList: { gap: S.md },
-  methodBtn: {
+  // 기록 모달 (전체 화면 + 탭)
+  recScreen: { flex: 1, backgroundColor: D.bgBase, width: '100%', maxWidth: 800, alignSelf: 'center' },
+  recHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.md,
-    padding: S.md,
-    borderRadius: R.card,
-    borderWidth: 0.5,
-    borderColor: D.line,
-    backgroundColor: D.surface,
+    justifyContent: 'space-between',
+    paddingHorizontal: SIDE,
+    paddingVertical: S.md,
   },
-  methodIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: R.small,
+  recHeaderBtn: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  recTabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: SIDE,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: D.line,
+  },
+  recTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S.xs,
+    paddingVertical: S.md,
+    position: 'relative',
+  },
+  recTabIndicator: {
+    position: 'absolute',
+    bottom: -StyleSheet.hairlineWidth,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: D.primary,
+  },
+  photoArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: S.sm, paddingHorizontal: SIDE },
+  photoBtn: {
+    width: 96,
+    height: 96,
+    borderRadius: R.card,
     backgroundColor: D.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: S.sm,
   },
-  methodText: { flex: 1, gap: 2 },
-
-  input: {
-    height: 52,
-    borderRadius: R.small,
+  tabForm: { flex: 1, paddingHorizontal: SIDE, paddingTop: S.lg, gap: S.md },
+  textArea: {
+    minHeight: 120,
+    borderRadius: R.card,
     backgroundColor: D.muted,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    paddingHorizontal: S.md,
-    fontSize: 16,
+    padding: S.md,
+    fontSize: 18,
+    lineHeight: 26,
     color: D.gray900,
+    textAlignVertical: 'top',
   },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.sm,
+    height: 48,
+    borderRadius: R.button,
+    backgroundColor: D.muted,
+    paddingHorizontal: S.md,
+  },
+  searchInput: { flex: 1, fontSize: 16, color: D.gray900 },
+  searchItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S.sm,
+    paddingVertical: S.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: D.line,
+  },
+  searchEmpty: { textAlign: 'center', paddingVertical: S.xl },
 
   analyzing: { alignItems: 'center', gap: S.sm, paddingVertical: S.xxl },
 
-  reviewBody: { gap: S.sm },
+  reviewBody: { paddingHorizontal: SIDE, paddingTop: S.md, paddingBottom: S.xxl, gap: S.sm },
   reviewCard: {
     backgroundColor: D.muted,
     borderRadius: R.card,
@@ -1083,6 +1289,7 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   estimateRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
   reviewKcal: { flexDirection: 'row', alignItems: 'baseline', gap: S.sm, marginTop: S.xs },
+  reviewKcalNum: { fontSize: 44, lineHeight: 52 },
   reviewMacros: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginTop: S.sm },
   reviewMacro: { alignItems: 'center', gap: 2 },
 
