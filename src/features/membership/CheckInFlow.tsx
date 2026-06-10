@@ -4,10 +4,11 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { ExerciseRecordForm } from '@/features/membership/ExerciseRecordForm';
 import { useCreateVisit } from '@/features/membership/useCreateVisit';
 import type { Membership } from '@/features/membership/useMemberships';
 
-type Step = 'select' | 'prepare' | 'depart' | 'arrive' | 'done';
+type Step = 'select' | 'prepare' | 'depart' | 'arrive' | 'done' | 'exercise' | 'logged';
 
 function CheckItem({
   label,
@@ -19,7 +20,11 @@ function CheckItem({
   onToggle: () => void;
 }) {
   return (
-    <Pressable onPress={onToggle} style={styles.checkRow} accessibilityRole="checkbox" accessibilityState={{ checked }}>
+    <Pressable
+      onPress={onToggle}
+      style={styles.checkRow}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}>
       <View style={[styles.checkbox, checked && styles.checkboxOn]}>
         {checked ? (
           <ThemedText type="smallBold" style={styles.checkMark}>
@@ -47,7 +52,11 @@ function PrimaryBtn({
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
-      style={({ pressed }) => [styles.primary, (disabled || loading) && styles.primaryDim, pressed && styles.pressed]}>
+      style={({ pressed }) => [
+        styles.primary,
+        (disabled || loading) && styles.primaryDim,
+        pressed && styles.pressed,
+      ]}>
       {loading ? (
         <ActivityIndicator color="#fff" />
       ) : (
@@ -69,6 +78,7 @@ export function CheckInFlow({
   const single = memberships.length === 1;
   const [step, setStep] = useState<Step>(single ? 'prepare' : 'select');
   const [selectedId, setSelectedId] = useState<string | null>(single ? memberships[0].id : null);
+  const [visitId, setVisitId] = useState<string | null>(null);
   const [phone, setPhone] = useState(false);
   const [clothes, setClothes] = useState(false);
   const { mutate, isPending, error } = useCreateVisit();
@@ -79,7 +89,12 @@ export function CheckInFlow({
     if (!selected) return;
     mutate(
       { membershipId: selected.id, centerName: selected.name },
-      { onSuccess: () => setStep('done') },
+      {
+        onSuccess: (data) => {
+          setVisitId((data as { id: string }).id);
+          setStep('done');
+        },
+      },
     );
   }
 
@@ -112,7 +127,7 @@ export function CheckInFlow({
 
         {step === 'prepare' ? (
           <>
-            <ThemedText type="small" style={styles.stepTag}>
+            <ThemedText type="small" style={styles.dim}>
               STEP 1 · 준비
             </ThemedText>
             <ThemedText type="subtitle">짐 챙기셨나요?</ThemedText>
@@ -129,7 +144,7 @@ export function CheckInFlow({
 
         {step === 'depart' ? (
           <>
-            <ThemedText type="small" style={styles.stepTag}>
+            <ThemedText type="small" style={styles.dim}>
               STEP 2 · 출발
             </ThemedText>
             <ThemedText type="subtitle">지금 출발할까요?</ThemedText>
@@ -140,7 +155,7 @@ export function CheckInFlow({
 
         {step === 'arrive' ? (
           <>
-            <ThemedText type="small" style={styles.stepTag}>
+            <ThemedText type="small" style={styles.dim}>
               STEP 3 · 도착
             </ThemedText>
             <ThemedText type="subtitle">센터에 거의 다 왔어요!</ThemedText>
@@ -160,8 +175,28 @@ export function CheckInFlow({
             {selected ? (
               <ThemedText type="default">{selected.name} · 방문이 기록됐어요.</ThemedText>
             ) : null}
+            <PrimaryBtn label="운동 기록하기" onPress={() => setStep('exercise')} />
+            <Pressable onPress={onClose} style={styles.skip} hitSlop={8}>
+              <ThemedText type="small" style={styles.dim}>
+                나중에 (닫기)
+              </ThemedText>
+            </Pressable>
+          </>
+        ) : null}
+
+        {step === 'exercise' && visitId ? (
+          <ExerciseRecordForm
+            visitId={visitId}
+            onDone={() => setStep('logged')}
+            onSkip={onClose}
+          />
+        ) : null}
+
+        {step === 'logged' ? (
+          <>
+            <ThemedText type="title">💪 운동 기록 완료!</ThemedText>
             <ThemedText type="small" style={styles.dim}>
-              통계(이번 달 방문·위험도)가 갱신됩니다.
+              이번 달 통계·위험도가 갱신됩니다.
             </ThemedText>
             <PrimaryBtn label="확인" onPress={onClose} />
           </>
@@ -181,7 +216,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
   },
   body: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: Spacing.three },
-  stepTag: { opacity: 0.6 },
   dim: { opacity: 0.6 },
   error: { color: '#d33' },
   optionBtn: {
@@ -190,7 +224,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(127,127,127,0.4)',
   },
-  checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.one },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingVertical: Spacing.one,
+  },
   checkbox: {
     width: 26,
     height: 26,
@@ -212,4 +251,5 @@ const styles = StyleSheet.create({
   primaryDim: { backgroundColor: '#bbb' },
   pressed: { opacity: 0.85 },
   primaryLabel: { color: '#fff' },
+  skip: { alignItems: 'center', paddingVertical: Spacing.two },
 });
