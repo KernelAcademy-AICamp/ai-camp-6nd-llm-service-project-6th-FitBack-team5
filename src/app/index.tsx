@@ -15,10 +15,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
-import { computeRisk, sortByRisk, summarize } from '@/features/membership/dashboard';
+import { computeRisk, sortByRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
+import { MembershipDetail } from '@/features/membership/MembershipDetail';
 import { MembershipForm } from '@/features/membership/MembershipForm';
 import { MembershipStatsCard, SummaryHeader } from '@/features/membership/MembershipStatsCard';
-import { useMemberships } from '@/features/membership/useMemberships';
+import { type Membership, useMemberships } from '@/features/membership/useMemberships';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
@@ -47,6 +48,11 @@ export default function MembershipScreen() {
   const { data: stats } = useMonthlyStats();
   const [showForm, setShowForm] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [detail, setDetail] = useState<{
+    m: Membership;
+    risk: RiskInfo;
+    monthlyVisits: number;
+  } | null>(null);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -118,7 +124,13 @@ export default function MembershipScreen() {
 
           {/* 위험순 회원권 카드 */}
           {sorted.map((x) => (
-            <MembershipStatsCard key={x.m.id} m={x.m} risk={x.risk} monthlyVisits={x.visits} />
+            <MembershipStatsCard
+              key={x.m.id}
+              m={x.m}
+              risk={x.risk}
+              monthlyVisits={x.visits}
+              onPress={() => setDetail({ m: x.m, risk: x.risk, monthlyVisits: x.visits })}
+            />
           ))}
         </ScrollView>
 
@@ -145,6 +157,25 @@ export default function MembershipScreen() {
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
+
+      <Modal
+        visible={!!detail}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setDetail(null)}>
+        <ThemedView style={styles.modalRoot}>
+          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+            {detail ? (
+              <MembershipDetail
+                m={detail.m}
+                risk={detail.risk}
+                monthlyVisits={detail.monthlyVisits}
+                onClose={() => setDetail(null)}
+              />
+            ) : null}
           </SafeAreaView>
         </ThemedView>
       </Modal>

@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -49,17 +49,19 @@ export function MembershipStatsCard({
   m,
   risk,
   monthlyVisits,
+  onPress,
 }: {
   m: Membership;
   risk: RiskInfo;
   monthlyVisits: number;
+  onPress?: () => void;
 }) {
   const color = RISK_COLORS[risk.level];
   const meta = RISK_META[risk.level];
   const expired = risk.remainingDays <= 0;
   const showAction = !expired && (risk.level === 'danger' || risk.level === 'warning');
 
-  return (
+  const card = (
     <ThemedView type="backgroundElement" style={[styles.card, { borderLeftColor: color }]}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -118,6 +120,17 @@ export function MembershipStatsCard({
       </View>
     </ThemedView>
   );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => (pressed ? styles.cardPressed : undefined)}>
+        {card}
+      </Pressable>
+    );
+  }
+  return card;
 }
 
 function SummaryChip({ level, n }: { level: RiskLevel; n: number }) {
@@ -150,6 +163,7 @@ export function SummaryHeader({ summary, count }: { summary: RiskSummary; count:
 }
 
 const styles = StyleSheet.create({
+  cardPressed: { opacity: 0.7 },
   card: {
     padding: Spacing.three,
     borderRadius: Spacing.two,
