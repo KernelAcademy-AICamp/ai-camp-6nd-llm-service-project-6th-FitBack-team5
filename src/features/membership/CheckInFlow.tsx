@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import * as Location from 'expo-location';
 
 import { ThemedText } from '@/components/themed-text';
@@ -24,6 +24,24 @@ function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): num
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * 현재 위치. 웹에선 권한 확인(requestForegroundPermissionsAsync)이 팝업을 안 띄우는
+ * 경우가 많아, 권한 확인을 건너뛰고 getCurrentPositionAsync를 바로 호출 → 브라우저가
+ * 권한 팝업을 띄운다. 네이티브는 권한 확인이 필요하므로 기존대로 확인 후 요청.
+ */
+async function getPosition(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    if (Platform.OS !== 'web') {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return null;
+    }
+    const pos = await Location.getCurrentPositionAsync({});
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  } catch {
+    return null;
+  }
 }
 
 function CheckItem({
@@ -112,27 +130,17 @@ export function CheckInFlow({
     let cancelled = false;
     setGps({ phase: 'checking' });
     (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          if (!cancelled) setGps({ phase: 'unavailable' });
-          return;
-        }
-        const pos = await Location.getCurrentPositionAsync({});
-        if (cancelled) return;
-        if (center?.latitude != null && center?.longitude != null) {
-          const km = distanceKm(
-            pos.coords.latitude,
-            pos.coords.longitude,
-            center.latitude,
-            center.longitude,
-          );
-          setGps({ phase: km <= 1 ? 'near' : 'far', km });
-        } else {
-          setGps({ phase: 'unavailable' });
-        }
-      } catch {
-        if (!cancelled) setGps({ phase: 'unavailable' });
+      const p = await getPosition();
+      if (cancelled) return;
+      if (!p) {
+        setGps({ phase: 'unavailable' });
+        return;
+      }
+      if (center?.latitude != null && center?.longitude != null) {
+        const km = distanceKm(p.lat, p.lng, center.latitude, center.longitude);
+        setGps({ phase: km <= 1 ? 'near' : 'far', km });
+      } else {
+        setGps({ phase: 'unavailable' });
       }
     })();
     return () => {
@@ -145,14 +153,8 @@ export function CheckInFlow({
     if (step !== 'depart') return;
     let cancelled = false;
     (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        const pos = await Location.getCurrentPositionAsync({});
-        if (!cancelled) setOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      } catch {
-        /* 위치 실패 시 경로 생략 */
-      }
+      const p = await getPosition();
+      if (!cancelled && p) setOrigin({ lat: p.lat, lng: p.lng });
     })();
     return () => {
       cancelled = true;
