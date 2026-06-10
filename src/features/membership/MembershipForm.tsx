@@ -1,11 +1,23 @@
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { formatNumber } from '@/features/membership/dashboard';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
+import { recognizeText } from '@/features/membership/ocr';
+import { parseReceipt } from '@/features/membership/parseReceipt';
 import {
   computeEndDate,
   isValidDate,
@@ -89,6 +101,23 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   const visitsError =
     touched.maxVisits && showVisits && !visitsOk ? '횟수를 1 이상 입력해 주세요. (필수)' : null;
 
+  // 영수증 스캔: 이미지 선택 → OCR → 정규식 파싱 → 폼 프리필 (사용자 확인/수정 전제)
+  async function scanReceipt() {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ quality: 1 });
+      if (res.canceled) return;
+      const text = await recognizeText(res.assets[0].uri);
+      const parsed = parseReceipt(text);
+      if (parsed.name) setName(parsed.name);
+      if (parsed.cost != null) setCost(String(parsed.cost));
+      if (parsed.startDate && isValidDate(parsed.startDate)) setStartDate(parsed.startDate);
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('영수증 스캔', msg);
+    }
+  }
+
   function handleSubmit() {
     if (!canSubmit) {
       // 빈 칸 그대로 누르면 어떤 항목이 필수인지 메시지로 표시
@@ -111,6 +140,12 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        <Pressable
+          onPress={scanReceipt}
+          style={({ pressed }) => [styles.scanBtn, pressed && styles.scanBtnPressed]}>
+          <ThemedText type="smallBold">📷 영수증으로 자동입력</ThemedText>
+        </Pressable>
+
         {/* STEP 3: 회원권 기본 정보 */}
         <Field label="회원권명" required error={nameError}>
           <TextInput
@@ -247,6 +282,15 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.four,
     gap: Spacing.three,
   },
+  scanBtn: {
+    alignItems: 'center',
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.two,
+    borderWidth: 1,
+    borderColor: '#22c55e',
+    backgroundColor: 'rgba(34,197,94,0.08)',
+  },
+  scanBtnPressed: { opacity: 0.7 },
   field: { gap: Spacing.two },
   labelRow: { flexDirection: 'row', alignItems: 'center' },
   fieldLabel: { opacity: 0.7 },
