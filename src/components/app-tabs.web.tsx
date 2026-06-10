@@ -11,7 +11,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, ScreenPaddingX, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
   return (
@@ -39,21 +40,24 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
     <Pressable
       {...props}
       style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
+      <View style={styles.tabButtonInner}>
+        <ThemedText
+          type="smallBold"
+          themeColor={isFocused ? 'primary' : 'textDisabled'}>
           {children}
         </ThemedText>
-      </ThemedView>
+      </View>
     </Pressable>
   );
 }
 
 export function CustomTabList(props: TabListProps) {
+  const theme = useTheme();
   return (
     <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
+      <ThemedView
+        type="backgroundElement"
+        style={[styles.innerContainer, { borderTopColor: theme.lineDefault }]}>
         {props.children}
       </ThemedView>
     </View>
@@ -66,21 +70,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     width: '100%',
-    padding: Spacing.three,
-    justifyContent: 'center',
-    alignItems: 'center',
     flexDirection: 'row',
+    justifyContent: 'center',
   },
   innerContainer: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.five,
+    width: '100%',
+    maxWidth: MaxContentWidth,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    gap: Spacing.two,
-    flexGrow: 1,
-    maxWidth: MaxContentWidth,
+    paddingHorizontal: ScreenPaddingX,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   tabButton: {
     flex: 1,
@@ -88,10 +90,9 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-  tabButtonView: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+  tabButtonInner: {
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
     alignItems: 'center',
   },
 });

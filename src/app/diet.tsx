@@ -3,7 +3,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  BottomTabInset,
+  Elevation,
+  MaxContentWidth,
+  Radius,
+  ScreenPaddingX,
+  Spacing,
+} from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 interface Meal {
   id: string;
@@ -22,11 +30,18 @@ const dummyMeals: Meal[] = [
 const dailyGoal = 2000;
 
 function MealCard({ item }: { item: Meal }) {
+  const theme = useTheme();
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <ThemedView
+      type="backgroundElement"
+      style={[styles.card, { borderColor: theme.lineDefault }, Elevation.level1]}>
       <View style={styles.cardHeader}>
-        <ThemedText type="small">{item.time}</ThemedText>
-        <ThemedText type="smallBold">{item.kcal} kcal</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {item.time}
+        </ThemedText>
+        <ThemedText type="smallBold" themeColor="primary">
+          {item.kcal} kcal
+        </ThemedText>
       </View>
       <ThemedText type="subtitle">{item.name}</ThemedText>
     </ThemedView>
@@ -34,23 +49,36 @@ function MealCard({ item }: { item: Meal }) {
 }
 
 export default function DietScreen() {
+  const theme = useTheme();
   const totalKcal = dummyMeals.reduce((acc, m) => acc + m.kcal, 0);
-  const remaining = dailyGoal - totalKcal;
+  const remaining = Math.max(dailyGoal - totalKcal, 0);
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedText type="title">오늘의 식단</ThemedText>
 
-        <ThemedView type="backgroundElement" style={styles.summary}>
+        <ThemedView
+          type="backgroundElement"
+          style={[styles.summary, { borderColor: theme.lineDefault }, Elevation.level1]}>
           <View style={styles.summaryRow}>
-            <ThemedText type="small">섭취</ThemedText>
-            <ThemedText type="subtitle">{totalKcal} kcal</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              섭취
+            </ThemedText>
+            <ThemedText type="display" themeColor="primary">
+              {totalKcal}
+              <ThemedText type="subtitle" themeColor="primary">
+                {' '}
+                kcal
+              </ThemedText>
+            </ThemedText>
           </View>
           <View style={styles.summaryRow}>
-            <ThemedText type="small">목표 {dailyGoal} kcal</ThemedText>
-            <ThemedText type="small">
-              남은 {remaining > 0 ? remaining : 0} kcal
+            <ThemedText type="small" themeColor="textSecondary">
+              목표 {dailyGoal} kcal
+            </ThemedText>
+            <ThemedText type="smallBold" themeColor="textBody">
+              남은 {remaining} kcal
             </ThemedText>
           </View>
         </ThemedView>
@@ -71,32 +99,34 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+    paddingHorizontal: ScreenPaddingX,
+    paddingTop: Spacing.lg,
+    paddingBottom: BottomTabInset + Spacing.md,
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    gap: Spacing.three,
+    gap: Spacing.md,
   },
   summary: {
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    gap: Spacing.two,
+    padding: Spacing.md,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'baseline',
   },
   list: {
-    gap: Spacing.three,
-    paddingBottom: Spacing.three,
+    gap: Spacing.md,
+    paddingBottom: Spacing.md,
   },
   card: {
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    gap: Spacing.two,
+    padding: Spacing.md,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
   },
   cardHeader: {
     flexDirection: 'row',

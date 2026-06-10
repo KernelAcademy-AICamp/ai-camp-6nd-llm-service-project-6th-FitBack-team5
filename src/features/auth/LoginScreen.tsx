@@ -5,17 +5,20 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
 
+import { ThemedText } from '@/components/themed-text';
+import { Elevation, Radius, ScreenPaddingX, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/lib/supabase';
 
 const TEST_EMAIL = process.env.EXPO_PUBLIC_DEV_TEST_EMAIL ?? '';
 const TEST_PASSWORD = process.env.EXPO_PUBLIC_DEV_TEST_PASSWORD ?? '';
 
 export function LoginScreen() {
+  const theme = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -39,13 +42,22 @@ export function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.root}
+      style={[styles.root, { backgroundColor: theme.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.card}>
-        <Text style={styles.title}>FitBack 로그인</Text>
-        <Text style={styles.subtitle}>개발용 화면 — 테스트 계정으로만 로그인됩니다.</Text>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: theme.backgroundElement, borderColor: theme.lineDefault },
+          Elevation.level1,
+        ]}>
+        <ThemedText type="title">FitBack 로그인</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
+          개발용 화면이에요. 아래 테스트 계정으로 들어와주세요.
+        </ThemedText>
 
-        <Text style={styles.label}>이메일</Text>
+        <ThemedText type="smallBold" style={styles.label}>
+          이메일
+        </ThemedText>
         <TextInput
           value={email}
           onChangeText={setEmail}
@@ -53,53 +65,91 @@ export function LoginScreen() {
           autoComplete="email"
           keyboardType="email-address"
           placeholder="dev@fitback.local"
-          placeholderTextColor="#aab"
-          style={styles.input}
+          placeholderTextColor={theme.textDisabled}
+          style={[
+            styles.input,
+            {
+              backgroundColor: theme.backgroundMuted,
+              color: theme.text,
+              borderColor: theme.lineDefault,
+            },
+          ]}
         />
 
-        <Text style={styles.label}>비밀번호</Text>
+        <ThemedText type="smallBold" style={styles.label}>
+          비밀번호
+        </ThemedText>
         <TextInput
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="current-password"
           placeholder="••••••••"
-          placeholderTextColor="#aab"
-          style={styles.input}
+          placeholderTextColor={theme.textDisabled}
+          style={[
+            styles.input,
+            {
+              backgroundColor: theme.backgroundMuted,
+              color: theme.text,
+              borderColor: theme.lineDefault,
+            },
+          ]}
           onSubmitEditing={canSubmit ? handleLogin : undefined}
         />
 
-        {errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+        {errorMessage && (
+          <ThemedText type="small" themeColor="error" style={styles.error}>
+            {errorMessage}
+          </ThemedText>
+        )}
 
         <Pressable
           onPress={handleLogin}
           disabled={!canSubmit}
           style={({ pressed }) => [
             styles.button,
-            !canSubmit && styles.buttonDisabled,
-            pressed && canSubmit && styles.buttonPressed,
+            {
+              backgroundColor: !canSubmit
+                ? theme.textDisabled
+                : pressed
+                  ? theme.primaryPressed
+                  : theme.primary,
+            },
           ]}>
           {submitting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonLabel}>로그인</Text>
+            <ThemedText type="smallBold" style={styles.buttonLabel}>
+              로그인
+            </ThemedText>
           )}
         </Pressable>
 
-        <View style={styles.devBox}>
-          <Text style={styles.devTitle}>테스트 계정 (개발용)</Text>
-          <Text style={styles.devText}>이메일: {TEST_EMAIL || '(.env 미설정)'}</Text>
-          <Text style={styles.devText}>
+        <View style={[styles.devBox, { backgroundColor: theme.backgroundSelected }]}>
+          <ThemedText type="smallBold" themeColor="textBody">
+            테스트 계정 (개발용)
+          </ThemedText>
+          <ThemedText type="small" themeColor="textBody" style={styles.devText}>
+            이메일: {TEST_EMAIL || '(.env 미설정)'}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textBody" style={styles.devText}>
             비밀번호: {TEST_PASSWORD || '(.env 미설정)'}
-          </Text>
+          </ThemedText>
           {TEST_EMAIL && TEST_PASSWORD ? (
-            <Pressable onPress={fillTestCredentials} style={styles.devButton}>
-              <Text style={styles.devButtonLabel}>입력란에 자동으로 채우기</Text>
+            <Pressable
+              onPress={fillTestCredentials}
+              style={({ pressed }) => [
+                styles.devButton,
+                { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+              ]}>
+              <ThemedText type="smallBold" style={styles.buttonLabel}>
+                입력란에 자동 채우기
+              </ThemedText>
             </Pressable>
           ) : (
-            <Text style={styles.devHint}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.devHint}>
               .env에 EXPO_PUBLIC_DEV_TEST_EMAIL / EXPO_PUBLIC_DEV_TEST_PASSWORD를 채우세요.
-            </Text>
+            </ThemedText>
           )}
         </View>
       </View>
@@ -112,86 +162,51 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    backgroundColor: '#f5f5f7',
+    paddingHorizontal: ScreenPaddingX,
   },
   card: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111',
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.lg,
+    gap: Spacing.xs,
   },
   subtitle: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   label: {
-    fontSize: 13,
-    color: '#555',
-    marginTop: 10,
+    marginTop: Spacing.sm,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
+    height: 52,
+    borderRadius: Radius.small,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.md,
     fontSize: 16,
-    color: '#111',
-    backgroundColor: '#fafafa',
-  },
-  button: {
-    marginTop: 18,
-    backgroundColor: '#111',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    backgroundColor: '#bbb',
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  buttonLabel: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   error: {
-    color: '#d33',
-    fontSize: 13,
-    marginTop: 8,
+    marginTop: Spacing.xs,
+  },
+  button: {
+    marginTop: Spacing.md,
+    height: 52,
+    borderRadius: Radius.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonLabel: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   devBox: {
-    marginTop: 24,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#f0f4ff',
-    borderWidth: 1,
-    borderColor: '#dbe4ff',
-    gap: 4,
-  },
-  devTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334',
+    marginTop: Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: Radius.small,
+    gap: Spacing.xs,
   },
   devText: {
-    fontSize: 12,
-    color: '#445',
     fontFamily: Platform.select({
       ios: 'Menlo',
       android: 'monospace',
@@ -199,20 +214,13 @@ const styles = StyleSheet.create({
     }),
   },
   devButton: {
-    marginTop: 8,
-    paddingVertical: 8,
+    marginTop: Spacing.sm,
+    height: 36,
+    borderRadius: Radius.button,
     alignItems: 'center',
-    borderRadius: 6,
-    backgroundColor: '#dbe4ff',
-  },
-  devButtonLabel: {
-    fontSize: 12,
-    color: '#334',
-    fontWeight: '600',
+    justifyContent: 'center',
   },
   devHint: {
-    marginTop: 4,
-    fontSize: 11,
-    color: '#88a',
+    marginTop: Spacing.xs,
   },
 });

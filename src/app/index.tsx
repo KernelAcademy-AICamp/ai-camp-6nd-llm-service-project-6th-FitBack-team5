@@ -3,7 +3,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  BottomTabInset,
+  Elevation,
+  MaxContentWidth,
+  Radius,
+  ScreenPaddingX,
+  Spacing,
+} from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
@@ -51,48 +59,60 @@ const statusLabels: Record<MembershipStatus, string> = {
   paused: '일시중지',
 };
 
-function statusBadgeColor(status: MembershipStatus) {
-  if (status === 'active') return '#22c55e';
-  if (status === 'paused') return '#f59e0b';
-  return '#9ca3af';
-}
-
 function MembershipCard({ item }: { item: Membership }) {
+  const theme = useTheme();
   const isSession = item.totalSessions !== null;
+  const badgeBg =
+    item.status === 'active'
+      ? theme.success
+      : item.status === 'paused'
+        ? theme.warning
+        : theme.textSecondary;
+
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <ThemedView
+      type="backgroundElement"
+      style={[styles.card, { borderColor: theme.lineDefault }, Elevation.level1]}>
       <View style={styles.cardHeader}>
         <ThemedText type="subtitle">{item.name}</ThemedText>
-        <View style={[styles.badge, { backgroundColor: statusBadgeColor(item.status) }]}>
+        <View style={[styles.badge, { backgroundColor: badgeBg }]}>
           <ThemedText type="smallBold" style={styles.badgeText}>
             {statusLabels[item.status]}
           </ThemedText>
         </View>
       </View>
       {isSession && (
-        <ThemedText type="default">
+        <ThemedText type="default" themeColor="textBody">
           남은 {item.remainingSessions} / {item.totalSessions}회
         </ThemedText>
       )}
-      <ThemedText type="small">만료일 · {item.expiresAt}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        만료일 · {item.expiresAt}
+      </ThemedText>
     </ThemedView>
   );
 }
 
 function AuthFooter() {
+  const theme = useTheme();
   const user = useCurrentUser();
   async function handleSignOut() {
     await supabase.auth.signOut();
   }
   return (
-    <ThemedView type="backgroundElement" style={styles.authFooter}>
-      <ThemedText type="small" style={styles.authEmail}>
+    <ThemedView
+      type="backgroundElement"
+      style={[styles.authFooter, { borderColor: theme.lineDefault }]}>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.authEmail}>
         {user?.email ?? '(no session)'}
       </ThemedText>
       <Pressable
         onPress={handleSignOut}
-        style={({ pressed }) => [styles.authButton, pressed && styles.authButtonPressed]}>
-        <ThemedText type="small">로그아웃</ThemedText>
+        style={({ pressed }) => [
+          styles.authButton,
+          { borderColor: theme.lineStrong, opacity: pressed ? 0.6 : 1 },
+        ]}>
+        <ThemedText type="smallBold">로그아웃</ThemedText>
       </Pressable>
     </ThemedView>
   );
@@ -120,22 +140,23 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+    paddingHorizontal: ScreenPaddingX,
+    paddingTop: Spacing.lg,
+    paddingBottom: BottomTabInset + Spacing.md,
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    gap: Spacing.three,
+    gap: Spacing.md,
   },
   list: {
-    gap: Spacing.three,
-    paddingBottom: Spacing.three,
+    gap: Spacing.md,
+    paddingBottom: Spacing.md,
   },
   card: {
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    gap: Spacing.two,
+    padding: Spacing.md,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -143,27 +164,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badge: {
-    paddingHorizontal: Spacing.two,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
-    borderRadius: Spacing.two,
+    borderRadius: Radius.small,
   },
-  badgeText: { color: '#fff' },
+  badgeText: { color: '#FFFFFF' },
   authFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.small,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.md,
   },
   authEmail: { flex: 1 },
   authButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.small,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  authButtonPressed: { opacity: 0.6 },
 });
