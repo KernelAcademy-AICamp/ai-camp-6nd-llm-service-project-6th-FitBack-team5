@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { computeRisk, sortByRisk, summarize } from '@/features/membership/dashboard';
 import { MembershipForm } from '@/features/membership/MembershipForm';
 import { MembershipStatsCard, SummaryHeader } from '@/features/membership/MembershipStatsCard';
@@ -21,13 +22,6 @@ import { useMemberships } from '@/features/membership/useMemberships';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
-
-// PART 3(센터 이동 흐름)에서 마이크로 스텝으로 연결 예정. 지금은 안내만.
-function notifyGoCenter() {
-  const msg = '센터 가기 흐름은 다음 단계(PART 3)에서 연결됩니다.';
-  if (Platform.OS === 'web') window.alert(msg);
-  else Alert.alert('센터 가기', msg);
-}
 
 function AuthFooter() {
   const user = useCurrentUser();
@@ -52,6 +46,7 @@ export default function MembershipScreen() {
   const { data: memberships, isLoading, isError, error } = useMemberships();
   const { data: stats } = useMonthlyStats();
   const [showForm, setShowForm] = useState(false);
+  const [showCheckIn, setShowCheckIn] = useState(false);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -63,6 +58,16 @@ export default function MembershipScreen() {
   const sorted = sortByRisk(withRisk, (x) => x.risk); // spec: 위험순 정렬
   const summary = summarize(withRisk.map((x) => x.risk));
   const isEmpty = !isLoading && !isError && list.length === 0;
+
+  function handleGoCenter() {
+    if (list.length === 0) {
+      const msg = '먼저 회원권을 등록해 주세요.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('센터 가기', msg);
+      return;
+    }
+    setShowCheckIn(true);
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -84,9 +89,9 @@ export default function MembershipScreen() {
             <SummaryHeader summary={summary} count={list.length} />
           ) : null}
 
-          {/* 센터 가기 (PART 3 진입점) */}
+          {/* 센터 가기 → 체크인 마이크로 스텝 (PART 3) */}
           <Pressable
-            onPress={notifyGoCenter}
+            onPress={handleGoCenter}
             style={({ pressed }) => [styles.centerBtn, pressed && styles.centerBtnPressed]}>
             <ThemedText type="subtitle" style={styles.centerBtnLabel}>
               🏃 센터 가기
@@ -128,6 +133,18 @@ export default function MembershipScreen() {
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <MembershipForm onClose={() => setShowForm(false)} />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
+
+      <Modal
+        visible={showCheckIn}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCheckIn(false)}>
+        <ThemedView style={styles.modalRoot}>
+          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+            <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
           </SafeAreaView>
         </ThemedView>
       </Modal>
