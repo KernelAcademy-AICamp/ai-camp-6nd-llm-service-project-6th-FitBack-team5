@@ -54,6 +54,8 @@ export interface RiskInfo {
   valueAtRisk: number;
   /** 만료 전 다 쓰려면 주당 필요한 방문(횟수제만, 올림). */
   requiredWeeklyPace: number | null;
+  /** 실제/필요 페이스 비율. 낮을수록 급함(1순위 정렬용). 횟수제·만료전만 값, 그 외 null. */
+  paceRatio: number | null;
   sessionFilledRatio: number; // 사용/전체 (0~1)
   periodFilledRatio: number; // 경과/전체 기간 (0~1)
 }
@@ -78,6 +80,7 @@ export function computeRisk(m: Membership, visitsThisMonth: number): RiskInfo {
 
   let level: RiskLevel;
   let requiredWeeklyPace: number | null = null;
+  let paceRatio: number | null = null;
 
   if (remainingDays <= 0) {
     level = 'danger'; // 만료
@@ -89,6 +92,7 @@ export function computeRisk(m: Membership, visitsThisMonth: number): RiskInfo {
     const requiredPace = (remaining as number) / (remainingDays / 7);
     const actualPace = visitsThisMonth / WEEKS_PER_MONTH;
     const ratio = requiredPace > 0 ? actualPace / requiredPace : 1;
+    paceRatio = ratio;
     requiredWeeklyPace = Math.ceil(requiredPace);
     if (ratio < 0.7) level = 'danger';
     else if (ratio < 1.0) level = 'warning';
@@ -106,6 +110,7 @@ export function computeRisk(m: Membership, visitsThisMonth: number): RiskInfo {
     valueUsed,
     valueAtRisk,
     requiredWeeklyPace,
+    paceRatio,
     sessionFilledRatio,
     periodFilledRatio,
   };
@@ -116,14 +121,49 @@ export interface RiskSummary {
   warning: number;
   safe: number;
   neutral: number;
-  totalAtRisk: number;
+  /** 만료 전 위험 회원권에서 아직 살릴 수 있는 금액(행동 가능) → 히어로. */
+  recoverable: number;
+  /** 이미 만료된 회원권의 잃은 금액(복구 불가) → 회색 보조. */
+  lost: number;
+  /** 이번 달 사용가치(긍정 강화) → 성공색 보조. */
+  valueUsedThisMonth: number;
+  /** 가장 급한(페이스 최저) 위험 회원권 이름 — CTA 부제. */
+  topPriorityName: string | null;
+  /** 위 회원권을 만료 전 다 쓰려면 주당 필요한 방문 횟수. */
+  topPriorityPace: number | null;
 }
 
-export function summarize(risks: RiskInfo[]): RiskSummary {
-  const s: RiskSummary = { danger: 0, warning: 0, safe: 0, neutral: 0, totalAtRisk: 0 };
-  for (const r of risks) {
+/** spec 4-A.2: 살릴 수 있는 돈/이미 잃은 돈/사용가치 분리 집계 + 1순위 도출. */
+export function summarize(
+  items: { risk: RiskInfo; monthlyVisits: number; name: string }[],
+): RiskSummary {
+  const s: RiskSummary = {
+    danger: 0,
+    warning: 0,
+    safe: 0,
+    neutral: 0,
+    recoverable: 0,
+    lost: 0,
+    valueUsedThisMonth: 0,
+    topPriorityName: null,
+    topPriorityPace: null,
+  };
+  let topPace = Infinity;
+  for (const { risk: r, monthlyVisits, name } of items) {
     s[r.level] += 1;
-    s.totalAtRisk += r.valueAtRisk;
+    s.valueUsedThisMonth += monthlyVisits * r.costPerSession;
+    const expired = r.remainingDays <= 0 && (r.remainingSessions ?? 0) > 0;
+    if (expired) {
+      s.lost += r.valueAtRisk; // 복구 불가
+    } else if (r.level === 'danger') {
+      s.recoverable += r.valueAtRisk; // 아직 살릴 수 있음
+      const pace = r.paceRatio ?? 0;
+      if (pace < topPace) {
+        topPace = pace;
+        s.topPriorityName = name;
+        s.topPriorityPace = r.requiredWeeklyPace;
+      }
+    }
   }
   return s;
 }

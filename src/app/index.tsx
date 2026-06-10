@@ -62,7 +62,9 @@ export default function MembershipScreen() {
     visits: visitsOf(m.id),
   }));
   const sorted = sortByRisk(withRisk, (x) => x.risk); // spec: 위험순 정렬
-  const summary = summarize(withRisk.map((x) => x.risk));
+  const summary = summarize(
+    withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })),
+  );
   const isEmpty = !isLoading && !isError && list.length === 0;
 
   function handleGoCenter() {
@@ -90,19 +92,10 @@ export default function MembershipScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-          {/* spec 요약 헤더 (위험/주의/안전 집계 + 총 위험 금액) */}
+          {/* spec 4-A 요약 헤더: 집계 + 비율막대 + 히어로 금액 + 보조 줄 + 센터 가기 CTA */}
           {!isLoading && !isError && list.length > 0 ? (
-            <SummaryHeader summary={summary} count={list.length} />
+            <SummaryHeader summary={summary} count={list.length} onGoCenter={handleGoCenter} />
           ) : null}
-
-          {/* 센터 가기 → 체크인 마이크로 스텝 (PART 3) */}
-          <Pressable
-            onPress={handleGoCenter}
-            style={({ pressed }) => [styles.centerBtn, pressed && styles.centerBtnPressed]}>
-            <ThemedText type="subtitle" style={styles.centerBtnLabel}>
-              🏃 센터 가기
-            </ThemedText>
-          </Pressable>
 
           {isLoading && (
             <View style={styles.stateBox}>
@@ -212,14 +205,6 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingBottom: Spacing.three,
   },
-  centerBtn: {
-    backgroundColor: '#22c55e',
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.four,
-    alignItems: 'center',
-  },
-  centerBtnPressed: { opacity: 0.85 },
-  centerBtnLabel: { color: '#fff' },
   stateBox: {
     paddingVertical: Spacing.four,
     alignItems: 'center',
