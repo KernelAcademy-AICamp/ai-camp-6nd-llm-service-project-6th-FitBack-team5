@@ -65,8 +65,11 @@ export function CustomTabList(props: TabListProps) {
 const styles = StyleSheet.create({
   slot: { height: '100%' },
   tabListContainer: {
-    position: 'absolute',
+    // 웹: 뷰포트 하단 고정 (absolute는 상위 높이에 따라 콘텐츠 끝에 붙는 문제가 있음)
+    position: 'fixed',
     bottom: 0,
+    left: 0,
+    right: 0,
     width: '100%',
     backgroundColor: NAV.surface,
     borderTopWidth: 0.5,

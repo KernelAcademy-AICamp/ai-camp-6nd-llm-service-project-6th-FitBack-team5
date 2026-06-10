@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -12,37 +12,50 @@ import {
   type TextStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
+
+import { useProfile } from '@/features/auth/useProfile';
+import {
+  MOCK_CONTEXT,
+  calorieTargetFromProfile,
+  generateGuide,
+  proteinTargetFromProfile,
+} from '@/features/diet/guide';
+import {
+  MEAL_TYPES,
+  useAddMeal,
+  useMeals,
+  type InputMethod,
+  type Meal,
+  type MealType,
+} from '@/features/diet/useMeals';
 
 /**
- * 식단 탭 (프로토타입, 가데이터) — design.md 디자인 시스템 적용
+ * 식단 탭 — design.md 디자인 시스템 적용. UI 가안 구현본.
  *
- * 플로우: 식단 기록 → AI 음식 분석 → 데이터 저장 → 운동 데이터 연계
- *        → AI 통합 분석 → AI 코칭 → 대시보드 반영
+ * 핵심 가치: "추천 대비 회복 목표 달성률"이 1순위 정보 (얼마나 먹었나가 아님).
+ * 구성: ① 운동 맞춤 식단 가이드(회복 달성률 + 목표 매크로 + 운동 대비 섭취 상태)
+ *      ② 코칭(다음 행동 + 추천 식품)  ③ 섭취 칼로리  ④ 오늘 기록
  *
- * 식단은 운동 데이터와 결합되어 AI 코칭을 제공하기 위한 보조 기능이다.
+ * 목표 매크로/칼로리는 회원 신체정보(profiles) 기반 — 화면 내 단일 소스(guide.target).
  */
 
 // ── design.md 토큰 ─────────────────────────────────────────
 const D = {
-  // Primary
   primary: '#6675FF',
   primaryPressed: '#4957D8',
   primaryLight: '#EEF1FF',
-  // Background
   bgBase: '#FAF9F7',
   surface: '#FFFFFF',
   muted: '#F3F4F6',
-  // Semantic
   success: '#22C55E',
   warning: '#F59E0B',
   error: '#EF4444',
-  // Neutral
   gray900: '#111827',
   gray700: '#374151',
   gray500: '#6B7280',
   gray300: '#D1D5DB',
   gray100: '#F3F4F6',
-  // Line
   line: 'rgba(0,0,0,0.07)',
   lineStrong: 'rgba(0,0,0,0.15)',
 } as const;
@@ -99,60 +112,16 @@ function Card({ children, style }: { children: React.ReactNode; style?: object }
 }
 
 // ── 데이터 ──────────────────────────────────────────────────
-type MealType = '아침' | '점심' | '저녁' | '간식';
-const MEAL_TYPES: MealType[] = ['아침', '점심', '저녁', '간식'];
-type InputMethod = 'image' | 'voice' | 'manual';
+// Meal · MealType · InputMethod · MEAL_TYPES 는 @/features/diet/useMeals 에서 가져온다.
 
-interface Meal {
-  id: string;
-  mealType: MealType;
-  name: string;
-  kcal: number;
-  carb: number;
-  protein: number;
-  fat: number;
-  time: string;
-  inputMethod: InputMethod;
-}
+const BURNED_KCAL = 420; // 운동 소모 칼로리 (운동 데이터 연계, 가데이터)
 
-// 목표 (PRD: 칼로리 = 체중 × 활동계수, 단백질 = 체중 × 1.5g)
-// 탄·지방 목표는 칼로리를 탄 50% / 단 20% / 지 30%로 배분해 산출 (탄·지 4·9kcal/g)
-const CALORIE_GOAL = 1860;
-const CARB_GOAL = 233; // ≈ CALORIE_GOAL × 0.5 / 4
-const PROTEIN_GOAL = 93; // ≈ 체중 × 1.5g (PRD)
-const FAT_GOAL = 62; // ≈ CALORIE_GOAL × 0.3 / 9
-const BURNED_KCAL = 420; // 운동 데이터 연계 (가데이터)
-
-// ── 운동 데이터 연계 (가데이터) ─────────────────────────────
-// 플로우 4단계: 운동 데이터를 식단과 결합. 실제 연동 전까지 UI 표현용 가데이터.
-// 일반 사용자가 바로 이해할 수 있는 정보(소모 칼로리·시간·부위) 위주로 표현.
-const WORKOUT_PART = '하체'; // 오늘 운동 부위 (가데이터)
-const WORKOUT_DURATION_MIN = 45; // 오늘 운동 시간(분) (가데이터)
-const WORKOUT_LINK: {
-  icon: React.ComponentProps<typeof MaterialIcons>['name'];
-  label: string;
-  value: string;
-}[] = [
-  { icon: 'local-fire-department', label: '운동 소모', value: `${BURNED_KCAL}kcal` },
-  { icon: 'timer', label: '운동 시간', value: `${WORKOUT_DURATION_MIN}분` },
-  { icon: 'fitness-center', label: '운동 부위', value: WORKOUT_PART },
-];
-
-// AI 코치 추천 식품 (가데이터)
-const COACH_FOODS = ['닭가슴살 100g', '그릭요거트 1개'];
-
-// 탄단지 표시 정의 (순서: 탄 → 단 → 지)
-const MACROS = [
-  { key: 'carb', label: '탄수화물', short: '탄', goal: CARB_GOAL, color: D.warning },
-  { key: 'protein', label: '단백질', short: '단', goal: PROTEIN_GOAL, color: D.primary },
-  { key: 'fat', label: '지방', short: '지', goal: FAT_GOAL, color: D.success },
+// 탄단지 표시 정의 (순서: 단 → 탄 → 지). 목표 값은 가이드(guide.target)에서 가져온다.
+const MACRO_META = [
+  { key: 'protein', label: '단백질' },
+  { key: 'carb', label: '탄수화물' },
+  { key: 'fat', label: '지방' },
 ] as const;
-
-const initialMeals: Meal[] = [
-  { id: '1', mealType: '아침', name: '시리얼 + 우유 + 바나나', kcal: 380, carb: 62, protein: 12, fat: 8, time: '08:10', inputMethod: 'manual' },
-  { id: '2', mealType: '점심', name: '닭가슴살 샐러드', kcal: 420, carb: 18, protein: 45, fat: 14, time: '12:30', inputMethod: 'image' },
-  { id: '3', mealType: '간식', name: '아메리카노 + 견과류', kcal: 180, carb: 8, protein: 5, fat: 15, time: '15:00', inputMethod: 'manual' },
-];
 
 const FAKE_RESULTS: Omit<Meal, 'id' | 'mealType' | 'time' | 'inputMethod'>[] = [
   { name: '현미밥 + 고등어구이', kcal: 620, carb: 78, protein: 32, fat: 18 },
@@ -168,24 +137,11 @@ function currentMealType(): MealType {
 // 운동 대비 섭취 상태 (순섭취/목표 비율 → 부족/적정/과다)
 function balanceStatus(ratio: number): { label: string; color: string; desc: string } {
   if (ratio < 0.9)
-    return {
-      label: '부족',
-      color: D.warning,
-      desc: '현재 운동량 기준 권장 섭취보다 적게 먹었어요.',
-    };
+    return { label: '부족', color: D.warning, desc: '현재 운동량 기준 권장 섭취보다 적게 먹었어요.' };
   if (ratio <= 1.05)
-    return {
-      label: '적정',
-      color: D.success,
-      desc: '현재 운동량 기준 권장 섭취 범위 안에 있어요.',
-    };
-  return {
-    label: '과다',
-    color: D.error,
-    desc: '현재 운동량 기준 권장 섭취를 넘었어요.',
-  };
+    return { label: '적정', color: D.success, desc: '현재 운동량 기준 권장 섭취 범위 안에 있어요.' };
+  return { label: '과다', color: D.error, desc: '현재 운동량 기준 권장 섭취를 넘었어요.' };
 }
-
 
 // ── 공통 컴포넌트 ───────────────────────────────────────────
 function ProgressBar({ ratio, color = D.primary }: { ratio: number; color?: string }) {
@@ -196,50 +152,37 @@ function ProgressBar({ ratio, color = D.primary }: { ratio: number; color?: stri
   );
 }
 
-// 탄단지 현황 — 달성률(%)과 부족/초과량을 우선 노출
-function MacroStat({
-  label,
-  value,
-  goal,
-  color,
-}: {
-  label: string;
-  value: number;
-  goal: number;
-  color: string;
-}) {
-  const pct = Math.round((value / goal) * 100);
-  const remain = goal - value;
+// 목표 매크로 진행 — 라벨 + 섭취/목표(g) + 진행 바
+function MacroProgress({ label, value, goal }: { label: string; value: number; goal: number }) {
   return (
-    <View style={styles.macroStat}>
+    <View style={styles.macroCol}>
       <Txt variant="label" color={D.gray500}>
         {label}
       </Txt>
-      <Txt variant="h2" color={color}>
-        {pct}%
-      </Txt>
-      <Txt variant="label" color={D.gray500}>
-        {remain > 0 ? `${remain}g 남음` : `${-remain}g 초과`}
-      </Txt>
-      <View style={styles.macroStatBar}>
-        <ProgressBar ratio={value / goal} color={color} />
+      <View style={styles.macroValueRow}>
+        <Txt variant="body" weight="700">
+          {value}
+        </Txt>
+        <Txt variant="caption" color={D.gray500}>
+          {' '}
+          / {goal}g
+        </Txt>
+      </View>
+      <View style={styles.macroBar}>
+        <ProgressBar ratio={goal > 0 ? value / goal : 0} />
       </View>
     </View>
   );
 }
 
-// 부족 ← 적정 → 과다 밸런스 미터 (순섭취/목표 비율을 0~1.5 구간에 매핑)
-function BalanceMeter({ ratio }: { ratio: number }) {
+// 부족 ← 적정 → 과다 밸런스 미터. 식단 기록 전(showMarker=false)에는 마커를 숨긴다.
+function BalanceMeter({ ratio, showMarker }: { ratio: number; showMarker: boolean }) {
   const pos = Math.min(Math.max(ratio / 1.5, 0), 1) * 100;
   return (
     <View style={styles.meterWrap}>
       <View style={styles.meterTrackWrap}>
-        <View style={styles.meterTrack}>
-          <View style={[styles.meterSeg, { flex: 60, backgroundColor: '#F3D6D3' }]} />
-          <View style={[styles.meterSeg, { flex: 10, backgroundColor: '#CDE9D8' }]} />
-          <View style={[styles.meterSeg, { flex: 30, backgroundColor: '#F4E5C3' }]} />
-        </View>
-        <View style={[styles.meterMarker, { left: `${pos}%` }]} />
+        <View style={styles.meterTrack} />
+        {showMarker && <View style={[styles.meterMarker, { left: `${pos}%` }]} />}
       </View>
       <View style={styles.meterLabels}>
         <Txt variant="label" color={D.gray500}>부족</Txt>
@@ -250,6 +193,34 @@ function BalanceMeter({ ratio }: { ratio: number }) {
   );
 }
 
+// 반원형 게이지 — SVG 반원 아크. 0~100% → 좌→우 채움.
+function SemiGauge({ pct }: { pct: number }) {
+  const W = 104;
+  const SW = 9; // 아크 두께
+  const r = (W - SW) / 2;
+  const cx = W / 2;
+  const cy = r + SW / 2;
+  const H = cy + SW / 2;
+  const p = Math.min(Math.max(pct, 0), 100) / 100;
+  const theta = Math.PI * (1 - p); // 좌(π) → 우(0)
+  const ex = cx + r * Math.cos(theta);
+  const ey = cy - r * Math.sin(theta);
+  const track = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
+  const prog = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+  return (
+    <View style={[styles.gaugeWrap, { width: W, height: H }]}>
+      <Svg width={W} height={H}>
+        <Path d={track} stroke={D.gray100} strokeWidth={SW} fill="none" strokeLinecap="round" />
+        {p > 0 && (
+          <Path d={prog} stroke={D.primary} strokeWidth={SW} fill="none" strokeLinecap="round" />
+        )}
+      </Svg>
+      <View style={styles.gaugeLabel}>
+        <Txt variant="h1">{Math.round(pct)}%</Txt>
+      </View>
+    </View>
+  );
+}
 
 function PrimaryButton({
   label,
@@ -299,11 +270,7 @@ function MealRow({ item }: { item: Meal }) {
           <Txt variant="body" weight="600">
             {item.kcal} kcal
           </Txt>
-          <MaterialIcons
-            name={open ? 'expand-less' : 'expand-more'}
-            size={20}
-            color={D.gray300}
-          />
+          <MaterialIcons name={open ? 'expand-less' : 'expand-more'} size={20} color={D.gray300} />
         </View>
       </View>
       {open && (
@@ -483,7 +450,7 @@ function RecordModal({
                       key={t}
                       onPress={() => setDraft({ ...draft, mealType: t })}
                       style={[
-                        styles.chip,
+                        styles.mealChip,
                         selected
                           ? { backgroundColor: D.primaryLight, borderColor: D.primary }
                           : { backgroundColor: D.surface, borderColor: D.line },
@@ -518,10 +485,185 @@ function ReviewMacro({ label, value }: { label: string; value: number }) {
   );
 }
 
+// ── 날짜 스트립 (가로 스와이프) ─────────────────────────────
+const DOW_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+function isoOf(d: Date): string {
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+function parseIso(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+const DATE_ITEM_W = 76;
+function DateStrip({
+  selected,
+  onSelect,
+  onOpenCalendar,
+}: {
+  selected: string;
+  onSelect: (iso: string) => void;
+  onOpenCalendar: () => void;
+}) {
+  // 오늘 기준 앞뒤 7일 (총 15일)
+  const days = useMemo(() => {
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+    return Array.from({ length: 15 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(base.getDate() + (i - 7));
+      return { iso: isoOf(d), month: d.getMonth() + 1, day: d.getDate(), dow: DOW_KO[d.getDay()] };
+    });
+  }, []);
+  const ref = useRef<ScrollView>(null);
+  const selIndex = days.findIndex((d) => d.iso === selected);
+
+  // 선택 날짜가 가운데 오도록 초기 스크롤
+  function centerSelected(width: number) {
+    const x = Math.max(0, selIndex * DATE_ITEM_W - (width / 2 - DATE_ITEM_W / 2));
+    ref.current?.scrollTo({ x, animated: false });
+  }
+
+  return (
+    <ScrollView
+      ref={ref}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      onLayout={(e) => centerSelected(e.nativeEvent.layout.width)}
+      style={styles.dateStrip}
+      contentContainerStyle={styles.dateStripContent}>
+      {days.map((d) => {
+        const isSel = d.iso === selected;
+        const color = isSel ? D.gray900 : D.gray500;
+        return (
+          <Pressable
+            key={d.iso}
+            onPress={() => (isSel ? onOpenCalendar() : onSelect(d.iso))}
+            style={styles.dateItem}>
+            <Txt variant="caption" weight={isSel ? '700' : '500'} color={color}>
+              {d.month}.{d.day} {d.dow}
+            </Txt>
+            {isSel && <MaterialIcons name="keyboard-arrow-down" size={16} color={color} />}
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+// 전체 달력 팝업 (월 단위)
+function CalendarModal({
+  visible,
+  selected,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  selected: string;
+  onSelect: (iso: string) => void;
+  onClose: () => void;
+}) {
+  const init = parseIso(selected);
+  const [view, setView] = useState({ y: init.getFullYear(), m: init.getMonth() });
+  const todayIso = isoOf(new Date());
+
+  const startDow = new Date(view.y, view.m, 1).getDay();
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const prev = () => setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }));
+  const next = () => setView((v) => (v.m === 11 ? { y: v.y + 1, m: 0 } : { y: v.y, m: v.m + 1 }));
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.calBackdrop} onPress={onClose}>
+        <Pressable style={styles.calCard} onPress={() => {}}>
+          <View style={styles.calHeader}>
+            <Pressable onPress={prev} hitSlop={8} style={styles.calNav}>
+              <MaterialIcons name="chevron-left" size={24} color={D.gray700} />
+            </Pressable>
+            <Txt variant="h2">
+              {view.y}년 {view.m + 1}월
+            </Txt>
+            <Pressable onPress={next} hitSlop={8} style={styles.calNav}>
+              <MaterialIcons name="chevron-right" size={24} color={D.gray700} />
+            </Pressable>
+          </View>
+          <View style={styles.calWeekRow}>
+            {DOW_KO.map((w) => (
+              <Txt key={w} variant="label" color={D.gray500} style={styles.calWeekCell}>
+                {w}
+              </Txt>
+            ))}
+          </View>
+          <View style={styles.calGrid}>
+            {cells.map((d, i) => {
+              if (d === null) return <View key={i} style={styles.calCell} />;
+              const iso = isoOf(new Date(view.y, view.m, d));
+              const isSel = iso === selected;
+              const isToday = iso === todayIso;
+              return (
+                <Pressable
+                  key={i}
+                  style={styles.calCell}
+                  onPress={() => {
+                    onSelect(iso);
+                    onClose();
+                  }}>
+                  <View style={[styles.calDay, isSel && { backgroundColor: D.primary }]}>
+                    <Txt
+                      variant="caption"
+                      weight={isSel || isToday ? '700' : '400'}
+                      color={isSel ? '#FFFFFF' : isToday ? D.primary : D.gray900}>
+                      {d}
+                    </Txt>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ── 화면 ────────────────────────────────────────────────────
 export default function DietScreen() {
-  const [meals, setMeals] = useState<Meal[]>(initialMeals);
+  const [selectedDate, setSelectedDate] = useState(() => isoOf(new Date()));
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const { data: meals = [], isLoading, isError, refetch } = useMeals(selectedDate);
+  const addMeal = useAddMeal(selectedDate);
   const [modalOpen, setModalOpen] = useState(false);
+
+  const isToday = selectedDate === isoOf(new Date());
+  const selDate = parseIso(selectedDate);
+  const dateLabel = `${selDate.getMonth() + 1}월 ${selDate.getDate()}일 ${DOW_KO[selDate.getDay()]}요일`;
+
+  // 가이드 목표 — 회원 신체정보(profiles) 기반. 단백질=체중×1.5g, 칼로리=TDEE×목표보정.
+  const { data: profile } = useProfile();
+  const guide = useMemo(() => {
+    const kcal = profile
+      ? calorieTargetFromProfile(
+          {
+            age: profile.age,
+            gender: profile.gender,
+            height: profile.height,
+            weight: profile.weight,
+            exerciseLevel: profile.exercise_level,
+          },
+          MOCK_CONTEXT.goal,
+        )
+      : null;
+    const protein = profile ? proteinTargetFromProfile(profile.weight) : null;
+    return generateGuide(MOCK_CONTEXT, { kcal, protein });
+  }, [profile]);
 
   const totals = useMemo(
     () =>
@@ -532,54 +674,77 @@ export default function DietScreen() {
     [meals],
   );
 
-  const remaining = CALORIE_GOAL - totals.kcal;
+  const hasLog = meals.length > 0;
+  const target = guide.target;
+
+  // 회복 목표 달성률 — 단·탄·지 달성률 평균(%)
+  const recoveryPct = Math.round(
+    ((totals.protein / target.protein + totals.carb / target.carb + totals.fat / target.fat) / 3) * 100,
+  );
+
+  const calorieGoal = target.kcal;
+  const remaining = calorieGoal - totals.kcal;
   const over = remaining < 0;
   const net = totals.kcal - BURNED_KCAL;
-  const netRatio = net / CALORIE_GOAL;
+  const netRatio = net / calorieGoal;
   const energyStatus = balanceStatus(netRatio);
-  const proteinRemain = Math.max(0, PROTEIN_GOAL - totals.protein);
+  const proteinRemain = Math.max(0, target.protein - totals.protein);
   const proteinDone = proteinRemain === 0;
 
+  // 사용자 상태별 추천 (첫 식사 → 단백질 / 유산소 → 탄수화물 / 근력 → 단백질)
+  const coach = ((): { headline: string; foods: string[] } => {
+    if (proteinDone)
+      return { headline: '오늘 단백질 목표를 채웠어요. 충분히 회복할 수 있어요.', foods: [] };
+    if (!hasLog)
+      return { headline: '첫 식사는 가벼운 단백질 식단 추천드려요', foods: ['닭가슴살', '그릭요거트', '계란'] };
+    if (MOCK_CONTEXT.part === 'cardio')
+      return { headline: '유산소 운동엔 탄수화물로 에너지를 채워보세요', foods: ['현미밥', '바나나', '고구마'] };
+    return { headline: '근력 운동 회복엔 단백질 식단 추천드려요', foods: ['닭가슴살', '소고기', '두부'] };
+  })();
+
   function handleSave(meal: Omit<Meal, 'id' | 'time'>) {
-    setMeals((prev) => [...prev, { ...meal, id: `${prev.length + 1}-${meal.name}`, time: '지금' }]);
+    addMeal.mutate(meal);
   }
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <DateStrip
+          selected={selectedDate}
+          onSelect={setSelectedDate}
+          onOpenCalendar={() => setCalendarOpen(true)}
+        />
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <Txt variant="h1">오늘의 식단</Txt>
+            <Txt variant="h1">{isToday ? '오늘의 식단' : '식단 기록'}</Txt>
             <Txt variant="caption" color={D.gray500}>
-              6월 9일 월요일
+              {dateLabel}
             </Txt>
           </View>
 
-          {/* ① AI 운동·식단 밸런스 (핵심 가치 — 최상단) */}
+          {/* ① 운동 맞춤 식단 가이드 — 회복 달성률 + 목표 매크로 + 운동 대비 섭취 상태 */}
           <Card>
             <View style={styles.aiHead}>
-              <MaterialIcons name="auto-awesome" size={18} color={D.primary} />
-              <Txt variant="caption" weight="600" color={D.primary}>
-                AI 운동·식단 밸런스
+              <MaterialIcons name="auto-awesome" size={16} color={D.primary} />
+              <Txt variant="label" weight="600" color={D.primary}>
+                운동 맞춤 식단 가이드
               </Txt>
             </View>
 
-            {/* 연계된 운동 데이터 */}
-            <View style={styles.workoutGrid}>
-              {WORKOUT_LINK.map((w) => (
-                <View key={w.label} style={styles.workoutItem}>
-                  <View style={styles.workoutIconBox}>
-                    <MaterialIcons name={w.icon} size={16} color={D.primary} />
-                  </View>
-                  <View style={styles.workoutText}>
-                    <Txt variant="body" weight="600" numberOfLines={1}>
-                      {w.value}
-                    </Txt>
-                    <Txt variant="label" color={D.gray500} numberOfLines={1}>
-                      {w.label}
-                    </Txt>
-                  </View>
-                </View>
+            <View style={styles.guideHeadRow}>
+              <View style={styles.flex1}>
+                <Txt variant="h2">회복 목표 달성률</Txt>
+                <Txt variant="caption" color={D.gray500}>
+                  {hasLog ? '꾸준히 채워가고 있어요' : '오늘 식단을 기록해주세요.'}
+                </Txt>
+              </View>
+              <SemiGauge pct={recoveryPct} />
+            </View>
+
+            {/* 목표 매크로 (단 → 탄 → 지) */}
+            <View style={styles.macroRow}>
+              {MACRO_META.map((m) => (
+                <MacroProgress key={m.key} label={m.label} value={totals[m.key]} goal={target[m.key]} />
               ))}
             </View>
 
@@ -590,116 +755,113 @@ export default function DietScreen() {
               <Txt variant="caption" color={D.gray700}>
                 운동 대비 섭취 상태
               </Txt>
-              <View style={[styles.statusPill, { backgroundColor: `${energyStatus.color}1A` }]}>
-                <Txt variant="label" weight="700" color={energyStatus.color}>
-                  {energyStatus.label}
-                </Txt>
-              </View>
+              {hasLog ? (
+                <View style={[styles.statusPill, { backgroundColor: `${energyStatus.color}1A` }]}>
+                  <Txt variant="label" weight="700" color={energyStatus.color}>
+                    {energyStatus.label}
+                  </Txt>
+                </View>
+              ) : (
+                <View style={[styles.statusPill, { backgroundColor: D.gray100 }]}>
+                  <Txt variant="label" weight="700" color={D.gray500}>
+                    등록 전
+                  </Txt>
+                </View>
+              )}
             </View>
-            <BalanceMeter ratio={netRatio} />
+            <BalanceMeter ratio={netRatio} showMarker={hasLog} />
             <Txt variant="caption" color={D.gray500}>
-              {energyStatus.desc}
+              {hasLog ? energyStatus.desc : '식단을 기록하면 운동 대비 섭취 상태를 알려드려요.'}
             </Txt>
-
-            {/* 단백질 회복 상태 */}
-            <View style={styles.statusLine}>
-              <Txt variant="caption" color={D.gray700}>
-                단백질 회복
-              </Txt>
-              <Txt variant="caption" weight="600" color={proteinDone ? D.success : D.warning}>
-                {proteinDone ? '목표 달성' : `목표까지 ${proteinRemain}g 남음`}
-              </Txt>
-            </View>
           </Card>
 
-          {/* ② AI 코치 (운동 데이터 기반 피드백) */}
-          <Card style={styles.coachCard}>
-            <View style={styles.aiHead}>
-              <MaterialIcons name="auto-awesome" size={18} color={D.primary} />
-              <Txt variant="caption" weight="600" color={D.primary}>
-                AI 코치
-              </Txt>
-            </View>
-            <Txt variant="body" color={D.gray700} style={styles.aiText}>
-              오늘 {WORKOUT_PART} 운동을 수행했어요.
-              {proteinDone
-                ? ' 단백질 목표를 채웠으니 충분히 회복할 수 있어요.'
-                : ` 근육 회복을 위해 단백질 ${proteinRemain}g 추가 섭취를 추천해요.`}
+          {/* ② 코칭 — 사용자 상태별 추천 문구 + 추천 식품 */}
+          <Card>
+            <Txt variant="body" weight="600">
+              {coach.headline}
             </Txt>
-            {!proteinDone && (
-              <View style={styles.foodBox}>
-                <Txt variant="label" color={D.gray500}>
-                  추천 식품
+            {coach.foods.length > 0 && (
+              <>
+                <Txt variant="caption" color={D.gray500}>
+                  식단으로 추천드려요
                 </Txt>
-                {COACH_FOODS.map((f) => (
-                  <View key={f} style={styles.foodItem}>
-                    <MaterialIcons name="restaurant" size={14} color={D.primary} />
-                    <Txt variant="caption" color={D.gray700}>
-                      {f}
-                    </Txt>
-                  </View>
-                ))}
-              </View>
+                <View style={styles.foodChipWrap}>
+                  {coach.foods.map((f) => (
+                    <View key={f} style={styles.foodChip}>
+                      <MaterialIcons name="add" size={14} color={D.gray500} />
+                      <Txt variant="label" weight="600" color={D.gray700}>
+                        {f}
+                      </Txt>
+                    </View>
+                  ))}
+                </View>
+              </>
             )}
           </Card>
 
           {/* ③ 오늘 섭취 칼로리 */}
           <Card>
             <View style={styles.kcalHead}>
-              <View>
-                <Txt variant="caption" color={D.gray500}>
-                  오늘 섭취 칼로리
-                </Txt>
-                <View style={styles.kcalBig}>
-                  <Txt variant="display" color={D.primary}>
-                    {totals.kcal.toLocaleString()}
-                  </Txt>
-                  <Txt variant="caption" color={D.gray500}>
-                    / {CALORIE_GOAL.toLocaleString()} kcal
-                  </Txt>
-                </View>
-              </View>
-              <View style={styles.remainBox}>
-                <Txt variant="h2" color={over ? D.warning : D.gray900}>
-                  {over ? `+${-remaining}` : remaining}
-                </Txt>
-                <Txt variant="label" color={D.gray500}>
-                  {over ? '초과' : '남음'}
-                </Txt>
-              </View>
+              <Txt variant="caption" color={D.gray500}>
+                오늘 섭취 칼로리
+              </Txt>
+              <Txt variant="caption" color={over ? D.warning : D.gray500}>
+                {over
+                  ? `${(-remaining).toLocaleString()} 칼로리 초과`
+                  : `${remaining.toLocaleString()} 칼로리 남았어요`}
+              </Txt>
             </View>
-            <ProgressBar ratio={totals.kcal / CALORIE_GOAL} color={over ? D.warning : D.primary} />
+            <View style={styles.kcalBig}>
+              <Txt variant="h1">{totals.kcal.toLocaleString()}</Txt>
+              <Txt variant="caption" color={D.gray500}>
+                {' '}
+                / {calorieGoal.toLocaleString()} kcal
+              </Txt>
+            </View>
+            <ProgressBar ratio={totals.kcal / calorieGoal} color={over ? D.warning : D.primary} />
           </Card>
 
-          {/* ④ 탄단지 현황 (달성률·부족량 강조) */}
-          <Card>
-            <Txt variant="label" color={D.gray500}>
-              탄단지 현황
-            </Txt>
-            <View style={styles.macroStatRow}>
-              {MACROS.map((m) => (
-                <MacroStat
-                  key={m.key}
-                  label={m.label}
-                  value={totals[m.key]}
-                  goal={m.goal}
-                  color={m.color}
-                />
-              ))}
-            </View>
-          </Card>
-
-          {/* ⑤ 오늘 기록 (식사명·시간·kcal만, 탭하면 탄단지) */}
+          {/* ④ 오늘 기록 */}
           <Txt variant="label" color={D.gray500} style={styles.listHead}>
             오늘 기록 {meals.length}
           </Txt>
-          <Card style={styles.listCard}>
-            {meals.map((m, i) => (
-              <View key={m.id}>
-                {i > 0 && <View style={styles.divider} />}
-                <MealRow item={m} />
+          <Card style={hasLog ? styles.listCard : undefined}>
+            {isLoading ? (
+              <View style={styles.listState}>
+                <ActivityIndicator color={D.primary} />
+                <Txt variant="caption" color={D.gray500}>
+                  기록을 불러오는 중…
+                </Txt>
               </View>
-            ))}
+            ) : isError ? (
+              <View style={styles.listState}>
+                <Txt variant="caption" color={D.gray500}>
+                  기록을 불러오지 못했어요.
+                </Txt>
+                <Pressable onPress={() => refetch()} hitSlop={8}>
+                  <Txt variant="caption" weight="600" color={D.primary}>
+                    다시 시도
+                  </Txt>
+                </Pressable>
+              </View>
+            ) : !hasLog ? (
+              <View style={styles.listState}>
+                <MaterialIcons name="pause-circle-outline" size={36} color={D.gray300} />
+                <Txt variant="body" weight="600" style={styles.center}>
+                  오늘 가이드대로 첫 끼를 기록해보세요
+                </Txt>
+                <Txt variant="caption" color={D.gray500} style={styles.center}>
+                  한 끼만 기록해도 회복 달성률이 올라가요
+                </Txt>
+              </View>
+            ) : (
+              meals.map((m, i) => (
+                <View key={m.id}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <MealRow item={m} />
+                </View>
+              ))
+            )}
           </Card>
         </ScrollView>
 
@@ -715,6 +877,12 @@ export default function DietScreen() {
       </SafeAreaView>
 
       <RecordModal visible={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} />
+      <CalendarModal
+        visible={calendarOpen}
+        selected={selectedDate}
+        onSelect={setSelectedDate}
+        onClose={() => setCalendarOpen(false)}
+      />
     </View>
   );
 }
@@ -722,8 +890,39 @@ export default function DietScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: D.bgBase },
   safeArea: { flex: 1, width: '100%', maxWidth: 800, alignSelf: 'center' },
-  scroll: { paddingHorizontal: SIDE, paddingTop: S.md, paddingBottom: NAV_HEIGHT + S.xxl + S.md, gap: S.md },
+
+  // 날짜 스트립 (하단 선 없음, 아래 영역과 24px 간격)
+  dateStrip: { flexGrow: 0, backgroundColor: D.bgBase, marginBottom: S.md },
+  dateStripContent: { paddingHorizontal: S.sm, alignItems: 'center' },
+  dateItem: {
+    width: DATE_ITEM_W,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+    paddingVertical: S.sm,
+  },
+
+  // 달력 팝업
+  calBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17,24,39,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: S.lg,
+  },
+  calCard: { width: '100%', maxWidth: 360, backgroundColor: D.surface, borderRadius: R.modal, padding: S.lg, gap: S.md },
+  calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  calNav: { padding: S.xs },
+  calWeekRow: { flexDirection: 'row' },
+  calWeekCell: { width: `${100 / 7}%`, textAlign: 'center' },
+  calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calCell: { width: `${100 / 7}%`, alignItems: 'center', justifyContent: 'center', paddingVertical: S.xs },
+  calDay: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  scroll: { paddingHorizontal: SIDE, paddingTop: 0, paddingBottom: NAV_HEIGHT + S.xxl + S.md, gap: S.md },
   header: { gap: S.xs, marginBottom: S.xs },
+  flex1: { flex: 1 },
 
   card: {
     backgroundColor: D.surface,
@@ -735,70 +934,67 @@ const styles = StyleSheet.create({
     ...LEVEL1,
   },
 
-  // 칼로리
-  kcalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  kcalBig: { flexDirection: 'row', alignItems: 'baseline', gap: S.sm, marginTop: S.xs },
-  remainBox: { alignItems: 'flex-end' },
+  // 가이드 헤더
+  aiHead: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+  guideHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
+
+  // 반원형 게이지
+  gaugeWrap: { position: 'relative', alignItems: 'center', justifyContent: 'flex-end' },
+  gaugeLabel: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' },
+
+  // 목표 매크로
+  macroRow: { flexDirection: 'row', gap: S.sm, marginTop: S.xs },
+  macroCol: { flex: 1, gap: 2 },
+  macroValueRow: { flexDirection: 'row', alignItems: 'baseline' },
+  macroBar: { marginTop: S.xs },
 
   // progress
-  track: { height: 8, borderRadius: R.full, backgroundColor: D.gray100, overflow: 'hidden' },
+  track: { height: 6, borderRadius: R.full, backgroundColor: D.gray100, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: R.full },
 
-  // 탄단지 현황 (달성률·부족량)
-  macroStatRow: { flexDirection: 'row', gap: S.sm, marginTop: S.xs },
-  macroStat: { flex: 1, alignItems: 'center', gap: 2 },
-  macroStatBar: { width: '100%', marginTop: S.xs },
-
-  // 운동 데이터 연계
-  workoutGrid: { flexDirection: 'row', gap: S.sm, marginTop: S.xs },
-  workoutItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: S.sm },
-  workoutIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: R.full,
-    backgroundColor: D.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  workoutText: { gap: 0 },
-  sectionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line, marginVertical: S.sm },
+  sectionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line, marginVertical: S.xs },
 
   // 운동 대비 섭취 상태
   statusHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusPill: { paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.full },
-  statusLine: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: S.xs,
-  },
 
   // 밸런스 미터
-  meterWrap: { gap: S.xs, marginTop: S.sm },
+  meterWrap: { gap: S.xs, marginTop: S.xs },
   meterTrackWrap: { position: 'relative', justifyContent: 'center' },
-  meterTrack: { flexDirection: 'row', height: 10, borderRadius: R.full, overflow: 'hidden', gap: 2 },
-  meterSeg: { height: '100%' },
+  meterTrack: { height: 10, borderRadius: R.full, backgroundColor: D.gray100 },
   meterMarker: {
     position: 'absolute',
     top: -3,
     width: 4,
     height: 16,
     borderRadius: 2,
-    backgroundColor: D.gray700,
+    backgroundColor: D.primary,
     transform: [{ translateX: -2 }],
   },
   meterLabels: { flexDirection: 'row', justifyContent: 'space-between' },
 
-  // AI 코치
-  aiHead: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
-  aiText: { lineHeight: 24 },
-  coachCard: { backgroundColor: D.primaryLight, borderColor: 'transparent' },
-  foodBox: { gap: S.xs, marginTop: S.xs },
-  foodItem: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+  // 코칭 — 추천 식품 칩
+  foodChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs },
+  foodChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 12,
+    paddingVertical: S.xs,
+    borderRadius: R.full,
+    borderWidth: 1,
+    borderColor: D.lineStrong,
+    backgroundColor: 'transparent',
+  },
+
+  // 칼로리
+  kcalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  kcalBig: { flexDirection: 'row', alignItems: 'baseline' },
 
   // list
   listHead: { marginTop: S.xs, marginLeft: S.xs },
   listCard: { paddingVertical: 0 },
+  listState: { alignItems: 'center', justifyContent: 'center', gap: S.sm, paddingVertical: S.lg },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line },
   mealRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm, paddingVertical: S.md },
   mealLeft: { flexDirection: 'row', alignItems: 'center', gap: S.sm, flex: 1 },
@@ -807,7 +1003,7 @@ const styles = StyleSheet.create({
   mealInfo: { flex: 1, gap: 2 },
   mealMacros: { paddingBottom: S.md, paddingLeft: S.xs },
 
-  // FAB — 하단 네비바(약 64px) 위로 띄워서 따로 분리, 우하단 플로팅
+  // FAB
   fab: {
     position: 'absolute',
     bottom: NAV_HEIGHT + S.md,
@@ -891,7 +1087,7 @@ const styles = StyleSheet.create({
   reviewMacro: { alignItems: 'center', gap: 2 },
 
   chipRow: { flexDirection: 'row', gap: S.sm },
-  chip: { flex: 1, alignItems: 'center', paddingVertical: S.sm, borderRadius: R.full, borderWidth: 1 },
+  mealChip: { flex: 1, alignItems: 'center', paddingVertical: S.sm, borderRadius: R.full, borderWidth: 1 },
 
   primaryBtn: { height: 52, borderRadius: R.button, alignItems: 'center', justifyContent: 'center', marginTop: S.sm },
 });
