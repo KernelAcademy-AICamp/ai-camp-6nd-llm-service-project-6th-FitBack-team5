@@ -8,6 +8,7 @@ import { Spacing } from '@/constants/theme';
 import { ExerciseRecordForm } from '@/features/membership/ExerciseRecordForm';
 import { useCenter } from '@/features/membership/useCenter';
 import { useCreateVisit } from '@/features/membership/useCreateVisit';
+import { useWeather } from '@/features/membership/useWeather';
 import type { Membership } from '@/features/membership/useMemberships';
 
 type Step = 'select' | 'prepare' | 'depart' | 'arrive' | 'done' | 'exercise' | 'logged';
@@ -98,6 +99,7 @@ export function CheckInFlow({
   const [gps, setGps] = useState<{ phase: GpsPhase; km?: number }>({ phase: 'idle' });
   const { mutate, isPending, error } = useCreateVisit();
   const { data: center } = useCenter(selectedId);
+  const { data: weather } = useWeather(center?.latitude, center?.longitude);
 
   const selected = memberships.find((m) => m.id === selectedId) ?? null;
 
@@ -198,6 +200,11 @@ export function CheckInFlow({
               STEP 2 · 출발
             </ThemedText>
             <ThemedText type="subtitle">지금 출발할까요?</ThemedText>
+            {weather ? (
+              <ThemedText type="small" style={styles.dim}>
+                🌡️ {center?.name ?? '센터'} · {weather.desc} {weather.temp}°C
+              </ThemedText>
+            ) : null}
             <ThemedText type="default">파이팅! 한 걸음이면 도착이에요 🙌</ThemedText>
             <PrimaryBtn label="출발하기" onPress={() => setStep('arrive')} />
           </>
