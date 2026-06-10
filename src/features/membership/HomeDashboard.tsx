@@ -7,8 +7,10 @@ import {
   breakEvenColor,
   breakEvenRemaining,
   daysLeft,
+  formatNumber,
   partLabel,
   perVisitCost,
+  won,
 } from '@/features/membership/dashboard';
 import type {
   Membership,
@@ -32,10 +34,6 @@ function statusBadgeColor(status: MembershipStatus) {
   return status === 'active' ? '#22c55e' : '#9ca3af';
 }
 
-function won(n: number): string {
-  return `₩${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
-
 function motivation(stats?: MonthlyStats): string {
   if (!stats || stats.visitCount === 0) return '이번 달 첫 방문을 시작해 보세요! 💪';
   if (stats.byPart.length >= 2) {
@@ -45,7 +43,7 @@ function motivation(stats?: MonthlyStats): string {
       return `${partLabel(bottom.part)} 운동이 부족해요. 다음엔 ${partLabel(bottom.part)} 어때요?`;
     }
   }
-  return `이번 달 ${stats.visitCount}회 방문 중! 잘하고 있어요 👍`;
+  return `이번 달 ${formatNumber(stats.visitCount)}회 방문 중! 잘하고 있어요 👍`;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -60,7 +58,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 /** 회원권 1개의 현황 카드 (주식 종목별 현황처럼 카드마다 독립 통계). */
-export function SummaryCard({ m }: { m: Membership }) {
+export function SummaryCard({ m, monthlyVisits }: { m: Membership; monthlyVisits?: number }) {
   const remaining = breakEvenRemaining(m);
   const per = perVisitCost(m);
   const left = daysLeft(m.endDate);
@@ -81,9 +79,9 @@ export function SummaryCard({ m }: { m: Membership }) {
         <ThemedText type="small" style={styles.meta}>
           {TYPE_LABELS[m.type]}
         </ThemedText>
-        {showVisits ? (
+        {showVisits && m.maxVisits != null ? (
           <ThemedText type="small" style={styles.meta}>
-            {m.maxVisits != null ? `남은 ${m.remainingVisits}/${m.maxVisits}회` : '무제한'}
+            남은 {formatNumber(m.remainingVisits ?? 0)}/{formatNumber(m.maxVisits)}회
           </ThemedText>
         ) : null}
         <ThemedText type="small" style={styles.meta}>
@@ -93,16 +91,20 @@ export function SummaryCard({ m }: { m: Membership }) {
 
       <View style={styles.statRow}>
         <Stat label="정비용" value={won(m.cost)} />
-        <Stat label="남은 기간" value={left >= 0 ? `${left}일` : '만료'} />
+        <Stat label="남은 기간" value={left >= 0 ? `${formatNumber(left)}일` : '만료'} />
         <Stat label="회당 비용" value={per != null ? won(per) : '—'} />
       </View>
 
       <View style={[styles.breakEven, { backgroundColor: `${color}22` }]}>
         <View style={[styles.dot, { backgroundColor: color }]} />
         <ThemedText type="smallBold">
-          {remaining <= 0 ? '회원권 활용 달성! 🎉' : `회원권 활용까지 ${remaining}회`}
+          {remaining <= 0 ? '회원권 활용 달성! 🎉' : `회원권 활용까지 ${formatNumber(remaining)}회`}
         </ThemedText>
       </View>
+
+      <ThemedText type="small" style={styles.monthly}>
+        이번 달 {formatNumber(monthlyVisits ?? 0)}회 방문
+      </ThemedText>
     </ThemedView>
   );
 }
@@ -110,14 +112,14 @@ export function SummaryCard({ m }: { m: Membership }) {
 function StatsCard({ stats }: { stats?: MonthlyStats }) {
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
-      <ThemedText type="smallBold">이번 달 통계</ThemedText>
-      <ThemedText type="default">방문 {stats?.visitCount ?? 0}회</ThemedText>
+      <ThemedText type="smallBold">이번 달 통계 (전체)</ThemedText>
+      <ThemedText type="default">방문 {formatNumber(stats?.visitCount ?? 0)}회</ThemedText>
       {stats && stats.byPart.length > 0 ? (
         <View style={styles.partRow}>
           {stats.byPart.map((p) => (
             <View key={p.part} style={styles.partChip}>
               <ThemedText type="small">
-                {partLabel(p.part)} {p.count}
+                {partLabel(p.part)} {formatNumber(p.count)}
               </ThemedText>
             </View>
           ))}
@@ -168,6 +170,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.one,
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
+  monthly: { opacity: 0.7, marginTop: Spacing.one },
   partRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.one },
   partChip: {
     paddingHorizontal: Spacing.two,

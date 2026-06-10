@@ -17,6 +17,7 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { HomeDashboard, SummaryCard } from '@/features/membership/HomeDashboard';
 import { MembershipForm } from '@/features/membership/MembershipForm';
 import { useMemberships } from '@/features/membership/useMemberships';
+import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
@@ -48,6 +49,7 @@ function AuthFooter() {
 
 export default function MembershipScreen() {
   const { data: memberships, isLoading, isError, error } = useMemberships();
+  const { data: stats } = useMonthlyStats();
   const [showForm, setShowForm] = useState(false);
   const isEmpty = !isLoading && !isError && (memberships?.length ?? 0) === 0;
 
@@ -93,7 +95,7 @@ export default function MembershipScreen() {
 
           {/* 회원권마다 독립 현황 카드 (정비용·남은기간·회당비용·회원권 활용 신호등) */}
           {memberships?.map((m) => (
-            <SummaryCard key={m.id} m={m} />
+            <SummaryCard key={m.id} m={m} monthlyVisits={stats?.byMembership[m.id] ?? 0} />
           ))}
         </ScrollView>
 

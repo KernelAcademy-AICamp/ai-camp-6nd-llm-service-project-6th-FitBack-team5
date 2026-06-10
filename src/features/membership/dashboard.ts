@@ -56,3 +56,17 @@ export function pickPrimary(memberships: Membership[]): Membership | null {
   if (memberships.length === 0) return null;
   return memberships.find((m) => m.status === 'active') ?? memberships[0];
 }
+
+/** 1,000 단위마다 쉼표 (정수부 기준). 예: 10000 → "10,000" */
+export function formatNumber(n: number): string {
+  const neg = n < 0;
+  const s = Math.abs(Math.trunc(n))
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return neg ? `-${s}` : s;
+}
+
+/** 원화 표기: ₩10,000 */
+export function won(n: number): string {
+  return `₩${formatNumber(n)}`;
+}

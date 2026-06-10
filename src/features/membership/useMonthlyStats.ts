@@ -6,6 +6,8 @@ import { useCurrentUser } from '@/stores/auth';
 export interface MonthlyStats {
   visitCount: number;
   byPart: { part: string; count: number }[];
+  /** membership_id → 이번 달 방문 횟수 */
+  byMembership: Record<string, number>;
 }
 
 /** 이번 달 1일 00:00 (UTC) ISO. */
@@ -15,8 +17,9 @@ function monthStartISO(): string {
 }
 
 /**
- * 이번 달 방문 횟수(visits) + 부위별 운동 횟수(exercise_records)를 집계한다.
- * RLS로 본인 데이터만 잡히고, 부위 그룹핑은 클라이언트에서 수행.
+ * 이번 달 방문(visits)과 부위별 운동(exercise_records)을 집계한다.
+ * 방문은 전체 합계(visitCount)와 회원권별(byMembership) 둘 다 제공하고,
+ * 부위별(byPart)은 전체 기준. RLS로 본인 데이터만 잡힌다.
  */
 export function useMonthlyStats() {
   const user = useCurrentUser();
@@ -24,15 +27,21 @@ export function useMonthlyStats() {
     queryKey: ['monthlyStats', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      if (!user) return { visitCount: 0, byPart: [] };
+      if (!user) return { visitCount: 0, byPart: [], byMembership: {} };
       const start = monthStartISO();
 
-      const { count, error: vErr } = await supabase
+      const { data: vrows, error: vErr } = await supabase
         .from('visits')
-        .select('*', { count: 'exact', head: true })
+        .select('membership_id')
         .eq('user_id', user.id)
         .gte('check_in_time', start);
       if (vErr) throw vErr;
+
+      const byMembership: Record<string, number> = {};
+      for (const v of (vrows ?? []) as { membership_id: string }[]) {
+        if (!v.membership_id) continue;
+        byMembership[v.membership_id] = (byMembership[v.membership_id] ?? 0) + 1;
+      }
 
       const { data: recs, error: eErr } = await supabase
         .from('exercise_records')
@@ -49,7 +58,7 @@ export function useMonthlyStats() {
         (a, b) => b.count - a.count,
       );
 
-      return { visitCount: count ?? 0, byPart };
+      return { visitCount: vrows?.length ?? 0, byPart, byMembership };
     },
   });
 }
