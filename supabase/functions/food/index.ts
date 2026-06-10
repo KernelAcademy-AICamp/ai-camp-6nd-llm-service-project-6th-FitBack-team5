@@ -130,8 +130,13 @@ async function lookupPer100g(key: string, name: string) {
   }
 }
 
-async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, text: string) {
+async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, text: string, grams?: number) {
   if (!text) return json({ error: 'text 가 필요합니다' }, 400);
+
+  // 사용자가 총 섭취량(g)을 직접 입력했으면 강한 힌트로 전달 → 분량 추정 오차 제거
+  const userMsg = grams && grams > 0
+    ? `먹은 음식: ${text}\n사용자가 알려준 총 섭취량은 ${grams}g 이다. items의 grams 합이 이 값이 되도록 분배하고, 영양값도 그에 맞춰라.`
+    : `먹은 음식: ${text}`;
 
   let claudeRes: Response;
   try {
@@ -144,7 +149,7 @@ async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, 
         system: SYSTEM,
         tools: [EXTRACT_TOOL],
         tool_choice: { type: 'tool', name: 'extract_items' },
-        messages: [{ role: 'user', content: `먹은 음식: ${text}` }],
+        messages: [{ role: 'user', content: userMsg }],
       }),
     });
   } catch (e) {
@@ -196,7 +201,7 @@ Deno.serve(async (req) => {
   const FOOD_SAFETY_API_KEY = Deno.env.get('FOOD_SAFETY_API_KEY');
   const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 
-  let payload: { action?: string; query?: string; text?: string };
+  let payload: { action?: string; query?: string; text?: string; grams?: number };
   try {
     payload = await req.json();
   } catch {
@@ -209,7 +214,7 @@ Deno.serve(async (req) => {
   }
   if (payload.action === 'analyze') {
     if (!ANTHROPIC_API_KEY) return json({ error: 'Missing ANTHROPIC_API_KEY secret' }, 500);
-    return handleAnalyze(ANTHROPIC_API_KEY, FOOD_SAFETY_API_KEY, (payload.text ?? '').trim());
+    return handleAnalyze(ANTHROPIC_API_KEY, FOOD_SAFETY_API_KEY, (payload.text ?? '').trim(), payload.grams);
   }
   return json({ error: "body.action 은 'search' 또는 'analyze' 여야 합니다" }, 400);
 });

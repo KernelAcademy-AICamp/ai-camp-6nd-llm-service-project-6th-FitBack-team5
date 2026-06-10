@@ -15,9 +15,15 @@ interface AnalyzeResponse extends Partial<AnalyzedMeal> {
   error?: string;
 }
 
-async function analyzeMealText(text: string): Promise<AnalyzedMeal> {
+// grams: 선택. 사용자가 총 섭취량(g)을 알려주면 분석 정확도가 올라간다.
+export interface AnalyzeInput {
+  text: string;
+  grams?: number;
+}
+
+async function analyzeMealText({ text, grams }: AnalyzeInput): Promise<AnalyzedMeal> {
   const { data, error } = await supabase.functions.invoke<AnalyzeResponse>('food', {
-    body: { action: 'analyze', text },
+    body: { action: 'analyze', text, grams },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
@@ -31,7 +37,7 @@ async function analyzeMealText(text: string): Promise<AnalyzedMeal> {
   };
 }
 
-/** 자연어 식단 설명 → Claude 영양 추정. 텍스트 탭에서 사용. */
+/** 자연어 식단 설명(+선택 총 섭취량) → Claude 영양 추정. 텍스트 탭에서 사용. */
 export function useAnalyzeMeal() {
   return useMutation({ mutationFn: analyzeMealText });
 }

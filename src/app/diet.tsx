@@ -379,6 +379,7 @@ function RecordModal({
   const [tab, setTab] = useState<RecTab>('image');
   const [step, setStep] = useState<RecStep>('input');
   const [textInput, setTextInput] = useState('');
+  const [gramsInput, setGramsInput] = useState(''); // 선택: 총 섭취량(g)
   const [searchInput, setSearchInput] = useState('');
   const [draft, setDraft] = useState<Omit<Meal, 'id' | 'time'> | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -388,6 +389,7 @@ function RecordModal({
     setTab('image');
     setStep('input');
     setTextInput('');
+    setGramsInput('');
     setSearchInput('');
     setDraft(null);
     setAnalyzeError(null);
@@ -416,10 +418,11 @@ function RecordModal({
   async function analyzeText() {
     const text = textInput.trim();
     if (!text) return;
+    const grams = parseInt(gramsInput, 10);
     setAnalyzeError(null);
     setStep('analyzing');
     try {
-      const r = await analyzeMeal.mutateAsync(text);
+      const r = await analyzeMeal.mutateAsync({ text, grams: Number.isFinite(grams) && grams > 0 ? grams : undefined });
       setDraft({
         mealType: currentMealType(),
         name: r.name,
@@ -576,6 +579,22 @@ function RecordModal({
                   multiline
                   autoFocus
                 />
+                <View style={styles.gramsRow}>
+                  <Txt variant="label" color={D.gray500} style={styles.flex1}>
+                    총 섭취량 (선택)
+                  </Txt>
+                  <TextInput
+                    value={gramsInput}
+                    onChangeText={(t) => setGramsInput(t.replace(/[^0-9]/g, ''))}
+                    placeholder="예: 250"
+                    placeholderTextColor={D.gray300}
+                    keyboardType="number-pad"
+                    style={styles.gramsInput}
+                  />
+                  <Txt variant="body" color={D.gray500}>
+                    g
+                  </Txt>
+                </View>
                 {analyzeError && (
                   <Txt variant="caption" color={D.error}>
                     {analyzeError}
@@ -1314,6 +1333,22 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     color: D.gray900,
     textAlignVertical: 'top',
+  },
+  gramsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.sm,
+    paddingHorizontal: S.xs,
+  },
+  gramsInput: {
+    width: 96,
+    height: 44,
+    borderRadius: R.button,
+    backgroundColor: D.muted,
+    paddingHorizontal: S.md,
+    fontSize: 16,
+    color: D.gray900,
+    textAlign: 'right',
   },
   searchBar: {
     flexDirection: 'row',
