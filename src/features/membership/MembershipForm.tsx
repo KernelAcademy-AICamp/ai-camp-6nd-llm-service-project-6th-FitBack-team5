@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View }
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { formatNumber } from '@/features/membership/dashboard';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
 import {
   computeEndDate,
@@ -124,11 +125,11 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
 
         <Field label="비용 (원)" required error={costError}>
           <TextInput
-            value={cost}
-            onChangeText={setCost}
+            value={cost ? formatNumber(Number(cost)) : ''}
+            onChangeText={(t) => setCost(t.replace(/[^0-9]/g, ''))}
             onBlur={() => touch('cost')}
             keyboardType="numeric"
-            placeholder="예: 360000"
+            placeholder="예: 360,000"
             placeholderTextColor="#9aa"
             style={[styles.input, costError && styles.inputError]}
           />
