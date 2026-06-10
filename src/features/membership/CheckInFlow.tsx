@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import * as Location from 'expo-location';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { ExerciseRecordForm } from '@/features/membership/ExerciseRecordForm';
+import { getPosition } from '@/features/membership/location';
 import { useCenter } from '@/features/membership/useCenter';
 import { useCreateVisit } from '@/features/membership/useCreateVisit';
 import { useRoute } from '@/features/membership/useRoute';
@@ -24,24 +24,6 @@ function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): num
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/**
- * 현재 위치. 웹에선 권한 확인(requestForegroundPermissionsAsync)이 팝업을 안 띄우는
- * 경우가 많아, 권한 확인을 건너뛰고 getCurrentPositionAsync를 바로 호출 → 브라우저가
- * 권한 팝업을 띄운다. 네이티브는 권한 확인이 필요하므로 기존대로 확인 후 요청.
- */
-async function getPosition(): Promise<{ lat: number; lng: number } | null> {
-  try {
-    if (Platform.OS !== 'web') {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return null;
-    }
-    const pos = await Location.getCurrentPositionAsync({});
-    return { lat: pos.coords.latitude, lng: pos.coords.longitude };
-  } catch {
-    return null;
-  }
 }
 
 function CheckItem({

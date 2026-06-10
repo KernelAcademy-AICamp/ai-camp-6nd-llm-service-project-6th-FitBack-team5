@@ -13,6 +13,10 @@ export interface NewMembershipInput {
   type: MembershipType;
   /** session/class only; ignored (stored null) for free. */
   maxVisits: number | null;
+  /** 선택: 센터명 + 좌표(현재 위치). 좌표가 있으면 centers에 함께 저장(GPS·날씨·경로용). */
+  centerName?: string | null;
+  centerLat?: number | null;
+  centerLng?: number | null;
 }
 
 const PERIOD_MONTHS: Record<MembershipPeriod, number> = {
@@ -64,6 +68,16 @@ export function useCreateMembership() {
         .select()
         .single();
       if (error) throw error;
+      // 센터 좌표가 있으면 centers에 함께 저장 (GPS·날씨·경로용). 실패해도 회원권은 유지.
+      if (input.centerLat != null && input.centerLng != null) {
+        await supabase.from('centers').insert({
+          user_id: user.id,
+          membership_id: (data as { id: string }).id,
+          name: input.centerName?.trim() || input.name.trim(),
+          latitude: input.centerLat,
+          longitude: input.centerLng,
+        });
+      }
       return data;
     },
     onSuccess: () => {

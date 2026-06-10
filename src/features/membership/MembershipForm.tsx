@@ -16,6 +16,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { formatNumber } from '@/features/membership/dashboard';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
+import { getPosition } from '@/features/membership/location';
 import { recognizeText } from '@/features/membership/ocr';
 import { parseReceipt } from '@/features/membership/parseReceipt';
 import {
@@ -79,6 +80,9 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   const [startDate, setStartDate] = useState(todayISO());
   const [type, setType] = useState<MembershipType>('free');
   const [maxVisits, setMaxVisits] = useState('');
+  const [centerName, setCenterName] = useState('');
+  const [centerCoord, setCenterCoord] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
@@ -118,6 +122,19 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function setCenterFromGPS() {
+    setGpsLoading(true);
+    const p = await getPosition();
+    setGpsLoading(false);
+    if (p) {
+      setCenterCoord(p);
+    } else {
+      const msg = '현재 위치를 가져올 수 없어요. 위치 권한을 확인해 주세요.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('센터 위치', msg);
+    }
+  }
+
   function handleSubmit() {
     if (!canSubmit) {
       // 빈 칸 그대로 누르면 어떤 항목이 필수인지 메시지로 표시
@@ -125,7 +142,17 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
       return;
     }
     mutate(
-      { name, cost: costNum, period, startDate, type, maxVisits: showVisits ? visitsNum : null },
+      {
+        name,
+        cost: costNum,
+        period,
+        startDate,
+        type,
+        maxVisits: showVisits ? visitsNum : null,
+        centerName: centerName.trim() || null,
+        centerLat: centerCoord?.lat ?? null,
+        centerLng: centerCoord?.lng ?? null,
+      },
       { onSuccess: onClose },
     );
   }
@@ -230,6 +257,30 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
           </Field>
         )}
 
+        {/* 센터(선택): 좌표가 있어야 GPS 도착·날씨·경로가 동작 */}
+        <Field label="센터 (선택)">
+          <TextInput
+            value={centerName}
+            onChangeText={setCenterName}
+            placeholder="예: 강남 피트니스"
+            placeholderTextColor="#9aa"
+            style={styles.input}
+          />
+          <Pressable
+            onPress={setCenterFromGPS}
+            style={({ pressed }) => [styles.gpsBtn, pressed && styles.scanBtnPressed]}>
+            {gpsLoading ? (
+              <ActivityIndicator />
+            ) : (
+              <ThemedText type="small">
+                {centerCoord
+                  ? `✅ 위치 설정됨 (${centerCoord.lat.toFixed(4)}, ${centerCoord.lng.toFixed(4)})`
+                  : '📍 현재 위치를 센터로 설정'}
+              </ThemedText>
+            )}
+          </Pressable>
+        </Field>
+
         {error && (
           <ThemedText type="small" style={styles.errorText}>
             저장 실패: {(error as Error).message}
@@ -291,6 +342,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34,197,94,0.08)',
   },
   scanBtnPressed: { opacity: 0.7 },
+  gpsBtn: {
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.two,
+    borderWidth: 1,
+    borderColor: 'rgba(127,127,127,0.4)',
+  },
   field: { gap: Spacing.two },
   labelRow: { flexDirection: 'row', alignItems: 'center' },
   fieldLabel: { opacity: 0.7 },
