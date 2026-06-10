@@ -1,14 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import * as Location from 'expo-location';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { ExerciseRecordForm } from '@/features/membership/ExerciseRecordForm';
+import { useCenter } from '@/features/membership/useCenter';
 import { useCreateVisit } from '@/features/membership/useCreateVisit';
 import type { Membership } from '@/features/membership/useMemberships';
 
 type Step = 'select' | 'prepare' | 'depart' | 'arrive' | 'done' | 'exercise' | 'logged';
+type GpsPhase = 'idle' | 'checking' | 'near' | 'far' | 'unavailable';
+
+/** 두 좌표 간 거리(km). Haversine. */
+function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 function CheckItem({
   label,
@@ -81,14 +95,50 @@ export function CheckInFlow({
   const [visitId, setVisitId] = useState<string | null>(null);
   const [phone, setPhone] = useState(false);
   const [clothes, setClothes] = useState(false);
+  const [gps, setGps] = useState<{ phase: GpsPhase; km?: number }>({ phase: 'idle' });
   const { mutate, isPending, error } = useCreateVisit();
+  const { data: center } = useCenter(selectedId);
 
   const selected = memberships.find((m) => m.id === selectedId) ?? null;
+
+  // 도착 단계 진입 시 위치를 확인해 센터와의 거리를 계산(키 불필요).
+  useEffect(() => {
+    if (step !== 'arrive') return;
+    let cancelled = false;
+    setGps({ phase: 'checking' });
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          if (!cancelled) setGps({ phase: 'unavailable' });
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({});
+        if (cancelled) return;
+        if (center?.latitude != null && center?.longitude != null) {
+          const km = distanceKm(
+            pos.coords.latitude,
+            pos.coords.longitude,
+            center.latitude,
+            center.longitude,
+          );
+          setGps({ phase: km <= 1 ? 'near' : 'far', km });
+        } else {
+          setGps({ phase: 'unavailable' });
+        }
+      } catch {
+        if (!cancelled) setGps({ phase: 'unavailable' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, center]);
 
   function checkIn() {
     if (!selected) return;
     mutate(
-      { membershipId: selected.id, centerName: selected.name },
+      { membershipId: selected.id, centerName: center?.name ?? selected.name },
       {
         onSuccess: (data) => {
           setVisitId((data as { id: string }).id);
@@ -159,7 +209,26 @@ export function CheckInFlow({
               STEP 3 · 도착
             </ThemedText>
             <ThemedText type="subtitle">센터에 거의 다 왔어요!</ThemedText>
-            <ThemedText type="default">도착하면 체크인하세요. 방문이 기록돼요.</ThemedText>
+            {gps.phase === 'checking' ? (
+              <ThemedText type="small" style={styles.dim}>
+                📍 위치 확인 중…
+              </ThemedText>
+            ) : null}
+            {gps.phase === 'near' ? (
+              <ThemedText type="smallBold" style={styles.near}>
+                ✅ 센터 도착 감지! ({Math.round((gps.km ?? 0) * 1000)}m 이내)
+              </ThemedText>
+            ) : null}
+            {gps.phase === 'far' ? (
+              <ThemedText type="small" style={styles.dim}>
+                아직 {(gps.km ?? 0).toFixed(1)}km 떨어져 있어요. 도착하면 체크인하세요.
+              </ThemedText>
+            ) : null}
+            {gps.phase === 'unavailable' ? (
+              <ThemedText type="small" style={styles.dim}>
+                위치 확인이 어려워요. 도착했다면 수동으로 체크인하세요.
+              </ThemedText>
+            ) : null}
             {error ? (
               <ThemedText type="small" style={styles.error}>
                 체크인 실패: {(error as Error).message}
@@ -217,6 +286,7 @@ const styles = StyleSheet.create({
   },
   body: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: Spacing.three },
   dim: { opacity: 0.6 },
+  near: { color: '#22c55e' },
   error: { color: '#d33' },
   optionBtn: {
     padding: Spacing.three,
