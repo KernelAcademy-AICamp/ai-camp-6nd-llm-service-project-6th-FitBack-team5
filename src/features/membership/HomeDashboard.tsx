@@ -9,9 +9,12 @@ import {
   daysLeft,
   partLabel,
   perVisitCost,
-  pickPrimary,
 } from '@/features/membership/dashboard';
-import type { Membership, MembershipType } from '@/features/membership/useMemberships';
+import type {
+  Membership,
+  MembershipStatus,
+  MembershipType,
+} from '@/features/membership/useMemberships';
 import { useMonthlyStats, type MonthlyStats } from '@/features/membership/useMonthlyStats';
 
 const TYPE_LABELS: Record<MembershipType, string> = {
@@ -19,6 +22,15 @@ const TYPE_LABELS: Record<MembershipType, string> = {
   session: '세션권',
   class: '예약권',
 };
+
+const STATUS_LABELS: Record<MembershipStatus, string> = {
+  active: '사용중',
+  expired: '만료',
+};
+
+function statusBadgeColor(status: MembershipStatus) {
+  return status === 'active' ? '#22c55e' : '#9ca3af';
+}
 
 function won(n: number): string {
   return `₩${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
@@ -47,26 +59,48 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SummaryCard({ m }: { m: Membership }) {
+/** 회원권 1개의 현황 카드 (주식 종목별 현황처럼 카드마다 독립 통계). */
+export function SummaryCard({ m }: { m: Membership }) {
   const remaining = breakEvenRemaining(m);
   const per = perVisitCost(m);
   const left = daysLeft(m.endDate);
   const color = breakEvenColor(remaining);
+  const showVisits = m.type !== 'free';
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
       <View style={styles.rowBetween}>
         <ThemedText type="subtitle">{m.name}</ThemedText>
-        <ThemedText type="small">{TYPE_LABELS[m.type]}</ThemedText>
+        <View style={[styles.badge, { backgroundColor: statusBadgeColor(m.status) }]}>
+          <ThemedText type="smallBold" style={styles.badgeText}>
+            {STATUS_LABELS[m.status]}
+          </ThemedText>
+        </View>
       </View>
+
+      <View style={styles.metaRow}>
+        <ThemedText type="small" style={styles.meta}>
+          {TYPE_LABELS[m.type]}
+        </ThemedText>
+        {showVisits ? (
+          <ThemedText type="small" style={styles.meta}>
+            {m.maxVisits != null ? `남은 ${m.remainingVisits}/${m.maxVisits}회` : '무제한'}
+          </ThemedText>
+        ) : null}
+        <ThemedText type="small" style={styles.meta}>
+          만료 {m.endDate}
+        </ThemedText>
+      </View>
+
       <View style={styles.statRow}>
         <Stat label="정비용" value={won(m.cost)} />
         <Stat label="남은 기간" value={left >= 0 ? `${left}일` : '만료'} />
         <Stat label="회당 비용" value={per != null ? won(per) : '—'} />
       </View>
+
       <View style={[styles.breakEven, { backgroundColor: `${color}22` }]}>
         <View style={[styles.dot, { backgroundColor: color }]} />
         <ThemedText type="smallBold">
-          {remaining <= 0 ? '본전 달성! 🎉' : `본전까지 ${remaining}회 더`}
+          {remaining <= 0 ? '회원권 활용 달성! 🎉' : `회원권 활용까지 ${remaining}회`}
         </ThemedText>
       </View>
     </ThemedView>
@@ -96,18 +130,11 @@ function StatsCard({ stats }: { stats?: MonthlyStats }) {
   );
 }
 
-export function HomeDashboard({
-  memberships,
-  onGoCenter,
-}: {
-  memberships: Membership[];
-  onGoCenter: () => void;
-}) {
-  const primary = pickPrimary(memberships);
+/** 대시보드 상단: 이번달 통계(전체) + 센터 가기. 회원권별 현황은 SummaryCard로 목록에 표시. */
+export function HomeDashboard({ onGoCenter }: { onGoCenter: () => void }) {
   const { data: stats } = useMonthlyStats();
   return (
     <View style={styles.wrap}>
-      {primary ? <SummaryCard m={primary} /> : null}
       <StatsCard stats={stats} />
       <Pressable
         onPress={onGoCenter}
@@ -124,6 +151,10 @@ const styles = StyleSheet.create({
   wrap: { gap: Spacing.three },
   card: { padding: Spacing.three, borderRadius: Spacing.two, gap: Spacing.two },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  badge: { paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Spacing.two },
+  badgeText: { color: '#fff' },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three },
+  meta: { opacity: 0.7 },
   statRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.one },
   stat: { gap: 2 },
   statLabel: { opacity: 0.6 },

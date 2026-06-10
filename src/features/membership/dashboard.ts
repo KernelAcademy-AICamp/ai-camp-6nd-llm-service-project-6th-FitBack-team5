@@ -2,7 +2,7 @@ import type { Membership } from './useMemberships';
 
 // PART 2 홈 대시보드 계산 helper.
 
-/** 본전 기준: 회당 20,000원 (문서값). */
+/** 회원권 활용 기준: 회당 20,000원 (문서값). */
 export const BREAK_EVEN_PER_VISIT = 20000;
 
 export const PART_LABELS: Record<string, string> = {
@@ -31,7 +31,7 @@ export function perVisitCost(m: Membership): number | null {
   return null;
 }
 
-/** 본전까지 남은 방문 횟수 = ceil(비용 ÷ 20,000) − 지금까지 방문. 음수면 본전 달성. */
+/** 회원권 활용까지 남은 방문 횟수 = ceil(비용 ÷ 20,000) − 지금까지 방문. 음수면 활용 완료. */
 export function breakEvenRemaining(m: Membership): number {
   return Math.ceil(m.cost / BREAK_EVEN_PER_VISIT) - m.usedVisits;
 }
