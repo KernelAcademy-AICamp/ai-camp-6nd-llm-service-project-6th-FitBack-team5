@@ -16,8 +16,8 @@ interface AnalyzeResponse extends Partial<AnalyzedMeal> {
 }
 
 async function analyzeMealText(text: string): Promise<AnalyzedMeal> {
-  const { data, error } = await supabase.functions.invoke<AnalyzeResponse>('analyze-meal', {
-    body: { text },
+  const { data, error } = await supabase.functions.invoke<AnalyzeResponse>('food', {
+    body: { action: 'analyze', text },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);

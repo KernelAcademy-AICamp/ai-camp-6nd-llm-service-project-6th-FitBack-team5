@@ -18,8 +18,8 @@ interface FoodSearchResponse {
 }
 
 async function searchFoods(query: string): Promise<FoodSearchResult[]> {
-  const { data, error } = await supabase.functions.invoke<FoodSearchResponse>('food-search', {
-    body: { query },
+  const { data, error } = await supabase.functions.invoke<FoodSearchResponse>('food', {
+    body: { action: 'search', query },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
