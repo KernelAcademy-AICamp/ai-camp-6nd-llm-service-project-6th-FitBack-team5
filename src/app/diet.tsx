@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { useProfile } from '@/features/auth/useProfile';
+import { useAnalyzeMeal } from '@/features/diet/analyzeMeal';
 import { useFoodSearch, type FoodSearchResult } from '@/features/diet/foodSearch';
 import {
   MOCK_CONTEXT,
@@ -380,6 +381,8 @@ function RecordModal({
   const [textInput, setTextInput] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [draft, setDraft] = useState<Omit<Meal, 'id' | 'time'> | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const analyzeMeal = useAnalyzeMeal();
 
   function close() {
     setTab('image');
@@ -387,9 +390,11 @@ function RecordModal({
     setTextInput('');
     setSearchInput('');
     setDraft(null);
+    setAnalyzeError(null);
     onClose();
   }
 
+  // 사진 탭: 아직 mock (FAKE_RESULTS에서 추정값 흉내)
   function analyze(method: InputMethod, nameHint?: string) {
     setStep('analyzing');
     const picked = FAKE_RESULTS[nameHint ? nameHint.length % FAKE_RESULTS.length : 0];
@@ -405,6 +410,30 @@ function RecordModal({
       });
       setStep('review');
     }, 1200);
+  }
+
+  // 텍스트 탭: Claude(analyze-meal Edge Function)로 실제 영양 추정
+  async function analyzeText() {
+    const text = textInput.trim();
+    if (!text) return;
+    setAnalyzeError(null);
+    setStep('analyzing');
+    try {
+      const r = await analyzeMeal.mutateAsync(text);
+      setDraft({
+        mealType: currentMealType(),
+        name: r.name,
+        kcal: r.kcal,
+        carb: r.carb,
+        protein: r.protein,
+        fat: r.fat,
+        inputMethod: 'manual',
+      });
+      setStep('review');
+    } catch {
+      setStep('input');
+      setAnalyzeError('분석에 실패했어요. 음식을 더 구체적으로 적고 다시 시도해 주세요.');
+    }
   }
 
   function pickFood(food: FoodSearchResult) {
@@ -547,7 +576,12 @@ function RecordModal({
                   multiline
                   autoFocus
                 />
-                <PrimaryButton label="AI 분석" disabled={!textInput.trim()} onPress={() => analyze('manual', textInput)} />
+                {analyzeError && (
+                  <Txt variant="caption" color={D.error}>
+                    {analyzeError}
+                  </Txt>
+                )}
+                <PrimaryButton label="AI 분석" disabled={!textInput.trim()} onPress={analyzeText} />
               </View>
             )}
 
@@ -572,8 +606,8 @@ function RecordModal({
                           {f.name}
                         </Txt>
                         <Txt variant="caption" color={D.gray500}>
-                          탄 {f.carb}g · 단 {f.protein}g · 지 {f.fat}g
-                          {f.servingSize ? ` · ${f.servingSize}` : ''}
+                          100g 기준 · 탄 {f.carb}g · 단 {f.protein}g · 지 {f.fat}g
+                          {f.servingSize ? ` · 1회 ${f.servingSize}` : ''}
                         </Txt>
                       </View>
                       <Txt variant="body" weight="600" color={D.primary}>
