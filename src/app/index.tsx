@@ -1,10 +1,20 @@
 import { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { HomeDashboard } from '@/features/membership/HomeDashboard';
 import { MembershipForm } from '@/features/membership/MembershipForm';
 import {
   type Membership,
@@ -21,6 +31,13 @@ const statusLabels: Record<MembershipStatus, string> = {
 
 function statusBadgeColor(status: MembershipStatus) {
   return status === 'active' ? '#22c55e' : '#9ca3af';
+}
+
+// PART 3(센터 이동 흐름)에서 마이크로 스텝으로 연결 예정. 지금은 안내만.
+function notifyGoCenter() {
+  const msg = '센터 가기 흐름은 다음 단계(PART 3)에서 연결됩니다.';
+  if (Platform.OS === 'web') window.alert(msg);
+  else Alert.alert('센터 가기', msg);
 }
 
 function MembershipCard({ item }: { item: Membership }) {
@@ -88,6 +105,13 @@ export default function MembershipScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+          {/* PART 2: 홈 대시보드 (현황 카드 + 이번달 통계 + 센터 가기) */}
+          <HomeDashboard memberships={memberships ?? []} onGoCenter={notifyGoCenter} />
+
+          <ThemedText type="subtitle" style={styles.listHeading}>
+            회원권 목록
+          </ThemedText>
+
           {isLoading && (
             <View style={styles.stateBox}>
               <ActivityIndicator />
@@ -157,6 +181,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingBottom: Spacing.three,
   },
+  listHeading: { marginTop: Spacing.two },
   stateBox: {
     paddingVertical: Spacing.four,
     alignItems: 'center',
