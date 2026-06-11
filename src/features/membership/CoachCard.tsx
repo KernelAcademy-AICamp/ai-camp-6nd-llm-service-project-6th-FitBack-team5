@@ -1,5 +1,5 @@
-import { RefreshCw, Sparkles } from 'lucide-react-native';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Sparkles } from 'lucide-react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Card, Icon } from '@/components/ui';
@@ -8,7 +8,7 @@ import { useCoach, type CoachInput } from '@/features/membership/useCoach';
 
 /** "이번 주 추천" — AI 코치(Claude)가 데이터를 해석하고 다음 행동을 제안. */
 export function CoachCard(input: CoachInput) {
-  const { data, isLoading, isError, refetch, isFetching } = useCoach(input);
+  const { data, isLoading, isError } = useCoach(input);
 
   // 회원권이 없으면 표시하지 않음.
   if (input.withRisk.length === 0) return null;
@@ -22,12 +22,9 @@ export function CoachCard(input: CoachInput) {
             이번 주 추천 · AI 코치
           </ThemedText>
         </View>
-        <Pressable onPress={() => refetch()} hitSlop={8} disabled={isFetching} accessibilityLabel="새로고침">
-          <Icon icon={RefreshCw} size={16} color={Palette.gray300} />
-        </Pressable>
       </View>
 
-      {isLoading || isFetching ? (
+      {isLoading ? (
         <View style={styles.loading}>
           <ActivityIndicator color={Palette.primary} />
           <ThemedText type="caption" themeColor="textSecondary">

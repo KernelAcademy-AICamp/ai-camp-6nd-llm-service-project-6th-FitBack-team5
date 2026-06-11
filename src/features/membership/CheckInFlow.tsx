@@ -11,7 +11,7 @@ import {
   TrainFront,
   X,
 } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -66,6 +66,14 @@ function encourageMsg(remainM: number | null): string | null {
   if (remainM <= 300) return '코앞이에요. 이 페이스면 충분해요.';
   if (remainM <= 600) return '거의 다 왔어요. 조금만 더!';
   return null;
+}
+
+// 가는 중 타이틀 하단 멘트 (배민 톤 — 가볍고 경쾌하게).
+function goingPhrase(mode: Mode | null): string {
+  if (mode === 'walk') return '씩씩하게 걸어가는 중이에요…';
+  if (mode === 'transit') return '휙— 타고 순식간에 가는 중이에요…';
+  if (mode === 'car') return '쌩— 번개처럼 달려가는 중이에요…';
+  return '센터로 가는 중이에요…';
 }
 
 function CheckItem({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
@@ -163,6 +171,10 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
   const [etaText, setEtaText] = useState('');
   const [arrived, setArrived] = useState(false);
   const [usingSim, setUsingSim] = useState(false);
+
+  // 출발 단계: 출발지 설정 시 '어떻게 가시나요?' 영역으로 스크롤.
+  const scrollRef = useRef<ScrollView>(null);
+  const [modeSectionY, setModeSectionY] = useState(0);
 
   const { mutate, isPending, error } = useCreateVisit();
   const { data: center } = useCenter(selectedId);
@@ -300,6 +312,16 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
+  // 출발지가 설정되면 '어떻게 가시나요?' 영역으로 스크롤.
+  useEffect(() => {
+    if (step !== 'depart' || !origin || modeSectionY <= 0) return;
+    const id = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, modeSectionY - 16), animated: true });
+    }, 200);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, origin?.lat, origin?.lng, modeSectionY]);
+
   async function runOriginSearch() {
     const q = originQuery.trim();
     if (!q) return;
@@ -343,7 +365,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         {step === 'select' ? (
           <>
             <ThemedText type="body">어느 회원권으로 가시나요?</ThemedText>
@@ -381,7 +403,15 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         {step === 'depart' ? (
           <>
             <StepLabel>STEP 2 · 출발</StepLabel>
-            <ThemedText type="h2">{center?.name ?? selected?.name ?? '센터'}까지 가는 길</ThemedText>
+
+            {/* ① 도착지 — 라벨 + 센터명 + 지도 (도착지임을 명확히) */}
+            <View style={styles.destRow}>
+              <Icon icon={MapPin} size={18} color={Palette.loss} />
+              <View style={styles.destText}>
+                <ThemedText type="label" themeColor="textSecondary">도착지</ThemedText>
+                <ThemedText type="h2">{center?.name ?? selected?.name ?? '센터'}</ThemedText>
+              </View>
+            </View>
 
             {dest ? (
               <KakaoMap lat={dest.lat} lng={dest.lng} label={center?.name ?? undefined} height={180} />
@@ -393,17 +423,24 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
               </Card>
             )}
 
-            {/* 출발지 */}
-            <Card>
-              <View style={styles.timeRow}>
-                <View style={styles.timeLeft}>
-                  <Icon icon={MapPin} size={16} color={Palette.gray500} />
-                  <ThemedText type="caption" themeColor="textSecondary">
-                    출발지
-                  </ThemedText>
-                </View>
-                <ThemedText type="captionBold">{origin ? originLabel : '미설정'}</ThemedText>
+            {weather ? (
+              <View style={styles.infoRow}>
+                <Icon icon={CloudSun} size={16} color={Palette.gray500} />
+                <ThemedText type="caption" themeColor="textSecondary">
+                  {`${center?.name ?? '센터'} · ${weather.desc} ${weather.temp}°C`}
+                </ThemedText>
               </View>
+            ) : null}
+
+            {/* ② 출발지 — "어디에서 출발하시나요?" */}
+            <Card>
+              <ThemedText type="captionBold">어디에서 출발하시나요?</ThemedText>
+              {origin ? (
+                <View style={[styles.infoRow, { marginTop: Spacing.xs }]}>
+                  <Icon icon={Check} size={16} color={Palette.profit} />
+                  <ThemedText type="caption" themeColor="textSecondary">출발지 · {originLabel}</ThemedText>
+                </View>
+              ) : null}
               <View style={styles.searchRow}>
                 <TextInput
                   value={originQuery}
@@ -444,21 +481,10 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
               ))}
             </Card>
 
-            {weather ? (
-              <View style={styles.infoRow}>
-                <Icon icon={CloudSun} size={16} color={Palette.gray500} />
-                <ThemedText type="caption" themeColor="textSecondary">
-                  {`${center?.name ?? '센터'} · ${weather.desc} ${weather.temp}°C`}
-                </ThemedText>
-              </View>
-            ) : null}
-
-            {/* 이동수단 선택 */}
+            {/* ③ 이동수단 — 출발지 설정 후에만 표시(설정 시 이 영역으로 스크롤) */}
             {dest && origin ? (
-              <>
-                <ThemedText type="caption" themeColor="textSecondary">
-                  어떻게 가시나요?
-                </ThemedText>
+              <View onLayout={(e) => setModeSectionY(e.nativeEvent.layout.y)} style={styles.modeSection}>
+                <ThemedText type="captionBold">어떻게 가시나요?</ThemedText>
                 <ModeRow
                   mode="walk"
                   selected={mode === 'walk'}
@@ -489,19 +515,18 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
                   time={route ? `${route.durationMin}분` : '-'}
                   detail={route ? `${route.distanceKm.toFixed(1)}km` : undefined}
                 />
-              </>
+                <Button
+                  label={mode ? `${MODE_META[mode].label}로 출발하기` : '이동수단을 선택하세요'}
+                  onPress={() => setStep('going')}
+                  disabled={!mode}
+                  style={styles.action}
+                />
+              </View>
             ) : dest && !origin ? (
               <ThemedText type="caption" themeColor="textSecondary">
-                출발지를 설정하면 이동수단을 고를 수 있어요.
+                출발지를 입력하면 이동수단과 소요시간이 나타나요.
               </ThemedText>
             ) : null}
-
-            <Button
-              label={mode ? `${MODE_META[mode].label}로 출발하기` : '이동수단을 선택하세요'}
-              onPress={() => setStep('going')}
-              disabled={!mode || !origin || !dest}
-              style={styles.action}
-            />
           </>
         ) : null}
 
@@ -509,6 +534,9 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
           <>
             <StepLabel>STEP 3 · 가는 중</StepLabel>
             <ThemedText type="h2">{center?.name ?? '센터'}까지 가는 중</ThemedText>
+            <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+              {goingPhrase(mode)}
+            </ThemedText>
 
             {dest && origin ? (
               <KakaoMap
@@ -645,19 +673,24 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         ) : null}
 
         {step === 'done' ? (
-          <>
+          <View style={styles.popup}>
             <View style={styles.celebrate}>
               <Icon icon={Check} size={32} color={Palette.profit} />
             </View>
-            <ThemedText type="h1">체크인 완료!</ThemedText>
-            {selected ? <ThemedText type="body">{selected.name} · 방문이 기록됐어요.</ThemedText> : null}
-            <Button label="운동 기록하기" onPress={() => setStep('exercise')} style={styles.action} />
+            <ThemedText type="h1">축하합니다!</ThemedText>
+            <ThemedText type="h2" style={{ color: Palette.profit }}>오늘도 출석 완료!</ThemedText>
+            {selected ? (
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
+                {selected.name} · 방문이 기록됐어요.
+              </ThemedText>
+            ) : null}
+            <Button label="운동 기록하기" onPress={() => setStep('exercise')} style={styles.popupBtn} />
             <Pressable onPress={onClose} style={styles.skip} hitSlop={8}>
               <ThemedText type="caption" themeColor="textSecondary">
                 나중에 (닫기)
               </ThemedText>
             </Pressable>
-          </>
+          </View>
         ) : null}
 
         {step === 'exercise' && visitId ? (
@@ -671,16 +704,16 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         ) : null}
 
         {step === 'logged' ? (
-          <>
+          <View style={styles.popup}>
             <View style={styles.celebrate}>
               <Icon icon={Check} size={32} color={Palette.profit} />
             </View>
             <ThemedText type="h1">운동 기록 완료!</ThemedText>
-            <ThemedText type="caption" themeColor="textSecondary">
-              이번 달 통계·위험도가 갱신됩니다.
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
+              이번 달 회원권 통계가 갱신됩니다.
             </ThemedText>
-            <Button label="확인" onPress={onClose} style={styles.action} />
-          </>
+            <Button label="닫기" onPress={onClose} style={styles.popupBtn} />
+          </View>
         ) : null}
       </ScrollView>
     </ThemedView>
@@ -788,4 +821,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.small,
     backgroundColor: Palette.primaryLight,
   },
+  destRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  destText: { gap: 2 },
+  modeSection: { gap: Spacing.md },
+  popup: { alignItems: 'center', gap: Spacing.sm, paddingTop: Spacing.xxl },
+  popupBtn: { marginTop: Spacing.md, alignSelf: 'stretch' },
 });

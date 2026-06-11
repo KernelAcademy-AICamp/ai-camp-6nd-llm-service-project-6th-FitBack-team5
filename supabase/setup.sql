@@ -175,6 +175,60 @@ end $$;
 
 
 -- ████████████████████████████████████████████████████████████
+-- 02_init_meals.sql
+-- ████████████████████████████████████████████████████████████
+
+-- meals (식단 기록) + RLS
+-- Paste into Supabase SQL Editor and run once. Depends on 01_init_profiles.sql (auth.users).
+--
+-- 현 UI(diet.tsx)는 끼니별로 칼로리·탄단지를 비정규화로 들고 있어, 이 테이블도
+-- UI Meal 타입에 1:1로 매핑되는 단일 테이블로 둔다. foods 카탈로그 정규화는 추후 별도 마이그레이션.
+
+-- ============================================================
+-- meals table
+-- ============================================================
+create table if not exists public.meals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  log_date date not null default current_date,
+  meal_type text not null check (meal_type in ('아침', '점심', '저녁', '간식')),
+  name text not null,
+  kcal integer not null default 0 check (kcal >= 0),
+  carb integer not null default 0 check (carb >= 0),
+  protein integer not null default 0 check (protein >= 0),
+  fat integer not null default 0 check (fat >= 0),
+  eaten_at timestamptz not null default now(),
+  input_method text not null default 'manual' check (input_method in ('image', 'voice', 'manual')),
+  created_at timestamptz not null default now()
+);
+
+-- 하루치 조회용 인덱스 (user_id + log_date)
+create index if not exists meals_user_date_idx
+  on public.meals (user_id, log_date);
+
+-- ============================================================
+-- RLS — own rows only
+-- ============================================================
+alter table public.meals enable row level security;
+
+drop policy if exists "meals: read own" on public.meals;
+create policy "meals: read own" on public.meals
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "meals: insert own" on public.meals;
+create policy "meals: insert own" on public.meals
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "meals: update own" on public.meals;
+create policy "meals: update own" on public.meals
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "meals: delete own" on public.meals;
+create policy "meals: delete own" on public.meals
+  for delete using (auth.uid() = user_id);
+
+
+-- ████████████████████████████████████████████████████████████
 -- 03_memberships.sql
 -- ████████████████████████████████████████████████████████████
 
@@ -628,3 +682,30 @@ alter table public.exercise_records alter column exercise_part drop not null;
 
 -- db:push 검증용 임시 테이블 정리.
 drop table if exists public._db_push_test;
+
+
+-- ████████████████████████████████████████████████████████████
+-- 12_onboarding.sql
+-- ████████████████████████████████████████████████████████████
+
+-- 12_onboarding.sql — 최초 로그인 온보딩.
+--  · profiles.onboarded: 온보딩 완료 여부(첫 진입 위저드 노출 판단).
+--    기존 회원권 보유 사용자는 완료로 간주해 재노출 방지(backfill).
+--  · 운동 목표(fitness_goal)를 기획서 5종으로 확장:
+--    근력(muscle_gain)/감량(fat_loss)/지구력(endurance) + 건강관리(health)/체형개선(body_shape)/습관형성(habit)
+-- 멱등: add column if not exists / drop constraint if exists 재실행 안전.
+
+alter table public.profiles add column if not exists onboarded boolean not null default false;
+
+update public.profiles p
+set onboarded = true
+where p.onboarded = false
+  and exists (select 1 from public.memberships m where m.user_id = p.id);
+
+alter table public.user_preferences drop constraint if exists user_preferences_fitness_goal_check;
+alter table public.user_preferences add constraint user_preferences_fitness_goal_check
+  check (
+    fitness_goal is null or fitness_goal in (
+      'muscle_gain', 'fat_loss', 'endurance', 'health', 'body_shape', 'habit'
+    )
+  );
