@@ -8,6 +8,7 @@ export default function AppTabs() {
       backgroundColor={Palette.bgSurface}
       indicatorColor={Palette.primaryLight}
       labelStyle={{ color: Palette.gray300, selected: { color: Palette.primary } }}>
+
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>회원권</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
