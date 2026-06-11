@@ -8,6 +8,8 @@ import AppTabs from '@/components/app-tabs';
 import { Palette } from '@/constants/theme';
 import { LoginScreen } from '@/features/auth/LoginScreen';
 import { useAuthBootstrap } from '@/features/auth/useAuthBootstrap';
+import { useProfile } from '@/features/auth/useProfile';
+import { OnboardingFlow } from '@/features/onboarding/OnboardingFlow';
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/stores/auth';
 
@@ -20,6 +22,7 @@ const FitBackTheme = {
 function AppShell() {
   useAuthBootstrap();
   const status = useAuthStore((s) => s.status);
+  const { data: profile, isLoading: profileLoading } = useProfile();
 
   if (status === 'loading') {
     return (
@@ -31,6 +34,20 @@ function AppShell() {
 
   if (status !== 'authenticated') {
     return <LoginScreen />;
+  }
+
+  // 프로필 로딩 중 — 깜빡임 방지
+  if (profileLoading) {
+    return (
+      <View style={loadingStyles.container}>
+        <ActivityIndicator color={Palette.primary} />
+      </View>
+    );
+  }
+
+  // 최초 로그인 온보딩 (미완료 시) — 완료하면 profile 무효화 → 탭 진입
+  if (profile && !profile.onboarded) {
+    return <OnboardingFlow />;
   }
 
   return (

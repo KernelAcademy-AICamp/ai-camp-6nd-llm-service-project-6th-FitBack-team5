@@ -23,6 +23,7 @@ export interface Profile {
   injury_history: string | null;
   medical_conditions: string | null;
   avoid_exercise_parts: string[] | null;
+  onboarded: boolean;
 }
 
 export function useProfile() {

@@ -118,7 +118,117 @@ create policy "profiles: update own" on public.profiles
 
 
 -- ████████████████████████████████████████████████████████████
--- 02_extend_profiles.sql
+-- 02_exercises_and_tts.sql
+-- ████████████████████████████████████████████████████████████
+
+-- ============================================================
+-- 02_exercises_and_tts.sql
+-- 운동 마스터 + 오디오 캐시 구조.
+-- 텍스트 저장과 오디오 파일 캐싱을 분리해서 설계.
+-- ============================================================
+
+-- updated_at 자동 갱신 유틸 (재사용 가능)
+create or replace function public.update_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+-- ------------------------------------------------------------
+-- exercises: 운동 마스터 (텍스트 + 오디오 캐시 url)
+-- ------------------------------------------------------------
+create table if not exists public.exercises (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  category text,
+  muscle_group text,
+  description_text text not null,
+  description_audio_url text,
+  caution_text text not null default '',
+  caution_audio_url text,
+  tts_version int not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists exercises_updated_at on public.exercises;
+create trigger exercises_updated_at
+  before update on public.exercises
+  for each row execute function public.update_updated_at();
+
+-- ------------------------------------------------------------
+-- exercise_cues: 구간 큐 (세트 시작 / rep / rest / finish) 템플릿 + 캐시
+-- 파라미터 고정값은 params jsonb로, 미리 생성된 오디오는 audio_url로.
+-- ------------------------------------------------------------
+create table if not exists public.exercise_cues (
+  id uuid primary key default gen_random_uuid(),
+  exercise_id uuid references public.exercises(id) on delete cascade,
+  cue_type text not null check (cue_type in ('set_start', 'rep_count', 'rest', 'finish')),
+  template text not null,
+  params jsonb not null default '{}'::jsonb,
+  audio_url text,
+  tts_version int not null default 1,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists exercise_cues_lookup
+  on public.exercise_cues (cue_type, exercise_id);
+
+-- ------------------------------------------------------------
+-- tts_cache: 동적 생성 TTS 캐시 (텍스트 해시 → 오디오 url)
+-- text_hash = sha256(text || ':' || tts_version)
+-- ------------------------------------------------------------
+create table if not exists public.tts_cache (
+  text_hash text primary key,
+  text text not null,
+  audio_url text not null,
+  tts_version int not null default 1,
+  last_used_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists tts_cache_last_used on public.tts_cache (last_used_at);
+
+-- ------------------------------------------------------------
+-- RLS
+-- ------------------------------------------------------------
+alter table public.exercises enable row level security;
+alter table public.exercise_cues enable row level security;
+alter table public.tts_cache enable row level security;
+
+-- 인증된 사용자: 모든 테이블 읽기 가능
+drop policy if exists "exercises readable by authenticated" on public.exercises;
+create policy "exercises readable by authenticated"
+  on public.exercises for select to authenticated using (true);
+
+drop policy if exists "exercise_cues readable by authenticated" on public.exercise_cues;
+create policy "exercise_cues readable by authenticated"
+  on public.exercise_cues for select to authenticated using (true);
+
+drop policy if exists "tts_cache readable by authenticated" on public.tts_cache;
+create policy "tts_cache readable by authenticated"
+  on public.tts_cache for select to authenticated using (true);
+
+-- 1단계: 클라이언트에서 exercises upsert 허용 (운동 마스터 자동 영속화).
+-- TODO Phase 2: Edge Function 경유로 전환 시 아래 정책 제거.
+drop policy if exists "exercises insertable by authenticated" on public.exercises;
+create policy "exercises insertable by authenticated"
+  on public.exercises for insert to authenticated with check (true);
+
+drop policy if exists "exercises updatable by authenticated" on public.exercises;
+create policy "exercises updatable by authenticated"
+  on public.exercises for update to authenticated using (true) with check (true);
+
+-- exercise_cues / tts_cache 는 1단계에선 write 안 함.
+-- (클라우드 TTS 도입 시 Edge Function 또는 백오피스 경유)
+
+
+-- ████████████████████████████████████████████████████████████
+-- 03_extend_profiles.sql
 -- ████████████████████████████████████████████████████████████
 
 -- Extend profiles with the User health/basic fields from the Phase 1 type doc.
@@ -175,7 +285,61 @@ end $$;
 
 
 -- ████████████████████████████████████████████████████████████
--- 03_memberships.sql
+-- 04_init_meals.sql
+-- ████████████████████████████████████████████████████████████
+
+-- meals (식단 기록) + RLS
+-- Paste into Supabase SQL Editor and run once. Depends on 01_init_profiles.sql (auth.users).
+--
+-- 현 UI(diet.tsx)는 끼니별로 칼로리·탄단지를 비정규화로 들고 있어, 이 테이블도
+-- UI Meal 타입에 1:1로 매핑되는 단일 테이블로 둔다. foods 카탈로그 정규화는 추후 별도 마이그레이션.
+
+-- ============================================================
+-- meals table
+-- ============================================================
+create table if not exists public.meals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  log_date date not null default current_date,
+  meal_type text not null check (meal_type in ('아침', '점심', '저녁', '간식')),
+  name text not null,
+  kcal integer not null default 0 check (kcal >= 0),
+  carb integer not null default 0 check (carb >= 0),
+  protein integer not null default 0 check (protein >= 0),
+  fat integer not null default 0 check (fat >= 0),
+  eaten_at timestamptz not null default now(),
+  input_method text not null default 'manual' check (input_method in ('image', 'voice', 'manual')),
+  created_at timestamptz not null default now()
+);
+
+-- 하루치 조회용 인덱스 (user_id + log_date)
+create index if not exists meals_user_date_idx
+  on public.meals (user_id, log_date);
+
+-- ============================================================
+-- RLS — own rows only
+-- ============================================================
+alter table public.meals enable row level security;
+
+drop policy if exists "meals: read own" on public.meals;
+create policy "meals: read own" on public.meals
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "meals: insert own" on public.meals;
+create policy "meals: insert own" on public.meals
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "meals: update own" on public.meals;
+create policy "meals: update own" on public.meals
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "meals: delete own" on public.meals;
+create policy "meals: delete own" on public.meals
+  for delete using (auth.uid() = user_id);
+
+
+-- ████████████████████████████████████████████████████████████
+-- 05_memberships.sql
 -- ████████████████████████████████████████████████████████████
 
 -- memberships table + RLS (owner-only) + seed data for the test account.
@@ -237,7 +401,42 @@ create policy "memberships: delete own" on public.memberships
 
 
 -- ████████████████████████████████████████████████████████████
--- 04_centers.sql
+-- 06_workout_logs.sql
+-- ████████████████████████████████████████████████████████████
+
+-- workout_logs: 운동 완료 기록
+create table if not exists public.workout_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  routine_title text not null,
+  routine_meta text not null,
+  duration_min int not null,
+  exercise_count int not null,
+  difficulty text not null check (difficulty in ('easy', 'good', 'hard')),
+  pain_areas text[] not null default '{}',
+  completion_status text not null check (completion_status in ('completed', 'partial', 'missed')),
+  memo text,
+  ai_feedback jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- RLS
+alter table public.workout_logs enable row level security;
+
+-- 본인 기록만 읽기/쓰기
+create policy "workout_logs: own read"
+  on public.workout_logs for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+create policy "workout_logs: own insert"
+  on public.workout_logs for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+
+-- ████████████████████████████████████████████████████████████
+-- 07_centers.sql
 -- ████████████████████████████████████████████████████████████
 
 -- centers table + RLS (owner-only). Run AFTER 03_memberships.sql.
@@ -283,7 +482,7 @@ create policy "centers: delete own" on public.centers
 
 
 -- ████████████████████████████████████████████████████████████
--- 05_visits.sql
+-- 08_visits.sql
 -- ████████████████████████████████████████████████████████████
 
 -- visits table + RLS (owner-only). Run AFTER 04_centers.sql.
@@ -333,7 +532,7 @@ create policy "visits: delete own" on public.visits
 
 
 -- ████████████████████████████████████████████████████████████
--- 06_exercise_records.sql
+-- 09_exercise_records.sql
 -- ████████████████████████████████████████████████████████████
 
 -- exercise_records table + RLS (owner-only). Run AFTER 05_visits.sql.
@@ -383,7 +582,7 @@ create policy "exercise_records: delete own" on public.exercise_records
 
 
 -- ████████████████████████████████████████████████████████████
--- 07_user_preferences.sql
+-- 10_user_preferences.sql
 -- ████████████████████████████████████████████████████████████
 
 -- user_preferences table + RLS (owner-only). Run AFTER 06_exercise_records.sql.
@@ -435,7 +634,7 @@ create policy "user_preferences: delete own" on public.user_preferences
 
 
 -- ████████████████████████████████████████████████████████████
--- 08_seed_demo_data.sql
+-- 11_seed_demo_data.sql
 -- ████████████████████████████████████████████████████████████
 
 -- 08_seed_demo_data.sql — 전 테이블 데모(가) 데이터. Run AFTER 07_user_preferences.sql.
@@ -579,7 +778,7 @@ end $$;
 
 
 -- ████████████████████████████████████████████████████████████
--- 09_disable_demo_seed_trigger.sql
+-- 12_disable_demo_seed_trigger.sql
 -- ████████████████████████████████████████████████████████████
 
 -- 09_disable_demo_seed_trigger.sql — 온보딩에서 회원권을 직접 등록하므로,
@@ -593,7 +792,7 @@ drop trigger if exists on_auth_user_created_demo_seed on auth.users;
 
 
 -- ████████████████████████████████████████████████████████████
--- 10_backfill_centers.sql
+-- 13_backfill_centers.sql
 -- ████████████████████████████████████████████████████████████
 
 -- 10_backfill_centers.sql — 센터(좌표) 없는 회원권에 기본 좌표 보정 (개발/테스트용).
@@ -609,3 +808,49 @@ from public.memberships m
 where not exists (
   select 1 from public.centers c where c.membership_id = m.id
 );
+
+
+-- ████████████████████████████████████████████████████████████
+-- 14_exercise_records_by_type.sql
+-- ████████████████████████████████████████████████████████████
+
+-- 11_exercise_records_by_type.sql — 운동기록을 회원권 형태별로 저장 (PART 4).
+-- 자유이용권: 부위/강도/시간. 세션권(PT): 트레이너명. 예약권(클래스): 클래스명.
+-- PT/클래스는 '부위' 개념이 없으므로 exercise_part를 nullable로 완화하고,
+-- 형태별 부가정보(트레이너명/클래스명/종류/상태)는 기존 auto_data(jsonb)에 저장한다.
+--   auto_data 예: { "kind": "session", "trainer": "김코치", "status": "세션 완료" }
+--                 { "kind": "class", "className": "스피닝", "status": "수강 완료" }
+--                 { "kind": "free", "status": "운동 완료" }
+-- 멱등: drop not null / drop table if exists 는 재실행 안전.
+
+alter table public.exercise_records alter column exercise_part drop not null;
+
+-- db:push 검증용 임시 테이블 정리.
+drop table if exists public._db_push_test;
+
+
+-- ████████████████████████████████████████████████████████████
+-- 15_onboarding.sql
+-- ████████████████████████████████████████████████████████████
+
+-- 12_onboarding.sql — 최초 로그인 온보딩.
+--  · profiles.onboarded: 온보딩 완료 여부(첫 진입 위저드 노출 판단).
+--    기존 회원권 보유 사용자는 완료로 간주해 재노출 방지(backfill).
+--  · 운동 목표(fitness_goal)를 기획서 5종으로 확장:
+--    근력(muscle_gain)/감량(fat_loss)/지구력(endurance) + 건강관리(health)/체형개선(body_shape)/습관형성(habit)
+-- 멱등: add column if not exists / drop constraint if exists 재실행 안전.
+
+alter table public.profiles add column if not exists onboarded boolean not null default false;
+
+update public.profiles p
+set onboarded = true
+where p.onboarded = false
+  and exists (select 1 from public.memberships m where m.user_id = p.id);
+
+alter table public.user_preferences drop constraint if exists user_preferences_fitness_goal_check;
+alter table public.user_preferences add constraint user_preferences_fitness_goal_check
+  check (
+    fitness_goal is null or fitness_goal in (
+      'muscle_gain', 'fat_loss', 'endurance', 'health', 'body_shape', 'habit'
+    )
+  );

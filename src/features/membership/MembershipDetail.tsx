@@ -10,9 +10,9 @@ import type { Membership, MembershipType } from '@/features/membership/useMember
 import { useMembershipVisits } from '@/features/membership/useMembershipVisits';
 
 const TYPE_LABELS: Record<MembershipType, string> = {
-  free: '자유이용권',
-  session: '세션권',
-  class: '예약권',
+  free: '자유이용',
+  session: 'PT 세션',
+  class: '클래스',
 };
 
 const PART_LABEL: Record<string, string> = {
@@ -142,14 +142,25 @@ export function MembershipDetail({
               ) : null}
             </View>
             {v.exercise_records.length > 0 ? (
-              v.exercise_records.map((e) => (
-                <ThemedText key={e.id} type="caption">
-                  · {PART_LABEL[e.exercise_part] ?? e.exercise_part}
-                  {e.intensity ? ` · ${INTENSITY_LABEL[e.intensity] ?? e.intensity}` : ''}
-                  {e.duration ? ` · ${formatNumber(e.duration)}분` : ''}
-                  {e.notes ? ` · ${e.notes}` : ''}
-                </ThemedText>
-              ))
+              v.exercise_records.map((e) => {
+                // 형태별: PT=트레이너, 클래스=클래스명, 자유이용권=부위.
+                const head =
+                  e.auto_data?.kind === 'session'
+                    ? `PT${e.auto_data.trainer ? ` · ${e.auto_data.trainer}` : ''}`
+                    : e.auto_data?.kind === 'class'
+                      ? `클래스${e.auto_data.className ? ` · ${e.auto_data.className}` : ''}`
+                      : e.exercise_part
+                        ? (PART_LABEL[e.exercise_part] ?? e.exercise_part)
+                        : (e.auto_data?.status ?? '기록');
+                return (
+                  <ThemedText key={e.id} type="caption">
+                    · {head}
+                    {e.intensity ? ` · ${INTENSITY_LABEL[e.intensity] ?? e.intensity}` : ''}
+                    {e.duration ? ` · ${formatNumber(e.duration)}분` : ''}
+                    {e.notes ? ` · ${e.notes}` : ''}
+                  </ThemedText>
+                );
+              })
             ) : (
               <ThemedText type="caption" themeColor="textSecondary">
                 운동 기록 없음

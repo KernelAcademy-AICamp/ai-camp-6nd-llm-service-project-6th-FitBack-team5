@@ -4,10 +4,11 @@ import { supabase } from '@/lib/supabase';
 
 export interface ExerciseRow {
   id: string;
-  exercise_part: string;
+  exercise_part: string | null;
   intensity: string | null;
   duration: number | null;
   notes: string | null;
+  auto_data: { kind?: string; trainer?: string | null; className?: string | null; status?: string } | null;
 }
 
 export interface VisitWithExercises {
@@ -28,7 +29,7 @@ export function useMembershipVisits(membershipId: string | null) {
       const { data, error } = await supabase
         .from('visits')
         .select(
-          'id, check_in_time, center_name, status, exercise_records(id, exercise_part, intensity, duration, notes)',
+          'id, check_in_time, center_name, status, exercise_records(id, exercise_part, intensity, duration, notes, auto_data)',
         )
         .eq('membership_id', membershipId)
         .order('check_in_time', { ascending: false });

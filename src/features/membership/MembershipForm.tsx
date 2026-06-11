@@ -37,9 +37,9 @@ const PERIODS: { value: MembershipPeriod; label: string }[] = [
 ];
 
 const TYPES: { value: MembershipType; label: string; desc: string }[] = [
-  { value: 'free', label: '자유이용권', desc: '언제든 이용 (무제한)' },
-  { value: 'session', label: '세션권 (PT)', desc: '정해진 횟수만 이용' },
-  { value: 'class', label: '예약권 (클래스)', desc: '클래스 예약제' },
+  { value: 'free', label: '자유이용', desc: '언제든 이용 (무제한)' },
+  { value: 'session', label: 'PT 세션', desc: '정해진 횟수만 이용' },
+  { value: 'class', label: '클래스', desc: '클래스 예약제' },
 ];
 
 function todayISO(): string {
@@ -135,7 +135,25 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // 운동 센터만 검색. 0건이면 주소로 직접 검색하도록 안내.
   async function runSearch() {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const res = await searchPlaces(q, { sport: true });
+      setResults(res);
+      if (res.length === 0) setSearchError('운동 센터가 안 보이면 아래 “주소로 검색”으로 직접 등록하세요.');
+    } catch (e) {
+      setSearchError((e as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  // 폴백: 운동 카테고리 필터 없이 주소/장소 그대로 검색(수동 등록용).
+  async function runAddressSearch() {
     const q = searchQuery.trim();
     if (!q) return;
     setSearching(true);
@@ -352,9 +370,16 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
           </View>
 
           {searchError ? (
-            <ThemedText type="caption" themeColor="textSecondary">
-              {searchError}
-            </ThemedText>
+            <View style={styles.fallbackRow}>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.fallbackText}>
+                {searchError}
+              </ThemedText>
+              <Pressable onPress={runAddressSearch} hitSlop={6}>
+                <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                  주소로 검색
+                </ThemedText>
+              </Pressable>
+            </View>
           ) : null}
 
           {results.map((r, i) => (
@@ -482,6 +507,8 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.bgSurface,
   },
   resultText: { flex: 1, gap: 2 },
+  fallbackRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  fallbackText: { flex: 1 },
   field: { gap: Spacing.sm },
   labelRow: { flexDirection: 'row', alignItems: 'center' },
   required: { color: Palette.loss },
