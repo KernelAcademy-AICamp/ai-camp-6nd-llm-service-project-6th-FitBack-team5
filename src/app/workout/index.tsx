@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,8 +13,11 @@ import {
   ScreenPaddingX,
   Spacing,
 } from '@/constants/theme';
+import { persistRoutineExercises } from '@/features/workout/exercises';
 import { Routine, useGenerateRoutine } from '@/features/workout/useGenerateRoutine';
 import { useTheme } from '@/hooks/use-theme';
+import { getOrCreateAudio } from '@/lib/tts';
+import { useWorkoutSession } from '@/stores/workout-session';
 
 const goals = ['체력 향상', '체중 감량', '자세 개선'] as const;
 const places = ['집', '야외', '헬스장'] as const;
@@ -90,6 +94,8 @@ export default function WorkoutScreen() {
   const [duration, setDuration] = useState<(typeof durations)[number]>('15분');
   const [recommendation, setRecommendation] = useState<Routine | null>(null);
   const { mutate: generate, isPending, error } = useGenerateRoutine();
+  const router = useRouter();
+  const setSessionRoutine = useWorkoutSession((s) => s.setRoutine);
 
   const hasResult = recommendation !== null;
 
@@ -98,6 +104,20 @@ export default function WorkoutScreen() {
       { goal, place, equipment, condition, bodyPart, duration },
       { onSuccess: setRecommendation },
     );
+  }
+
+  function handleStartSession() {
+    if (!recommendation) return;
+    setSessionRoutine(recommendation);
+    // 운동 마스터를 exercises 테이블에 백그라운드 upsert (실패해도 진행)
+    persistRoutineExercises(recommendation).catch(() => {});
+    // Phase 2 TTS 워밍업 — 현재는 stub이라 실질적 동작 없음
+    // Phase 2 전환 시 getOrCreateAudio가 실제 오디오를 미리 생성·캐싱함
+    recommendation.exercises.forEach((ex) => {
+      getOrCreateAudio(ex.description).catch(() => {});
+      if (ex.caution) getOrCreateAudio(ex.caution).catch(() => {});
+    });
+    router.push('/workout/session');
   }
 
   return (
@@ -162,9 +182,20 @@ export default function WorkoutScreen() {
           </Pressable>
 
           {error && (
-            <ThemedText type="small" themeColor="error">
-              {error instanceof Error ? error.message : '루틴 생성에 실패했어요.'}
-            </ThemedText>
+            <View
+              style={[
+                styles.errorCard,
+                { backgroundColor: theme.backgroundElement, borderColor: theme.error },
+              ]}>
+              <ThemedText type="smallBold" themeColor="error">
+                루틴을 만들지 못했어요
+              </ThemedText>
+              <ThemedText type="small" themeColor="textBody">
+                {error instanceof Error
+                  ? error.message
+                  : '알 수 없는 오류가 발생했어요. 잠시 후 다시 시도해주세요.'}
+              </ThemedText>
+            </View>
           )}
 
           {recommendation && (
@@ -223,6 +254,7 @@ export default function WorkoutScreen() {
               </View>
 
               <Pressable
+                onPress={handleStartSession}
                 style={({ pressed }) => [
                   styles.cta,
                   {
@@ -333,5 +365,11 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  errorCard: {
+    padding: Spacing.md,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.xs,
   },
 });
