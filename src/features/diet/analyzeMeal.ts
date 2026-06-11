@@ -28,9 +28,13 @@ async function analyzeMealText({ text, grams }: AnalyzeInput): Promise<AnalyzedM
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
+  return toAnalyzed(data ?? null, text);
+}
+
+function toAnalyzed(data: AnalyzeResponse | null, fallbackName: string): AnalyzedMeal {
   if (!data || typeof data.kcal !== 'number') throw new Error('분석 결과를 받지 못했어요');
   return {
-    name: data.name ?? text,
+    name: data.name ?? fallbackName,
     kcal: data.kcal,
     carb: data.carb ?? 0,
     protein: data.protein ?? 0,
@@ -41,4 +45,24 @@ async function analyzeMealText({ text, grams }: AnalyzeInput): Promise<AnalyzedM
 /** 자연어 식단 설명(+선택 총 섭취량) → Claude 영양 추정. 텍스트 탭에서 사용. */
 export function useAnalyzeMeal() {
   return useMutation({ mutationFn: analyzeMealText });
+}
+
+// 사진(base64) → Claude 비전 영양 추정
+export interface AnalyzeImageInput {
+  base64: string;
+  mediaType: string;
+}
+
+async function analyzeMealImage({ base64, mediaType }: AnalyzeImageInput): Promise<AnalyzedMeal> {
+  const { data, error } = await supabase.functions.invoke<AnalyzeResponse>('food-search', {
+    body: { action: 'analyze-image', image: base64, mediaType },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return toAnalyzed(data ?? null, '사진 분석');
+}
+
+/** 음식 사진 → Claude 비전 영양 추정. 사진 탭에서 사용. */
+export function useAnalyzeImage() {
+  return useMutation({ mutationFn: analyzeMealImage });
 }

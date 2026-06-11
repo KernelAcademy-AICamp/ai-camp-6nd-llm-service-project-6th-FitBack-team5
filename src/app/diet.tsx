@@ -16,8 +16,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { useProfile } from '@/features/auth/useProfile';
-import { useAnalyzeMeal } from '@/features/diet/analyzeMeal';
+import { useAnalyzeImage, useAnalyzeMeal } from '@/features/diet/analyzeMeal';
 import { useFoodSearch, type FoodSearchResult } from '@/features/diet/foodSearch';
+import { pickFoodImage } from '@/features/diet/pickFoodImage';
 import {
   MOCK_CONTEXT,
   calorieTargetFromProfile,
@@ -28,7 +29,6 @@ import {
   MEAL_TYPES,
   useAddMeal,
   useMeals,
-  type InputMethod,
   type Meal,
   type MealType,
 } from '@/features/diet/useMeals';
@@ -125,13 +125,6 @@ const MACRO_META = [
   { key: 'carb', label: '탄수화물' },
   { key: 'fat', label: '지방' },
 ] as const;
-
-const FAKE_RESULTS: Omit<Meal, 'id' | 'mealType' | 'time' | 'inputMethod'>[] = [
-  { name: '현미밥 + 고등어구이', kcal: 620, carb: 78, protein: 32, fat: 18 },
-  { name: '된장찌개 + 공깃밥', kcal: 480, carb: 72, protein: 16, fat: 10 },
-  { name: '불고기 정식', kcal: 720, carb: 60, protein: 38, fat: 28 },
-  { name: '연어 포케볼', kcal: 540, carb: 55, protein: 34, fat: 16 },
-];
 
 function currentMealType(): MealType {
   return '저녁'; // 가데이터: 시간대 기본 끼니 (라이브 시각 미사용)
@@ -384,6 +377,7 @@ function RecordModal({
   const [draft, setDraft] = useState<Omit<Meal, 'id' | 'time'> | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const analyzeMeal = useAnalyzeMeal();
+  const analyzeImage = useAnalyzeImage();
 
   function close() {
     setTab('image');
@@ -394,24 +388,6 @@ function RecordModal({
     setDraft(null);
     setAnalyzeError(null);
     onClose();
-  }
-
-  // 사진 탭: 아직 mock (FAKE_RESULTS에서 추정값 흉내)
-  function analyze(method: InputMethod, nameHint?: string) {
-    setStep('analyzing');
-    const picked = FAKE_RESULTS[nameHint ? nameHint.length % FAKE_RESULTS.length : 0];
-    setTimeout(() => {
-      setDraft({
-        mealType: currentMealType(),
-        name: nameHint?.trim() || picked.name,
-        kcal: picked.kcal,
-        carb: picked.carb,
-        protein: picked.protein,
-        fat: picked.fat,
-        inputMethod: method,
-      });
-      setStep('review');
-    }, 1200);
   }
 
   // 텍스트 탭: Claude(analyze-meal Edge Function)로 실제 영양 추정
@@ -436,6 +412,36 @@ function RecordModal({
     } catch {
       setStep('input');
       setAnalyzeError('분석에 실패했어요. 음식을 더 구체적으로 적고 다시 시도해 주세요.');
+    }
+  }
+
+  // 사진 탭: 앨범/카메라로 사진 → Claude 비전 영양 추정
+  async function analyzeFromImage(source: 'camera' | 'library') {
+    setAnalyzeError(null);
+    let picked;
+    try {
+      picked = await pickFoodImage(source);
+    } catch (e) {
+      setAnalyzeError(e instanceof Error ? e.message : '사진을 불러오지 못했어요.');
+      return;
+    }
+    if (!picked) return; // 사용자가 취소
+    setStep('analyzing');
+    try {
+      const r = await analyzeImage.mutateAsync(picked);
+      setDraft({
+        mealType: currentMealType(),
+        name: r.name,
+        kcal: r.kcal,
+        carb: r.carb,
+        protein: r.protein,
+        fat: r.fat,
+        inputMethod: 'image',
+      });
+      setStep('review');
+    } catch {
+      setStep('input');
+      setAnalyzeError('사진 분석에 실패했어요. 음식이 잘 보이는 사진으로 다시 시도해 주세요.');
     }
   }
 
@@ -556,7 +562,7 @@ function RecordModal({
             {/* 탭 내용 */}
             {tab === 'image' && (
               <View style={styles.photoArea}>
-                <Pressable onPress={() => analyze('image')} style={styles.photoBtn}>
+                <Pressable onPress={() => analyzeFromImage('camera')} style={styles.photoBtn}>
                   <MaterialIcons name="photo-camera" size={40} color={D.primary} />
                 </Pressable>
                 <Txt variant="body" weight="600">
@@ -565,6 +571,25 @@ function RecordModal({
                 <Txt variant="caption" color={D.gray500} style={styles.center}>
                   음식을 촬영하면 AI가 칼로리·탄단지를 분석해요.
                 </Txt>
+                <View style={styles.photoBtnRow}>
+                  <Pressable onPress={() => analyzeFromImage('camera')} style={styles.photoAction}>
+                    <MaterialIcons name="photo-camera" size={20} color={D.primary} />
+                    <Txt variant="caption" weight="600" color={D.primary}>
+                      촬영
+                    </Txt>
+                  </Pressable>
+                  <Pressable onPress={() => analyzeFromImage('library')} style={styles.photoAction}>
+                    <MaterialIcons name="photo-library" size={20} color={D.primary} />
+                    <Txt variant="caption" weight="600" color={D.primary}>
+                      앨범에서 선택
+                    </Txt>
+                  </Pressable>
+                </View>
+                {analyzeError && (
+                  <Txt variant="caption" color={D.error} style={styles.center}>
+                    {analyzeError}
+                  </Txt>
+                )}
               </View>
             )}
 
@@ -1096,7 +1121,7 @@ export default function DietScreen() {
               </View>
             ) : !hasLog ? (
               <View style={styles.listState}>
-                <MaterialIcons name="pause-circle-outline" size={36} color={D.gray300} />
+                <MaterialIcons name="restaurant" size={36} color={D.gray300} />
                 <Txt variant="body" weight="600" style={styles.center}>
                   오늘 가이드대로 첫 끼를 기록해보세요
                 </Txt>
@@ -1322,6 +1347,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: S.sm,
+  },
+  photoBtnRow: { flexDirection: 'row', gap: S.sm, marginTop: S.md },
+  photoAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: S.sm,
+    paddingHorizontal: S.lg,
+    borderRadius: R.button,
+    borderWidth: 1,
+    borderColor: D.primary,
+    backgroundColor: D.primaryLight,
   },
   tabForm: { flex: 1, paddingHorizontal: SIDE, paddingTop: S.lg, gap: S.md },
   textArea: {

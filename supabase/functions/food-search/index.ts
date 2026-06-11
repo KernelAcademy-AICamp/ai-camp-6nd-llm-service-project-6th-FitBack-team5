@@ -1,7 +1,8 @@
 // Edge Function: food-search (식단 기능용 통합 함수)
 // Supabase에 'food-search' 이름으로 배포됨. 검색+분석을 body.action 으로 분기한다.
-//   action='search'  : { query }      → 식품영양성분DB 검색 결과 리스트(100g 기준)
-//   action='analyze' : { text, grams? } → 자연어 식단 → Claude 추출 + DB 정확일치 보정 → 합산
+//   action='search'        : { query }            → 식품영양성분DB 검색 결과 리스트(100g 기준)
+//   action='analyze'       : { text, grams? }      → 자연어 식단 → Claude 추출 + DB 정확일치 보정 → 합산
+//   action='analyze-image' : { image(base64), mediaType } → 음식 사진 → Claude 비전 → 동일 파이프라인
 //
 // 데이터: 공공데이터포털 식품의약품안전처_식품영양성분DB정보(15127578)
 //   엔드포인트 apis.data.go.kr/1471000/FoodNtrCpntDbInfo02/getFoodNtrCpntDbInq02
@@ -114,7 +115,7 @@ const EXTRACT_TOOL = {
   },
 } as const;
 const SYSTEM =
-  'You are FitBack, a Korean nutrition parser. 사용자의 식단 설명을 음식 단위로 분해하라. ' +
+  'You are FitBack, a Korean nutrition parser. 사용자가 준 식단(텍스트 또는 음식 사진)을 음식 단위로 분해하라. ' +
   '각 음식의 섭취량을 g으로 추정하고(한공기≈210g, 1조각/1개 등 상식적으로), ' +
   '그 섭취량 기준 영양값도 정확히 추정하라. name은 간결한 핵심 식품명으로. 반드시 extract_items 도구를 호출하라.';
 
@@ -130,39 +131,31 @@ async function lookupPer100g(key: string, name: string) {
   }
 }
 
-async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, text: string, grams?: number) {
-  if (!text) return json({ error: 'text 가 필요합니다' }, 400);
-
-  // 사용자가 총 섭취량(g)을 직접 입력했으면 강한 힌트로 전달 → 분량 추정 오차 제거
-  const userMsg = grams && grams > 0
-    ? `먹은 음식: ${text}\n사용자가 알려준 총 섭취량은 ${grams}g 이다. items의 grams 합이 이 값이 되도록 분배하고, 영양값도 그에 맞춰라.`
-    : `먹은 음식: ${text}`;
-
-  let claudeRes: Response;
-  try {
-    claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
-        system: SYSTEM,
-        tools: [EXTRACT_TOOL],
-        tool_choice: { type: 'tool', name: 'extract_items' },
-        messages: [{ role: 'user', content: userMsg }],
-      }),
-    });
-  } catch (e) {
-    return json({ error: 'Claude fetch failed', detail: String(e) }, 502);
-  }
-  if (!claudeRes.ok) return json({ error: 'Claude API error', status: claudeRes.status, detail: await claudeRes.text() }, 502);
-
-  const claude = await claudeRes.json();
+// Claude 호출(텍스트/이미지 공통) → extract_items 결과 배열. 실패 시 throw.
+async function claudeExtract(anthropicKey: string, content: unknown): Promise<Record<string, unknown>[]> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      system: SYSTEM,
+      tools: [EXTRACT_TOOL],
+      tool_choice: { type: 'tool', name: 'extract_items' },
+      messages: [{ role: 'user', content }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const claude = await res.json();
   const block = Array.isArray(claude?.content) ? claude.content.find((c: { type?: string }) => c?.type === 'tool_use') : null;
-  const rawItems = block?.input?.items;
-  if (!Array.isArray(rawItems) || rawItems.length === 0) return json({ error: '음식을 분해하지 못했어요', detail: claude }, 502);
+  const items = block?.input?.items;
+  if (!Array.isArray(items) || items.length === 0) throw new Error('NO_ITEMS');
+  return items;
+}
 
-  const items = rawItems.map((r: Record<string, unknown>) => ({
+// extract_items 결과 → DB 정확일치 보정 → 합산한 응답 페이로드
+async function buildAnalysis(foodKey: string | undefined, rawItems: Record<string, unknown>[], fallbackName: string) {
+  const items = rawItems.map((r) => ({
     name: str(r.name),
     grams: Math.max(0, num(r.grams)),
     kcal: Math.max(0, num(r.kcal)),
@@ -170,7 +163,6 @@ async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, 
     protein: Math.max(0, num(r.protein)),
     fat: Math.max(0, num(r.fat)),
   }));
-
   const resolved = await Promise.all(
     items.map(async (it) => {
       const per100 = foodKey && it.name ? await lookupPer100g(foodKey, it.name) : null;
@@ -181,16 +173,44 @@ async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, 
       return { name: it.name, grams: it.grams, source: 'estimate' as const, kcal: it.kcal, carb: it.carb, protein: it.protein, fat: it.fat };
     }),
   );
-
   const sum = resolved.reduce((a, r) => ({ kcal: a.kcal + r.kcal, carb: a.carb + r.carb, protein: a.protein + r.protein, fat: a.fat + r.fat }), { kcal: 0, carb: 0, protein: 0, fat: 0 });
-  return json({
-    name: resolved.map((r) => r.name).filter(Boolean).join(' + ') || text,
+  return {
+    name: resolved.map((r) => r.name).filter(Boolean).join(' + ') || fallbackName,
     kcal: Math.round(sum.kcal),
     carb: Math.round(sum.carb),
     protein: Math.round(sum.protein),
     fat: Math.round(sum.fat),
     items: resolved.map((r) => ({ name: r.name, grams: Math.round(r.grams), source: r.source })),
-  });
+  };
+}
+
+async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, text: string, grams?: number) {
+  if (!text) return json({ error: 'text 가 필요합니다' }, 400);
+  const userMsg = grams && grams > 0
+    ? `먹은 음식: ${text}\n사용자가 알려준 총 섭취량은 ${grams}g 이다. items의 grams 합이 이 값이 되도록 분배하고, 영양값도 그에 맞춰라.`
+    : `먹은 음식: ${text}`;
+  try {
+    const raw = await claudeExtract(anthropicKey, userMsg);
+    return json(await buildAnalysis(foodKey, raw, text));
+  } catch (e) {
+    const msg = String(e instanceof Error ? e.message : e);
+    return json({ error: msg === 'NO_ITEMS' ? '음식을 분해하지 못했어요' : '분석 실패', detail: msg }, 502);
+  }
+}
+
+async function handleAnalyzeImage(anthropicKey: string, foodKey: string | undefined, image: string, mediaType?: string) {
+  if (!image) return json({ error: 'image 가 필요합니다' }, 400);
+  const content = [
+    { type: 'image', source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: image } },
+    { type: 'text', text: '이 사진에 보이는 음식을 분석해 extract_items로 채워라. 사진에 음식이 없으면 빈 목록.' },
+  ];
+  try {
+    const raw = await claudeExtract(anthropicKey, content);
+    return json(await buildAnalysis(foodKey, raw, '사진 분석'));
+  } catch (e) {
+    const msg = String(e instanceof Error ? e.message : e);
+    return json({ error: msg === 'NO_ITEMS' ? '사진에서 음식을 인식하지 못했어요' : '분석 실패', detail: msg }, 502);
+  }
 }
 
 // ── 라우터 ──────────────────────────────────────────────
@@ -201,7 +221,7 @@ Deno.serve(async (req) => {
   const FOOD_SAFETY_API_KEY = Deno.env.get('FOOD_SAFETY_API_KEY');
   const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 
-  let payload: { action?: string; query?: string; text?: string; grams?: number };
+  let payload: { action?: string; query?: string; text?: string; grams?: number; image?: string; mediaType?: string };
   try {
     payload = await req.json();
   } catch {
@@ -216,5 +236,9 @@ Deno.serve(async (req) => {
     if (!ANTHROPIC_API_KEY) return json({ error: 'Missing ANTHROPIC_API_KEY secret' }, 500);
     return handleAnalyze(ANTHROPIC_API_KEY, FOOD_SAFETY_API_KEY, (payload.text ?? '').trim(), payload.grams);
   }
-  return json({ error: "body.action 은 'search' 또는 'analyze' 여야 합니다" }, 400);
+  if (payload.action === 'analyze-image') {
+    if (!ANTHROPIC_API_KEY) return json({ error: 'Missing ANTHROPIC_API_KEY secret' }, 500);
+    return handleAnalyzeImage(ANTHROPIC_API_KEY, FOOD_SAFETY_API_KEY, payload.image ?? '', payload.mediaType);
+  }
+  return json({ error: "body.action 은 'search' | 'analyze' | 'analyze-image' 여야 합니다" }, 400);
 });
