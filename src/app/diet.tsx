@@ -39,7 +39,7 @@ import {
  * 식단 탭 — design.md 디자인 시스템 적용. UI 가안 구현본.
  *
  * 핵심 가치: "추천 대비 회복 목표 달성률"이 1순위 정보 (얼마나 먹었나가 아님).
- * 구성: ① 운동 맞춤 식단 가이드(회복 달성률 + 목표 매크로 + 운동 대비 섭취 상태)
+ * 구성: ① 운동 맞춤 식단 가이드(운동 대비 섭취 상태 게이지 + 목표 매크로)
  *      ② 코칭(다음 행동 + 추천 식품)  ③ 섭취 칼로리  ④ 오늘 기록
  *
  * 목표 매크로/칼로리는 회원 신체정보(profiles) 기반 — 화면 내 단일 소스(guide.target).
@@ -122,6 +122,11 @@ function Card({ children, style }: { children: React.ReactNode; style?: object }
 const BURNED_KCAL = 420; // 운동 소모 칼로리 (운동 데이터 연계, 가데이터)
 const WORKOUT_MIN = 45; // 운동 시간(분) — 가데이터
 
+// 운동 밸런스 점수 — 식단 기여 / 유효방문·회당 비용 (membership 연동 전 가데이터)
+const BALANCE_MAX_SCORE = 8; // 오늘 식단으로 받을 수 있는 최대 기여 점수
+const COST_PER_VISIT = 9166; // 현재 회당 비용(원)
+const COST_PER_VISIT_VALID = 8400; // 유효방문 인정 시 회당 비용(원)
+
 // 탄단지 표시 정의 (순서: 단 → 탄 → 지). 목표 값은 가이드(guide.target)에서 가져온다.
 const MACRO_META = [
   { key: 'protein', label: '단백질' },
@@ -181,47 +186,46 @@ function MacroProgress({ label, value, goal }: { label: string; value: number; g
   );
 }
 
-// 부족 ← 적정 → 과다 밸런스 미터. 식단 기록 전(showMarker=false)에는 마커를 숨긴다.
-function BalanceMeter({ ratio, showMarker }: { ratio: number; showMarker: boolean }) {
-  const pos = Math.min(Math.max(ratio / 1.5, 0), 1) * 100;
-  return (
-    <View style={styles.meterWrap}>
-      <View style={styles.meterTrack}>
-        {showMarker && <View style={[styles.meterFill, { width: `${pos}%` }]} />}
-      </View>
-      <View style={styles.meterLabels}>
-        <Txt variant="label" color="#999999">부족</Txt>
-        <Txt variant="label" color="#999999">적정</Txt>
-        <Txt variant="label" color="#999999">과다</Txt>
-      </View>
-    </View>
-  );
-}
-
-// 반원형 게이지 — SVG 반원 아크. 0~100% → 좌→우 채움.
-function SemiGauge({ pct }: { pct: number }) {
-  const W = 104;
-  const SW = 9; // 아크 두께
+// 반원형 게이지 — 운동 대비 섭취 상태(부족/적정/과다)를 색·채움·라벨로 표현.
+// netRatio(순섭취/목표)를 0~1.5 → 0~100%로 매핑(적정 ≈ 2/3 지점). 기록 전(active=false)엔 회색·'등록 전'.
+function SemiGauge({
+  ratio,
+  status,
+  active,
+}: {
+  ratio: number;
+  status: { label: string; color: string };
+  active: boolean;
+}) {
+  const W = 116;
+  const SW = 10; // 아크 두께
   const r = (W - SW) / 2;
   const cx = W / 2;
   const cy = r + SW / 2;
   const H = cy + SW / 2;
-  const p = Math.min(Math.max(pct, 0), 100) / 100;
+  const p = active ? Math.min(Math.max(ratio / 1.5, 0), 1) : 0; // 좌→우 채움 비율
   const theta = Math.PI * (1 - p); // 좌(π) → 우(0)
   const ex = cx + r * Math.cos(theta);
   const ey = cy - r * Math.sin(theta);
   const track = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
   const prog = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+  const color = active ? status.color : D.gray300;
+  const score = Math.max(0, Math.round(ratio * 100)); // 마이너스 없이 현재 점수
   return (
     <View style={[styles.gaugeWrap, { width: W, height: H }]}>
       <Svg width={W} height={H}>
         <Path d={track} stroke={D.gray100} strokeWidth={SW} fill="none" strokeLinecap="round" />
         {p > 0 && (
-          <Path d={prog} stroke={D.primary} strokeWidth={SW} fill="none" strokeLinecap="round" />
+          <Path d={prog} stroke={color} strokeWidth={SW} fill="none" strokeLinecap="round" />
         )}
       </Svg>
       <View style={styles.gaugeLabel}>
-        <Txt variant="h1">{Math.round(pct)}%</Txt>
+        <Txt variant="h2" weight="700" color={active ? D.gray900 : D.gray500}>
+          {active ? `${score}%` : '등록 전'}
+        </Txt>
+        <Txt variant="label" weight="600" color={active ? status.color : D.gray500}>
+          {active ? status.label : '운동 대비'}
+        </Txt>
       </View>
     </View>
   );
@@ -917,11 +921,6 @@ export default function DietScreen() {
   const hasLog = meals.length > 0;
   const target = guide.target;
 
-  // 회복 목표 달성률 — 단·탄·지 달성률 평균(%)
-  const recoveryPct = Math.round(
-    ((totals.protein / target.protein + totals.carb / target.carb + totals.fat / target.fat) / 3) * 100,
-  );
-
   // 매크로 비중에 따른 한 줄 코멘트 (목표 대비 가장 높은 매크로 기준)
   const macroHint = ((): string => {
     if (!hasLog) return '오늘 식단을 기록해주세요.';
@@ -939,6 +938,11 @@ export default function DietScreen() {
   const net = totals.kcal - BURNED_KCAL;
   const netRatio = net / calorieGoal;
   const energyStatus = balanceStatus(netRatio);
+
+  // 운동 밸런스 점수 — 기록한 끼니 수에 비례(끼니당 2점, 최대 8). 저녁 기록 시 유효방문 인정(가데이터)
+  const loggedTypes = new Set(meals.map((m) => m.mealType));
+  const dietScore = Math.min(BALANCE_MAX_SCORE, loggedTypes.size * 2);
+  const dinnerLogged = loggedTypes.has('저녁');
 
   // 부족 영양소 (목표 - 섭취) — 결손 큰 상위 2개를 함께 고려해 균형 추천
   const deficits = [
@@ -1003,16 +1007,16 @@ export default function DietScreen() {
               </Txt>
             </View>
           </View>
-          {/* ① 운동 맞춤 식단 가이드 — 회복 달성률 + 목표 매크로 + 운동 대비 섭취 상태 */}
+          {/* ① 운동 맞춤 식단 가이드 — 운동 대비 섭취 상태 게이지 + 목표 매크로 */}
           <Card style={styles.guideCard}>
             <View style={styles.guideHeadRow}>
-              <View style={styles.flex1}>
-                <Txt variant="h1">운동 기반 식단</Txt>
+              <View style={styles.guideTitleCol}>
+                <Txt variant="h1">운동 대비 섭취 상태</Txt>
                 <Txt variant="caption" color={D.gray500}>
                   {macroHint}
                 </Txt>
               </View>
-              <SemiGauge pct={recoveryPct} />
+              <SemiGauge ratio={netRatio} status={energyStatus} active={hasLog} />
             </View>
 
             {/* 목표 매크로 (단 → 탄 → 지) */}
@@ -1020,34 +1024,6 @@ export default function DietScreen() {
               {MACRO_META.map((m) => (
                 <MacroProgress key={m.key} label={m.label} value={totals[m.key]} goal={target[m.key]} />
               ))}
-            </View>
-
-            <View style={styles.sectionDivider} />
-
-            {/* 운동 대비 섭취 상태 */}
-            <View style={styles.statusGroup}>
-            <View style={styles.statusHead}>
-              <Txt variant="caption" color={D.gray700}>
-                운동 대비 섭취 상태
-              </Txt>
-              {hasLog ? (
-                <View style={[styles.statusPill, { backgroundColor: `${energyStatus.color}1A` }]}>
-                  <Txt variant="label" weight="700" color={energyStatus.color}>
-                    {energyStatus.label}
-                  </Txt>
-                </View>
-              ) : (
-                <View style={[styles.statusPill, { backgroundColor: D.gray100 }]}>
-                  <Txt variant="label" weight="700" color={D.gray500}>
-                    등록 전
-                  </Txt>
-                </View>
-              )}
-            </View>
-            <BalanceMeter ratio={netRatio} showMarker={hasLog} />
-            <Txt variant="caption" color={D.gray500}>
-              {hasLog ? energyStatus.desc : '식단을 기록하면 운동 대비 섭취 상태를 알려드려요.'}
-            </Txt>
             </View>
           </Card>
 
@@ -1136,6 +1112,45 @@ export default function DietScreen() {
                 </Txt>
               </>
             )}
+          </Card>
+
+          {/* ②-b 운동 밸런스 점수 — 식단 기여 + 유효방문/회당 비용 (membership 연동 전 가데이터) */}
+          <Card style={styles.balanceCard}>
+            <View style={styles.balanceHead}>
+              <Txt variant="body" weight="700">
+                운동 밸런스 점수
+              </Txt>
+              <View style={styles.balanceContrib}>
+                <Txt variant="caption" color={D.gray500}>
+                  오늘 식단 기여{' '}
+                </Txt>
+                <Txt variant="caption" weight="700" color={D.primary}>
+                  +{dietScore}
+                </Txt>
+                <Txt variant="caption" color={D.gray500}>
+                  {' '}
+                  / +{BALANCE_MAX_SCORE}점
+                </Txt>
+              </View>
+            </View>
+            <ProgressBar ratio={dietScore / BALANCE_MAX_SCORE} />
+            <Txt variant="caption" color={D.gray700}>
+              {dinnerLogged
+                ? '오늘 방문이 유효방문으로 인정됐어요.'
+                : '저녁 기록까지 마치면 오늘 방문이 유효방문으로 인정돼요.'}
+            </Txt>
+            <View style={styles.costRow}>
+              <Txt variant="label" color={D.gray500}>
+                회당 비용
+              </Txt>
+              <Txt variant="label" color={D.gray500} style={styles.costOld}>
+                ₩{COST_PER_VISIT.toLocaleString()}
+              </Txt>
+              <MaterialIcons name="arrow-forward" size={12} color={D.gray300} />
+              <Txt variant="label" weight="700" color={D.success}>
+                ₩{COST_PER_VISIT_VALID.toLocaleString()}
+              </Txt>
+            </View>
           </Card>
 
           {/* ③ 오늘 섭취 칼로리 — 타이틀을 카드 밖으로 (오늘 기록과 동일 패턴) */}
@@ -1290,13 +1305,14 @@ const styles = StyleSheet.create({
   // 가이드 헤더
   aiHead: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
   guideCard: { padding: S.lg, gap: S.md },
-  // 운동 대비 섭취 상태 카드 ↔ 이 카드 사이 여백 8px (스크롤 gap 16 - 8)
+  // 가이드 카드 ↔ 이 카드 사이 여백 8px (스크롤 gap 16 - 8)
   aiRecCard: { marginTop: -S.sm },
   guideHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
+  guideTitleCol: { flex: 1, gap: S.xs },
 
   // 반원형 게이지
   gaugeWrap: { position: 'relative', alignItems: 'center', justifyContent: 'flex-end' },
-  gaugeLabel: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' },
+  gaugeLabel: { position: 'absolute', bottom: 2, left: 0, right: 0, alignItems: 'center' },
 
   // 목표 매크로
   macroRow: { flexDirection: 'row', gap: S.md, marginTop: S.md },
@@ -1310,16 +1326,12 @@ const styles = StyleSheet.create({
 
   sectionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line, marginVertical: S.sm },
 
-  // 운동 대비 섭취 상태
-  statusGroup: { gap: S.sm },
-  statusHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  statusPill: { paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.full },
-
-  // 밸런스 미터
-  meterWrap: { gap: S.sm, marginTop: 0 },
-  meterTrack: { height: 10, borderRadius: R.full, backgroundColor: D.gray100, overflow: 'hidden' },
-  meterFill: { height: '100%', borderRadius: R.full, backgroundColor: D.gray300 },
-  meterLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  // 운동 밸런스 점수 (식단 기여 + 유효방문/회당 비용)
+  balanceCard: { gap: S.sm },
+  balanceHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
+  balanceContrib: { flexDirection: 'row', alignItems: 'baseline' },
+  costRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+  costOld: { textDecorationLine: 'line-through' },
 
   // 코칭 — 부족 영양소 + 추천 식품 칩
   deficitList: { flexDirection: 'row', flexWrap: 'wrap', gap: S.md },
