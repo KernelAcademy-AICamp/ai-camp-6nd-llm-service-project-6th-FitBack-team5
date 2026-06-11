@@ -123,9 +123,6 @@ function Card({ children, style }: { children: React.ReactNode; style?: object }
 const BURNED_KCAL = 420; // 운동 소모 칼로리 (운동 데이터 연계, 가데이터)
 const WORKOUT_MIN = 45; // 운동 시간(분) — 가데이터
 
-// 운동 밸런스 점수 — 식단 기여 / 유효방문 (membership 연동 전 가데이터)
-const BALANCE_MAX_SCORE = 8; // 오늘 식단으로 받을 수 있는 최대 기여 점수
-
 // 탄단지 표시 정의 (순서: 단 → 탄 → 지). 목표 값은 가이드(guide.target)에서 가져온다.
 const MACRO_META = [
   { key: 'protein', label: '단백질' },
@@ -963,10 +960,6 @@ export default function DietScreen() {
     return '지방이 조금 높아요.';
   })();
 
-  // 운동 밸런스 점수 — 기록한 끼니 수에 비례(끼니당 2점, 최대 8). 가데이터
-  const loggedTypes = new Set(meals.map((m) => m.mealType));
-  const dietScore = Math.min(BALANCE_MAX_SCORE, loggedTypes.size * 2);
-
   // 부족 영양소 (목표 - 섭취) — 결손 큰 상위 2개를 함께 고려해 균형 추천
   const deficits = [
     { key: 'protein' as const, label: '단백질', g: Math.max(0, target.protein - totals.protein) },
@@ -1048,28 +1041,6 @@ export default function DietScreen() {
                 <MacroProgress key={m.key} label={m.label} value={totals[m.key]} goal={target[m.key]} />
               ))}
             </View>
-
-            <View style={[styles.sectionDivider, styles.guideDivider]} />
-
-            {/* 운동 밸런스 점수 — 식단 기여 + 유효방문 (membership 연동 전 가데이터) */}
-            <View style={styles.balanceHead}>
-              <Txt variant="caption" weight="600" color={D.gray700}>
-                운동 밸런스 점수
-              </Txt>
-              <View style={styles.balanceContrib}>
-                <Txt variant="caption" color={D.gray500}>
-                  오늘 식단 기여{' '}
-                </Txt>
-                <Txt variant="caption" weight="700" color={D.primary}>
-                  +{dietScore}
-                </Txt>
-                <Txt variant="caption" color={D.gray500}>
-                  {' '}
-                  / +{BALANCE_MAX_SCORE}점
-                </Txt>
-              </View>
-            </View>
-            <ProgressBar ratio={dietScore / BALANCE_MAX_SCORE} color={D.gray300} />
           </Card>
 
           {/* ② 기록 전: 오늘의 식단 가이드 / 기록 후: 부족 영양소 기반 AI 식단 추천 */}
@@ -1344,12 +1315,6 @@ const styles = StyleSheet.create({
   fill: { height: '100%', borderRadius: R.full },
 
   sectionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line, marginVertical: S.sm },
-  // 매크로 ↔ 운동 밸런스 점수 사이 구분선만 위아래 간격 축소 (카드 기본 gap 상쇄)
-  guideDivider: { marginVertical: 0 },
-
-  // 운동 밸런스 점수 (식단 기여 + 유효방문)
-  balanceHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
-  balanceContrib: { flexDirection: 'row', alignItems: 'baseline' },
 
   // 코칭 — 부족 영양소 + 추천 식품 칩
   deficitList: { flexDirection: 'row', flexWrap: 'wrap', gap: S.md },
