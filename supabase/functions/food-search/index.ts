@@ -101,7 +101,7 @@ const EXTRACT_TOOL = {
           type: 'object',
           properties: {
             name: { type: 'string', description: '핵심 식품명(간결하게, 예: "닭가슴살", "현미밥")' },
-            grams: { type: 'number', description: '추정 섭취량(g). 분량 표현 반영, 없으면 1인분' },
+            grams: { type: 'number', description: '추정 섭취량(g). 분량 표현 있으면 반영. 없으면: 낱개로 세는 음식(방울토마토·사과·계란·바나나 등)은 1개 분량, 무게로 먹는 음식(밥·고기·채소·면 등)은 100g 기준.' },
             kcal: { type: 'number', description: '이 섭취량 기준 열량(kcal) 추정' },
             carb: { type: 'number', description: '이 섭취량 기준 탄수화물(g) 추정' },
             protein: { type: 'number', description: '이 섭취량 기준 단백질(g) 추정' },
@@ -116,7 +116,9 @@ const EXTRACT_TOOL = {
 } as const;
 const SYSTEM =
   'You are FitBack, a Korean nutrition parser. 사용자가 준 식단(텍스트 또는 음식 사진)을 음식 단위로 분해하라. ' +
-  '각 음식의 섭취량을 g으로 추정하고(한공기≈210g, 1조각/1개 등 상식적으로), ' +
+  '각 음식의 섭취량을 g으로 추정한다. 분량 표현(2조각, 한공기, 250g 등)이 있으면 그대로 반영하고(한공기≈210g), ' +
+  '분량 표현이 없으면 기본값을 적용: 낱개로 세는 음식(방울토마토·사과·계란·바나나·만두 등)은 "1개" 분량으로, ' +
+  '무게로 먹는 음식(밥·고기·채소·면·국 등)은 "100g" 기준으로 추정하라. ' +
   '그 섭취량 기준 영양값도 정확히 추정하라. name은 간결한 핵심 식품명으로. 반드시 extract_items 도구를 호출하라.';
 
 // 식품DB에서 100g당 영양 조회 — 정확일치일 때만 채택(부분일치는 가공식품 오매칭).
@@ -273,6 +275,50 @@ async function handleRecommend(anthropicKey: string, deficits: { label?: string;
   return json({ foods });
 }
 
+// ── action: feedback ────────────────────────────────────
+// 방금 기록한 음식 + 운동 맥락 → 트레이너 톤의 짧은 피드백(2~3문장).
+const FEEDBACK_SYSTEM =
+  'You are FitBack, an experienced Korean personal trainer (퍼스널 트레이너) who actively manages this member. ' +
+  '회원이 방금 기록한 한 끼의 영양값과 오늘 운동을 보고, 실제 PT가 회원을 관리하듯 구체적이고 솔직하게 코칭하라.\n' +
+  '규칙:\n' +
+  '1) 잘한 점은 인정하되, 부족하거나 과한 점은 솔직히 짚어라. 무조건 칭찬만 하지 마라.\n' +
+  '2) 단백질·탄수·지방 수치를 직접 근거로 들어 말하라. 예: "단백질 25g은 회복엔 살짝 부족해요". (한 끼 단백질 30g 안팎을 회복 기준으로 본다)\n' +
+  '3) 다음 끼니에 무엇을 더하거나 줄일지 실제 음식(닭가슴살·계란·고구마·현미밥 등)으로 구체적으로 제안하라.\n' +
+  '4) 오늘 운동 맥락이 있으면 반드시 회복 관점과 연결하라.\n' +
+  '5) 친근한 존댓말("~예요/~해요/~보세요"), 3~5문장. 이모지·마크다운 없이 순수 문장만.\n' +
+  '6) 죄책감·공포 유발 대신 동기부여로 마무리하라.\n' +
+  '출력 형식: 첫 줄에 16자 이내의 한 줄 요약을 쓰고, 줄바꿈(\\n) 후 상세 코칭 3~5문장을 이어 써라.';
+
+async function handleFeedback(
+  anthropicKey: string,
+  meal: { name?: string; kcal?: number; carb?: number; protein?: number; fat?: number; mealType?: string },
+  context?: string,
+) {
+  const name = str(meal?.name);
+  if (!name) return json({ feedback: '' });
+  const userMsg =
+    `회원이 기록한 끼니: ${str(meal.mealType) || '식사'}\n` +
+    `음식: ${name}\n` +
+    `영양: ${Math.round(num(meal.kcal))}kcal · 탄 ${Math.round(num(meal.carb))}g · 단 ${Math.round(num(meal.protein))}g · 지 ${Math.round(num(meal.fat))}g\n` +
+    `${context ? `오늘 운동: ${context}\n` : ''}` +
+    `이 끼니에 대해 트레이너로서 짧게 피드백해줘.`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      system: FEEDBACK_SYSTEM,
+      messages: [{ role: 'user', content: userMsg }],
+    }),
+  });
+  if (!res.ok) return json({ error: 'Claude API error', status: res.status, detail: await res.text() }, 502);
+  const claude = await res.json();
+  const feedback = str(claude?.content?.[0]?.text);
+  return json({ feedback });
+}
+
 // ── 라우터 ──────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -284,6 +330,7 @@ Deno.serve(async (req) => {
   let payload: {
     action?: string; query?: string; text?: string; grams?: number;
     image?: string; mediaType?: string; deficits?: { label?: string; g?: number }[]; context?: string;
+    meal?: { name?: string; kcal?: number; carb?: number; protein?: number; fat?: number; mealType?: string };
   };
   try {
     payload = await req.json();
@@ -307,5 +354,9 @@ Deno.serve(async (req) => {
     if (!ANTHROPIC_API_KEY) return json({ error: 'Missing ANTHROPIC_API_KEY secret' }, 500);
     return handleRecommend(ANTHROPIC_API_KEY, payload.deficits ?? [], payload.context);
   }
-  return json({ error: "body.action 은 'search' | 'analyze' | 'analyze-image' | 'recommend' 여야 합니다" }, 400);
+  if (payload.action === 'feedback') {
+    if (!ANTHROPIC_API_KEY) return json({ error: 'Missing ANTHROPIC_API_KEY secret' }, 500);
+    return handleFeedback(ANTHROPIC_API_KEY, payload.meal ?? {}, payload.context);
+  }
+  return json({ error: "body.action 은 'search' | 'analyze' | 'analyze-image' | 'recommend' | 'feedback' 여야 합니다" }, 400);
 });

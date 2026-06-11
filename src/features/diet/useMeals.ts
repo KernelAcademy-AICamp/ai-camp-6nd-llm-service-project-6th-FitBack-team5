@@ -128,3 +128,60 @@ export function useAddMeal(date: string = todayISO()) {
     },
   });
 }
+
+// 기록 수정 입력 (id로 특정 row 갱신)
+export interface MealEdit {
+  id: string;
+  mealType: MealType;
+  name: string;
+  kcal: number;
+  carb: number;
+  protein: number;
+  fat: number;
+}
+
+// 식단 기록 수정 — 값/끼니 갱신 후 해당 날짜 쿼리 무효화
+export function useUpdateMeal(date: string = todayISO()) {
+  const user = useCurrentUser();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (meal: MealEdit): Promise<Meal> => {
+      if (!user) throw new Error('로그인이 필요합니다.');
+      const { data, error } = await supabase
+        .from('meals')
+        .update({
+          meal_type: meal.mealType,
+          name: meal.name,
+          kcal: meal.kcal,
+          carb: meal.carb,
+          protein: meal.protein,
+          fat: meal.fat,
+        })
+        .eq('id', meal.id)
+        .eq('user_id', user.id)
+        .select('*')
+        .single();
+      if (error) throw error;
+      return fromRow(data as MealRow);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: mealsKey(user?.id, date) });
+    },
+  });
+}
+
+// 식단 기록 삭제 — 삭제 후 해당 날짜 쿼리 무효화
+export function useDeleteMeal(date: string = todayISO()) {
+  const user = useCurrentUser();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      if (!user) throw new Error('로그인이 필요합니다.');
+      const { error } = await supabase.from('meals').delete().eq('id', id).eq('user_id', user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: mealsKey(user?.id, date) });
+    },
+  });
+}
