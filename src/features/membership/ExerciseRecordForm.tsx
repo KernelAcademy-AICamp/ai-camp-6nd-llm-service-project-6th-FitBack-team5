@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Button } from '@/components/ui';
+import { Palette, Radius, Spacing } from '@/constants/theme';
 import { useCreateExerciseRecord } from '@/features/membership/useCreateExerciseRecord';
 
 const PARTS: { value: string; label: string }[] = [
@@ -35,6 +36,7 @@ export function ExerciseRecordForm({
   const [intensity, setIntensity] = useState<string | null>(null);
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
+  const [focused, setFocused] = useState<string | null>(null);
   const { mutate, isPending, error } = useCreateExerciseRecord();
 
   const canSubmit = part != null && !isPending;
@@ -55,87 +57,93 @@ export function ExerciseRecordForm({
 
   return (
     <View style={styles.wrap}>
-      <ThemedText type="subtitle">운동 기록</ThemedText>
+      <ThemedText type="h2">운동 기록</ThemedText>
 
       <View style={styles.field}>
-        <ThemedText type="small" style={styles.label}>
-          부위 *
-        </ThemedText>
+        <View style={styles.labelRow}>
+          <ThemedText type="label" themeColor="textSecondary">
+            부위
+          </ThemedText>
+          <ThemedText type="label" style={styles.required}> *</ThemedText>
+        </View>
         <View style={styles.grid}>
-          {PARTS.map((p) => (
-            <Pressable
-              key={p.value}
-              onPress={() => setPart(p.value)}
-              style={[styles.chip, part === p.value && styles.chipOn]}>
-              <ThemedText type={part === p.value ? 'smallBold' : 'small'}>{p.label}</ThemedText>
-            </Pressable>
-          ))}
+          {PARTS.map((p) => {
+            const on = part === p.value;
+            return (
+              <Pressable
+                key={p.value}
+                onPress={() => setPart(p.value)}
+                style={[styles.chip, on && styles.chipOn]}>
+                <ThemedText type={on ? 'captionBold' : 'caption'} style={on ? styles.activeText : undefined}>
+                  {p.label}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
       <View style={styles.field}>
-        <ThemedText type="small" style={styles.label}>
+        <ThemedText type="label" themeColor="textSecondary">
           강도
         </ThemedText>
         <View style={styles.row}>
-          {INTENSITIES.map((it) => (
-            <Pressable
-              key={it.value}
-              onPress={() => setIntensity((v) => (v === it.value ? null : it.value))}
-              style={[styles.seg, intensity === it.value && styles.chipOn]}>
-              <ThemedText type={intensity === it.value ? 'smallBold' : 'small'}>{it.label}</ThemedText>
-            </Pressable>
-          ))}
+          {INTENSITIES.map((it) => {
+            const on = intensity === it.value;
+            return (
+              <Pressable
+                key={it.value}
+                onPress={() => setIntensity((v) => (v === it.value ? null : it.value))}
+                style={[styles.seg, on && styles.chipOn]}>
+                <ThemedText type={on ? 'captionBold' : 'caption'} style={on ? styles.activeText : undefined}>
+                  {it.label}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
       <View style={styles.field}>
-        <ThemedText type="small" style={styles.label}>
+        <ThemedText type="label" themeColor="textSecondary">
           시간 (분)
         </ThemedText>
         <TextInput
           value={duration}
           onChangeText={(t) => setDuration(t.replace(/[^0-9]/g, ''))}
+          onFocus={() => setFocused('duration')}
+          onBlur={() => setFocused(null)}
           keyboardType="numeric"
           placeholder="예: 40"
-          placeholderTextColor="#9aa"
-          style={styles.input}
+          placeholderTextColor={Palette.gray300}
+          style={[styles.input, focused === 'duration' && styles.inputFocused]}
         />
       </View>
 
       <View style={styles.field}>
-        <ThemedText type="small" style={styles.label}>
+        <ThemedText type="label" themeColor="textSecondary">
           메모
         </ThemedText>
         <TextInput
           value={notes}
           onChangeText={setNotes}
+          onFocus={() => setFocused('notes')}
+          onBlur={() => setFocused(null)}
           placeholder="예: 스쿼트 5x5, 벤치프레스"
-          placeholderTextColor="#9aa"
-          style={styles.input}
+          placeholderTextColor={Palette.gray300}
+          style={[styles.input, focused === 'notes' && styles.inputFocused]}
         />
       </View>
 
       {error ? (
-        <ThemedText type="small" style={styles.error}>
+        <ThemedText type="caption" style={styles.error}>
           저장 실패: {(error as Error).message}
         </ThemedText>
       ) : null}
 
-      <Pressable
-        onPress={save}
-        disabled={!canSubmit}
-        style={({ pressed }) => [styles.primary, !canSubmit && styles.primaryDim, pressed && canSubmit && styles.pressed]}>
-        {isPending ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <ThemedText type="smallBold" style={styles.primaryLabel}>
-            운동 기록 저장
-          </ThemedText>
-        )}
-      </Pressable>
+      <Button label="운동 기록 저장" onPress={save} loading={isPending} disabled={!canSubmit} />
       <Pressable onPress={onSkip} style={styles.skip} hitSlop={8}>
-        <ThemedText type="small" style={styles.dim}>
+        <ThemedText type="caption" themeColor="textSecondary">
           기록 없이 닫기
         </ThemedText>
       </Pressable>
@@ -144,48 +152,40 @@ export function ExerciseRecordForm({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: Spacing.three },
-  field: { gap: Spacing.two },
-  label: { opacity: 0.7 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  row: { flexDirection: 'row', gap: Spacing.two },
+  wrap: { gap: Spacing.md },
+  field: { gap: Spacing.sm },
+  labelRow: { flexDirection: 'row', alignItems: 'center' },
+  required: { color: Palette.loss },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  row: { flexDirection: 'row', gap: Spacing.sm },
   chip: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.gray100,
   },
   seg: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.small,
+    backgroundColor: Palette.gray100,
   },
-  chipOn: { backgroundColor: 'rgba(34,197,94,0.15)', borderColor: '#22c55e' },
+  chipOn: { backgroundColor: Palette.primaryLight },
+  activeText: { color: Palette.primary },
   input: {
-    borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderRadius: Radius.small,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     fontSize: 16,
-    color: '#111',
-    backgroundColor: '#fff',
-    minHeight: 44,
+    fontFamily: 'Pretendard',
+    color: Palette.gray900,
+    backgroundColor: Palette.gray100,
+    minHeight: 52,
   },
-  error: { color: '#d33' },
-  primary: {
-    backgroundColor: '#22c55e',
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-  },
-  primaryDim: { backgroundColor: '#bbb' },
-  pressed: { opacity: 0.85 },
-  primaryLabel: { color: '#fff' },
-  skip: { alignItems: 'center', paddingVertical: Spacing.two },
-  dim: { opacity: 0.6 },
+  inputFocused: { borderColor: Palette.primary, backgroundColor: Palette.primaryLight },
+  error: { color: Palette.error },
+  skip: { alignItems: 'center', paddingVertical: Spacing.sm },
 });

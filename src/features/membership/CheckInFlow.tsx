@@ -1,9 +1,11 @@
+import { Check, ChevronRight, CloudSun, MapPin, Navigation, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Button, Card, Icon } from '@/components/ui';
+import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { ExerciseRecordForm } from '@/features/membership/ExerciseRecordForm';
 import { getPosition } from '@/features/membership/location';
 import { useCenter } from '@/features/membership/useCenter';
@@ -42,45 +44,29 @@ function CheckItem({
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}>
       <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-        {checked ? (
-          <ThemedText type="smallBold" style={styles.checkMark}>
-            ✓
-          </ThemedText>
-        ) : null}
+        {checked ? <Icon icon={Check} size={16} color={Palette.white} /> : null}
       </View>
-      <ThemedText type="default">{label}</ThemedText>
+      <ThemedText type="body">{label}</ThemedText>
     </Pressable>
   );
 }
 
-function PrimaryBtn({
-  label,
-  onPress,
-  disabled,
-  loading,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-}) {
+function StepLabel({ children }: { children: string }) {
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled || loading}
-      style={({ pressed }) => [
-        styles.primary,
-        (disabled || loading) && styles.primaryDim,
-        pressed && styles.pressed,
-      ]}>
-      {loading ? (
-        <ActivityIndicator color="#fff" />
-      ) : (
-        <ThemedText type="smallBold" style={styles.primaryLabel}>
-          {label}
-        </ThemedText>
-      )}
-    </Pressable>
+    <ThemedText type="label" themeColor="textSecondary">
+      {children}
+    </ThemedText>
+  );
+}
+
+function InfoRow({ icon, children }: { icon: typeof CloudSun; children: string }) {
+  return (
+    <View style={styles.infoRow}>
+      <Icon icon={icon} size={16} color={Palette.gray500} />
+      <ThemedText type="caption" themeColor="textSecondary">
+        {children}
+      </ThemedText>
+    </View>
   );
 }
 
@@ -159,112 +145,117 @@ export function CheckInFlow({
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="subtitle">센터 가기</ThemedText>
-        <Pressable onPress={onClose} hitSlop={8}>
-          <ThemedText type="default">닫기</ThemedText>
+        <ThemedText type="h2">센터 가기</ThemedText>
+        <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="닫기">
+          <Icon icon={X} size={24} color={Palette.gray500} />
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         {step === 'select' ? (
           <>
-            <ThemedText type="default">어느 회원권으로 가시나요?</ThemedText>
+            <ThemedText type="body">어느 회원권으로 가시나요?</ThemedText>
             {memberships.map((m) => (
-              <Pressable
+              <Card
                 key={m.id}
                 onPress={() => {
                   setSelectedId(m.id);
                   setStep('prepare');
-                }}
-                style={({ pressed }) => [styles.optionBtn, pressed && styles.pressed]}>
-                <ThemedText type="smallBold">{m.name}</ThemedText>
-              </Pressable>
+                }}>
+                <View style={styles.optionRow}>
+                  <ThemedText type="captionBold">{m.name}</ThemedText>
+                  <Icon icon={ChevronRight} size={20} color={Palette.gray300} />
+                </View>
+              </Card>
             ))}
           </>
         ) : null}
 
         {step === 'prepare' ? (
           <>
-            <ThemedText type="small" style={styles.dim}>
-              STEP 1 · 준비
-            </ThemedText>
-            <ThemedText type="subtitle">짐 챙기셨나요?</ThemedText>
+            <StepLabel>STEP 1 · 준비</StepLabel>
+            <ThemedText type="h2">짐 챙기셨나요?</ThemedText>
             {selected ? (
-              <ThemedText type="small" style={styles.dim}>
+              <ThemedText type="caption" themeColor="textSecondary">
                 {selected.name}
               </ThemedText>
             ) : null}
             <CheckItem label="휴대폰" checked={phone} onToggle={() => setPhone((v) => !v)} />
             <CheckItem label="운동복" checked={clothes} onToggle={() => setClothes((v) => !v)} />
-            <PrimaryBtn label="준비 완료" onPress={() => setStep('depart')} />
+            <Button label="준비 완료" onPress={() => setStep('depart')} style={styles.action} />
           </>
         ) : null}
 
         {step === 'depart' ? (
           <>
-            <ThemedText type="small" style={styles.dim}>
-              STEP 2 · 출발
-            </ThemedText>
-            <ThemedText type="subtitle">지금 출발할까요?</ThemedText>
-            {weather ? (
-              <ThemedText type="small" style={styles.dim}>
-                🌡️ {center?.name ?? '센터'} · {weather.desc} {weather.temp}°C
-              </ThemedText>
-            ) : null}
-            {route ? (
-              <ThemedText type="small" style={styles.dim}>
-                🚗 센터까지 약 {route.distanceKm.toFixed(1)}km · {route.durationMin}분
-              </ThemedText>
-            ) : null}
-            <ThemedText type="default">파이팅! 한 걸음이면 도착이에요 🙌</ThemedText>
-            <PrimaryBtn label="출발하기" onPress={() => setStep('arrive')} />
+            <StepLabel>STEP 2 · 출발</StepLabel>
+            <ThemedText type="h2">지금 출발할까요?</ThemedText>
+            <Card>
+              {weather ? (
+                <InfoRow icon={CloudSun}>{`${center?.name ?? '센터'} · ${weather.desc} ${weather.temp}°C`}</InfoRow>
+              ) : null}
+              {route ? (
+                <InfoRow icon={Navigation}>{`센터까지 약 ${route.distanceKm.toFixed(1)}km · ${route.durationMin}분`}</InfoRow>
+              ) : null}
+              {!weather && !route ? (
+                <ThemedText type="caption" themeColor="textSecondary">
+                  날씨·경로 정보를 불러오는 중이에요.
+                </ThemedText>
+              ) : null}
+            </Card>
+            <ThemedText type="body">한 걸음이면 도착이에요. 가볍게 다녀와요.</ThemedText>
+            <Button label="출발하기" onPress={() => setStep('arrive')} style={styles.action} />
           </>
         ) : null}
 
         {step === 'arrive' ? (
           <>
-            <ThemedText type="small" style={styles.dim}>
-              STEP 3 · 도착
-            </ThemedText>
-            <ThemedText type="subtitle">센터에 거의 다 왔어요!</ThemedText>
-            {gps.phase === 'checking' ? (
-              <ThemedText type="small" style={styles.dim}>
-                📍 위치 확인 중…
-              </ThemedText>
-            ) : null}
+            <StepLabel>STEP 3 · 도착</StepLabel>
+            <ThemedText type="h2">센터에 거의 다 왔어요</ThemedText>
+            {gps.phase === 'checking' ? <InfoRow icon={MapPin}>위치 확인 중…</InfoRow> : null}
             {gps.phase === 'near' ? (
-              <ThemedText type="smallBold" style={styles.near}>
-                ✅ 센터 도착 감지! ({Math.round((gps.km ?? 0) * 1000)}m 이내)
-              </ThemedText>
+              <View style={styles.infoRow}>
+                <Icon icon={Check} size={16} color={Palette.profit} />
+                <ThemedText type="captionBold" style={{ color: Palette.profit }}>
+                  센터 도착 감지! ({Math.round((gps.km ?? 0) * 1000)}m 이내)
+                </ThemedText>
+              </View>
             ) : null}
             {gps.phase === 'far' ? (
-              <ThemedText type="small" style={styles.dim}>
-                아직 {(gps.km ?? 0).toFixed(1)}km 떨어져 있어요. 도착하면 체크인하세요.
-              </ThemedText>
+              <InfoRow icon={MapPin}>
+                {`아직 ${(gps.km ?? 0).toFixed(1)}km 떨어져 있어요. 도착하면 체크인하세요.`}
+              </InfoRow>
             ) : null}
             {gps.phase === 'unavailable' ? (
-              <ThemedText type="small" style={styles.dim}>
-                위치 확인이 어려워요. 도착했다면 수동으로 체크인하세요.
-              </ThemedText>
+              <InfoRow icon={MapPin}>위치 확인이 어려워요. 도착했다면 수동으로 체크인하세요.</InfoRow>
             ) : null}
             {error ? (
-              <ThemedText type="small" style={styles.error}>
+              <ThemedText type="caption" style={styles.error}>
                 체크인 실패: {(error as Error).message}
               </ThemedText>
             ) : null}
-            <PrimaryBtn label="📍 도착 (체크인)" onPress={checkIn} loading={isPending} />
+            <Button
+              label="도착 (체크인)"
+              icon={MapPin}
+              onPress={checkIn}
+              loading={isPending}
+              style={styles.action}
+            />
           </>
         ) : null}
 
         {step === 'done' ? (
           <>
-            <ThemedText type="title">✅ 체크인 완료!</ThemedText>
+            <View style={styles.celebrate}>
+              <Icon icon={Check} size={32} color={Palette.profit} />
+            </View>
+            <ThemedText type="h1">체크인 완료!</ThemedText>
             {selected ? (
-              <ThemedText type="default">{selected.name} · 방문이 기록됐어요.</ThemedText>
+              <ThemedText type="body">{selected.name} · 방문이 기록됐어요.</ThemedText>
             ) : null}
-            <PrimaryBtn label="운동 기록하기" onPress={() => setStep('exercise')} />
+            <Button label="운동 기록하기" onPress={() => setStep('exercise')} style={styles.action} />
             <Pressable onPress={onClose} style={styles.skip} hitSlop={8}>
-              <ThemedText type="small" style={styles.dim}>
+              <ThemedText type="caption" themeColor="textSecondary">
                 나중에 (닫기)
               </ThemedText>
             </Pressable>
@@ -272,20 +263,19 @@ export function CheckInFlow({
         ) : null}
 
         {step === 'exercise' && visitId ? (
-          <ExerciseRecordForm
-            visitId={visitId}
-            onDone={() => setStep('logged')}
-            onSkip={onClose}
-          />
+          <ExerciseRecordForm visitId={visitId} onDone={() => setStep('logged')} onSkip={onClose} />
         ) : null}
 
         {step === 'logged' ? (
           <>
-            <ThemedText type="title">💪 운동 기록 완료!</ThemedText>
-            <ThemedText type="small" style={styles.dim}>
+            <View style={styles.celebrate}>
+              <Icon icon={Check} size={32} color={Palette.profit} />
+            </View>
+            <ThemedText type="h1">운동 기록 완료!</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary">
               이번 달 통계·위험도가 갱신됩니다.
             </ThemedText>
-            <PrimaryBtn label="확인" onPress={onClose} />
+            <Button label="확인" onPress={onClose} style={styles.action} />
           </>
         ) : null}
       </ScrollView>
@@ -294,50 +284,42 @@ export function CheckInFlow({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Palette.bgBase },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.three,
+    paddingHorizontal: ScreenPadding,
+    paddingVertical: Spacing.md,
   },
-  body: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: Spacing.three },
-  dim: { opacity: 0.6 },
-  near: { color: '#22c55e' },
-  error: { color: '#d33' },
-  optionBtn: {
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
-  },
+  body: { paddingHorizontal: ScreenPadding, paddingBottom: Spacing.xl, gap: Spacing.md },
+  optionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  error: { color: Palette.error },
+  action: { marginTop: Spacing.sm },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingVertical: Spacing.one,
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   checkbox: {
     width: 26,
     height: 26,
-    borderRadius: 6,
+    borderRadius: Radius.small,
     borderWidth: 2,
-    borderColor: '#22c55e',
+    borderColor: Palette.gray300,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxOn: { backgroundColor: '#22c55e' },
-  checkMark: { color: '#fff' },
-  primary: {
-    marginTop: Spacing.two,
-    backgroundColor: '#22c55e',
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.three,
+  checkboxOn: { backgroundColor: Palette.primary, borderColor: Palette.primary },
+  celebrate: {
+    width: 64,
+    height: 64,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.profitLight,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  primaryDim: { backgroundColor: '#bbb' },
-  pressed: { opacity: 0.85 },
-  primaryLabel: { color: '#fff' },
-  skip: { alignItems: 'center', paddingVertical: Spacing.two },
+  skip: { alignItems: 'center', paddingVertical: Spacing.sm },
 });

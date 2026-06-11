@@ -1,3 +1,5 @@
+import * as ImagePicker from 'expo-image-picker';
+import { Camera, Check, MapPin, X } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -9,11 +11,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Button, Icon } from '@/components/ui';
+import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { formatNumber } from '@/features/membership/dashboard';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
 import { getPosition } from '@/features/membership/location';
@@ -58,14 +60,14 @@ function Field({
   return (
     <View style={styles.field}>
       <View style={styles.labelRow}>
-        <ThemedText type="small" style={styles.fieldLabel}>
+        <ThemedText type="label" themeColor="textSecondary">
           {label}
         </ThemedText>
-        {required ? <ThemedText style={styles.required}> *</ThemedText> : null}
+        {required ? <ThemedText type="label" style={styles.required}> *</ThemedText> : null}
       </View>
       {children}
       {error ? (
-        <ThemedText type="small" style={styles.errorText}>
+        <ThemedText type="caption" style={styles.errorText}>
           {error}
         </ThemedText>
       ) : null}
@@ -85,11 +87,12 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [focused, setFocused] = useState<string | null>(null);
 
   const { mutate, isPending, error } = useCreateMembership();
   const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
 
-  const showVisits = type !== 'free'; // STEP 5: session/class만 횟수 입력
+  const showVisits = type !== 'free';
   const costNum = Number(cost);
   const visitsNum = Number(maxVisits);
   const dateOk = isValidDate(startDate);
@@ -105,7 +108,12 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   const visitsError =
     touched.maxVisits && showVisits && !visitsOk ? '횟수를 1 이상 입력해 주세요. (필수)' : null;
 
-  // 영수증 스캔: 이미지 선택 → OCR → 정규식 파싱 → 폼 프리필 (사용자 확인/수정 전제)
+  const inputStyle = (key: string, hasError?: boolean) => [
+    styles.input,
+    focused === key && styles.inputFocused,
+    hasError && styles.inputError,
+  ];
+
   async function scanReceipt() {
     try {
       const res = await ImagePicker.launchImageLibraryAsync({ quality: 1 });
@@ -137,7 +145,6 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
 
   function handleSubmit() {
     if (!canSubmit) {
-      // 빈 칸 그대로 누르면 어떤 항목이 필수인지 메시지로 표시
       setTouched({ name: true, cost: true, startDate: true, maxVisits: true });
       return;
     }
@@ -160,28 +167,34 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="subtitle">회원권 등록</ThemedText>
-        <Pressable onPress={onClose} hitSlop={8}>
-          <ThemedText type="default">닫기</ThemedText>
+        <ThemedText type="h2">회원권 등록</ThemedText>
+        <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="닫기">
+          <Icon icon={X} size={24} color={Palette.gray500} />
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <Pressable
           onPress={scanReceipt}
-          style={({ pressed }) => [styles.scanBtn, pressed && styles.scanBtnPressed]}>
-          <ThemedText type="smallBold">📷 영수증으로 자동입력</ThemedText>
+          style={({ pressed }) => [styles.scanBtn, pressed && styles.pressed]}>
+          <Icon icon={Camera} size={20} color={Palette.primary} />
+          <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+            영수증으로 자동입력
+          </ThemedText>
         </Pressable>
 
-        {/* STEP 3: 회원권 기본 정보 */}
         <Field label="회원권명" required error={nameError}>
           <TextInput
             value={name}
             onChangeText={setName}
-            onBlur={() => touch('name')}
+            onFocus={() => setFocused('name')}
+            onBlur={() => {
+              setFocused(null);
+              touch('name');
+            }}
             placeholder="예: 강남 PT 30회"
-            placeholderTextColor="#9aa"
-            style={[styles.input, nameError && styles.inputError]}
+            placeholderTextColor={Palette.gray300}
+            style={inputStyle('name', !!nameError)}
           />
         </Field>
 
@@ -189,120 +202,134 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
           <TextInput
             value={cost ? formatNumber(Number(cost)) : ''}
             onChangeText={(t) => setCost(t.replace(/[^0-9]/g, ''))}
-            onBlur={() => touch('cost')}
+            onFocus={() => setFocused('cost')}
+            onBlur={() => {
+              setFocused(null);
+              touch('cost');
+            }}
             keyboardType="numeric"
             placeholder="예: 360,000"
-            placeholderTextColor="#9aa"
-            style={[styles.input, costError && styles.inputError]}
+            placeholderTextColor={Palette.gray300}
+            style={inputStyle('cost', !!costError)}
           />
         </Field>
 
         <Field label="결제 기간">
           <View style={styles.segmentRow}>
-            {PERIODS.map((p) => (
-              <Pressable
-                key={p.value}
-                onPress={() => setPeriod(p.value)}
-                style={[styles.segment, period === p.value && styles.segmentActive]}>
-                <ThemedText type={period === p.value ? 'smallBold' : 'small'}>{p.label}</ThemedText>
-              </Pressable>
-            ))}
+            {PERIODS.map((p) => {
+              const on = period === p.value;
+              return (
+                <Pressable
+                  key={p.value}
+                  onPress={() => setPeriod(p.value)}
+                  style={[styles.segment, on && styles.segmentActive]}>
+                  <ThemedText type={on ? 'captionBold' : 'caption'} style={on ? styles.activeText : undefined}>
+                    {p.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </View>
         </Field>
 
-        {/* STEP 3: 시작일 — 휠 날짜 선택기 */}
         <Field label="시작일" required>
           <Pressable onPress={() => setPickerOpen(true)} style={styles.input}>
-            <ThemedText type="default">{startDate}</ThemedText>
+            <ThemedText type="body">{startDate}</ThemedText>
           </Pressable>
           {dateOk && (
-            <ThemedText type="small" style={styles.hint}>
+            <ThemedText type="caption" themeColor="textSecondary">
               만료일 · {computeEndDate(startDate, period)} (자동 계산)
             </ThemedText>
           )}
         </Field>
 
-        {/* STEP 4: 회원권 형태 */}
         <Field label="회원권 형태">
           <View style={styles.typeCol}>
-            {TYPES.map((t) => (
-              <Pressable
-                key={t.value}
-                onPress={() => setType(t.value)}
-                style={[styles.typeOption, type === t.value && styles.typeOptionActive]}>
-                <View style={styles.radioOuter}>
-                  {type === t.value && <View style={styles.radioInner} />}
-                </View>
-                <View style={styles.typeTextCol}>
-                  <ThemedText type="smallBold">{t.label}</ThemedText>
-                  <ThemedText type="small">{t.desc}</ThemedText>
-                </View>
-              </Pressable>
-            ))}
+            {TYPES.map((t) => {
+              const on = type === t.value;
+              return (
+                <Pressable
+                  key={t.value}
+                  onPress={() => setType(t.value)}
+                  style={[styles.typeOption, on && styles.typeOptionActive]}>
+                  <View style={[styles.radioOuter, on && styles.radioOuterOn]}>
+                    {on && <View style={styles.radioInner} />}
+                  </View>
+                  <View style={styles.typeTextCol}>
+                    <ThemedText type="captionBold">{t.label}</ThemedText>
+                    <ThemedText type="caption" themeColor="textSecondary">
+                      {t.desc}
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         </Field>
 
-        {/* STEP 5: 형태별 추가 정보 — 횟수 */}
         {showVisits && (
           <Field label={type === 'session' ? '계약 횟수' : '횟수'} required error={visitsError}>
             <TextInput
               value={maxVisits}
               onChangeText={setMaxVisits}
-              onBlur={() => touch('maxVisits')}
+              onFocus={() => setFocused('maxVisits')}
+              onBlur={() => {
+                setFocused(null);
+                touch('maxVisits');
+              }}
               keyboardType="numeric"
               placeholder="예: 30"
-              placeholderTextColor="#9aa"
-              style={[styles.input, visitsError && styles.inputError]}
+              placeholderTextColor={Palette.gray300}
+              style={inputStyle('maxVisits', !!visitsError)}
             />
           </Field>
         )}
 
-        {/* 센터(선택): 좌표가 있어야 GPS 도착·날씨·경로가 동작 */}
         <Field label="센터 (선택)">
           <TextInput
             value={centerName}
             onChangeText={setCenterName}
+            onFocus={() => setFocused('centerName')}
+            onBlur={() => setFocused(null)}
             placeholder="예: 강남 피트니스"
-            placeholderTextColor="#9aa"
-            style={styles.input}
+            placeholderTextColor={Palette.gray300}
+            style={inputStyle('centerName')}
           />
           <Pressable
             onPress={setCenterFromGPS}
-            style={({ pressed }) => [styles.gpsBtn, pressed && styles.scanBtnPressed]}>
+            style={({ pressed }) => [styles.gpsBtn, pressed && styles.pressed]}>
             {gpsLoading ? (
-              <ActivityIndicator />
+              <ActivityIndicator color={Palette.primary} />
             ) : (
-              <ThemedText type="small">
-                {centerCoord
-                  ? `✅ 위치 설정됨 (${centerCoord.lat.toFixed(4)}, ${centerCoord.lng.toFixed(4)})`
-                  : '📍 현재 위치를 센터로 설정'}
-              </ThemedText>
+              <>
+                <Icon
+                  icon={centerCoord ? Check : MapPin}
+                  size={16}
+                  color={centerCoord ? Palette.profit : Palette.gray500}
+                />
+                <ThemedText type="caption" themeColor="textSecondary">
+                  {centerCoord
+                    ? `위치 설정됨 (${centerCoord.lat.toFixed(4)}, ${centerCoord.lng.toFixed(4)})`
+                    : '현재 위치를 센터로 설정'}
+                </ThemedText>
+              </>
             )}
           </Pressable>
         </Field>
 
         {error && (
-          <ThemedText type="small" style={styles.errorText}>
+          <ThemedText type="caption" style={styles.errorText}>
             저장 실패: {(error as Error).message}
           </ThemedText>
         )}
 
-        <Pressable
+        <Button
+          label="등록하기"
           onPress={handleSubmit}
-          disabled={isPending}
-          style={({ pressed }) => [
-            styles.submit,
-            !canSubmit && styles.submitDisabled,
-            pressed && canSubmit && styles.submitPressed,
-          ]}>
-          {isPending ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <ThemedText type="smallBold" style={styles.submitLabel}>
-              등록하기
-            </ThemedText>
-          )}
-        </Pressable>
+          loading={isPending}
+          disabled={!canSubmit}
+          style={styles.submit}
+        />
       </ScrollView>
 
       <DateWheelPicker
@@ -320,94 +347,94 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Palette.bgBase },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.three,
+    paddingHorizontal: ScreenPadding,
+    paddingVertical: Spacing.md,
   },
   body: {
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.four,
-    gap: Spacing.three,
+    paddingHorizontal: ScreenPadding,
+    paddingBottom: Spacing.xl,
+    gap: Spacing.lg,
   },
+  pressed: { opacity: 0.7 },
   scanBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.two,
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.button,
     borderWidth: 1,
-    borderColor: '#22c55e',
-    backgroundColor: 'rgba(34,197,94,0.08)',
+    borderColor: Palette.primary,
+    backgroundColor: Palette.primaryLight,
   },
-  scanBtnPressed: { opacity: 0.7 },
   gpsBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.small,
     borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
+    borderColor: Palette.lineDefault,
+    backgroundColor: Palette.bgSurface,
   },
-  field: { gap: Spacing.two },
+  field: { gap: Spacing.sm },
   labelRow: { flexDirection: 'row', alignItems: 'center' },
-  fieldLabel: { opacity: 0.7 },
-  required: { color: '#d33', fontWeight: '700' },
-  errorText: { color: '#d33' },
+  required: { color: Palette.loss },
+  errorText: { color: Palette.error },
   input: {
-    borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderRadius: Radius.small,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     fontSize: 16,
-    color: '#111',
-    backgroundColor: '#fff',
-    minHeight: 44,
+    fontFamily: 'Pretendard',
+    color: Palette.gray900,
+    backgroundColor: Palette.gray100,
+    minHeight: 52,
     justifyContent: 'center',
   },
-  inputError: { borderColor: '#d33' },
-  hint: { opacity: 0.7 },
-  segmentRow: { flexDirection: 'row', gap: Spacing.two },
+  inputFocused: { borderColor: Palette.primary, backgroundColor: Palette.primaryLight },
+  inputError: { borderColor: Palette.error },
+  segmentRow: { flexDirection: 'row', gap: Spacing.sm },
   segment: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.small,
+    backgroundColor: Palette.gray100,
   },
-  segmentActive: { backgroundColor: 'rgba(34,197,94,0.15)', borderColor: '#22c55e' },
-  typeCol: { gap: Spacing.two },
+  segmentActive: { backgroundColor: Palette.primaryLight },
+  activeText: { color: Palette.primary },
+  typeCol: { gap: Spacing.sm },
   typeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.small,
     borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
+    borderColor: Palette.lineDefault,
+    backgroundColor: Palette.bgSurface,
   },
-  typeOptionActive: { backgroundColor: 'rgba(34,197,94,0.12)', borderColor: '#22c55e' },
+  typeOptionActive: { backgroundColor: Palette.primaryLight, borderColor: Palette.primary },
   radioOuter: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#22c55e',
+    borderColor: Palette.gray300,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e' },
+  radioOuterOn: { borderColor: Palette.primary },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: Palette.primary },
   typeTextCol: { flex: 1, gap: 2 },
-  submit: {
-    marginTop: Spacing.two,
-    backgroundColor: '#111',
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-  },
-  submitDisabled: { backgroundColor: '#bbb' },
-  submitPressed: { opacity: 0.85 },
-  submitLabel: { color: '#fff' },
+  submit: { marginTop: Spacing.sm },
 });

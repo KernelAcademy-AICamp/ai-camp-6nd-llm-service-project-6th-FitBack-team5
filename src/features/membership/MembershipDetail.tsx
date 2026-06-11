@@ -1,8 +1,10 @@
+import { Wallet, X } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Card, Chip, Icon } from '@/components/ui';
+import { Palette, ScreenPadding, Spacing } from '@/constants/theme';
 import { formatNumber, RISK_COLORS, RISK_META, won, type RiskInfo } from '@/features/membership/dashboard';
 import type { Membership, MembershipType } from '@/features/membership/useMemberships';
 import { useMembershipVisits } from '@/features/membership/useMembershipVisits';
@@ -40,10 +42,10 @@ function fmtDateTime(iso: string): string {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.stat}>
-      <ThemedText type="small" style={styles.dim}>
+      <ThemedText type="label" themeColor="textSecondary">
         {label}
       </ThemedText>
-      <ThemedText type="smallBold">{value}</ThemedText>
+      <ThemedText type="captionBold">{value}</ThemedText>
     </View>
   );
 }
@@ -67,24 +69,24 @@ export function MembershipDetail({
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="subtitle">{m.name}</ThemedText>
-        <Pressable onPress={onClose} hitSlop={8}>
-          <ThemedText type="default">닫기</ThemedText>
+        <ThemedText type="h2">{m.name}</ThemedText>
+        <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="닫기">
+          <Icon icon={X} size={24} color={Palette.gray500} />
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        {/* 요약 */}
-        <ThemedView type="backgroundElement" style={[styles.summaryCard, { borderLeftColor: color }]}>
+        <Card accentColor={color}>
           <View style={styles.rowBetween}>
-            <ThemedText type="small" style={styles.dim}>
+            <ThemedText type="caption" themeColor="textSecondary">
               {TYPE_LABELS[m.type]}
             </ThemedText>
-            <View style={[styles.chip, { backgroundColor: `${color}22` }]}>
-              <ThemedText type="smallBold" style={{ color }}>
-                {meta.icon} {expired ? '만료' : meta.label}
-              </ThemedText>
-            </View>
+            <Chip
+              label={expired ? '만료' : meta.label}
+              color={color}
+              bg={`${color}1A`}
+              icon={meta.icon}
+            />
           </View>
           <View style={styles.statRow}>
             <Stat label="정비용" value={won(m.cost)} />
@@ -102,44 +104,46 @@ export function MembershipDetail({
             <Stat label="시작·종료" value={`${m.startDate} ~ ${m.endDate}`} />
           </View>
           {risk.hasSessions && risk.valueAtRisk > 0 ? (
-            <ThemedText type="small" style={expired ? styles.dim : undefined}>
-              💰 못 쓰면 {won(risk.valueAtRisk)} 손실
-            </ThemedText>
+            <View style={styles.footRow}>
+              <Icon icon={Wallet} size={16} color={expired ? Palette.gray300 : Palette.loss} />
+              <ThemedText type="caption" themeColor={expired ? 'textSecondary' : 'text'}>
+                못 쓰면 {won(risk.valueAtRisk)} 손실
+              </ThemedText>
+            </View>
           ) : null}
-        </ThemedView>
+        </Card>
 
-        {/* 방문 이력 */}
-        <ThemedText type="smallBold" style={styles.sectionTitle}>
+        <ThemedText type="captionBold" style={styles.sectionTitle}>
           방문 이력 {visits ? `(${formatNumber(visits.length)}회)` : ''}
         </ThemedText>
 
         {isLoading ? (
           <View style={styles.stateBox}>
-            <ActivityIndicator />
+            <ActivityIndicator color={Palette.primary} />
           </View>
         ) : null}
 
         {!isLoading && (visits?.length ?? 0) === 0 ? (
-          <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="small" style={styles.dim}>
+          <Card>
+            <ThemedText type="caption" themeColor="textSecondary">
               아직 방문 기록이 없어요. “센터 가기”로 체크인해 보세요.
             </ThemedText>
-          </ThemedView>
+          </Card>
         ) : null}
 
         {visits?.map((v) => (
-          <ThemedView key={v.id} type="backgroundElement" style={styles.card}>
+          <Card key={v.id} style={styles.visitCard}>
             <View style={styles.rowBetween}>
-              <ThemedText type="smallBold">{fmtDateTime(v.check_in_time)}</ThemedText>
+              <ThemedText type="captionBold">{fmtDateTime(v.check_in_time)}</ThemedText>
               {v.center_name ? (
-                <ThemedText type="small" style={styles.dim}>
+                <ThemedText type="caption" themeColor="textSecondary">
                   {v.center_name}
                 </ThemedText>
               ) : null}
             </View>
             {v.exercise_records.length > 0 ? (
               v.exercise_records.map((e) => (
-                <ThemedText key={e.id} type="small">
+                <ThemedText key={e.id} type="caption">
                   · {PART_LABEL[e.exercise_part] ?? e.exercise_part}
                   {e.intensity ? ` · ${INTENSITY_LABEL[e.intensity] ?? e.intensity}` : ''}
                   {e.duration ? ` · ${formatNumber(e.duration)}분` : ''}
@@ -147,11 +151,11 @@ export function MembershipDetail({
                 </ThemedText>
               ))
             ) : (
-              <ThemedText type="small" style={styles.dim}>
+              <ThemedText type="caption" themeColor="textSecondary">
                 운동 기록 없음
               </ThemedText>
             )}
-          </ThemedView>
+          </Card>
         ))}
       </ScrollView>
     </ThemedView>
@@ -159,27 +163,20 @@ export function MembershipDetail({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Palette.bgBase },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.three,
+    paddingHorizontal: ScreenPadding,
+    paddingVertical: Spacing.md,
   },
-  body: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: Spacing.three },
-  card: { padding: Spacing.three, borderRadius: Spacing.two, gap: Spacing.two },
+  body: { paddingHorizontal: ScreenPadding, paddingBottom: Spacing.xl, gap: Spacing.md },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chip: { paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: Spacing.two },
-  statRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.four, marginTop: Spacing.one },
+  footRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: Spacing.xs },
+  statRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.lg, marginTop: Spacing.sm },
   stat: { gap: 2 },
-  dim: { opacity: 0.6 },
-  sectionTitle: { marginTop: Spacing.two },
-  summaryCard: {
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    gap: Spacing.two,
-    borderLeftWidth: 4,
-  },
-  stateBox: { paddingVertical: Spacing.four, alignItems: 'center' },
+  sectionTitle: { marginTop: Spacing.sm },
+  visitCard: { gap: Spacing.sm },
+  stateBox: { paddingVertical: Spacing.lg, alignItems: 'center' },
 });

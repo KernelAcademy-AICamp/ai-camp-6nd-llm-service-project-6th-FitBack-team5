@@ -1,3 +1,7 @@
+import { AlertCircle, AlertTriangle, Minus, TrendingUp, type LucideIcon } from 'lucide-react-native';
+
+import { Palette } from '@/constants/theme';
+
 import type { Membership } from './useMemberships';
 
 /** 종료일까지 남은 일수 (UTC 자정 기준, 타임존 영향 없음). 음수면 만료. */
@@ -25,19 +29,20 @@ export function won(n: number): string {
 // ── spec: 회원권 위험 통계 ────────────────────────────────
 export type RiskLevel = 'danger' | 'warning' | 'safe' | 'neutral';
 
+// 위험도 = 회원권 ROI 손익 개념 → 디자인 손익 컬러(적자/흑자) + 시맨틱.
 export const RISK_COLORS: Record<RiskLevel, string> = {
-  danger: '#EF4444',
-  warning: '#F97316',
-  safe: '#10B981',
-  neutral: '#6B7280',
+  danger: Palette.loss, // 적자(못 쓰면 손실)
+  warning: Palette.warning,
+  safe: Palette.profit, // 흑자(페이스 충분)
+  neutral: Palette.gray500,
 };
 
-// 색 단독 의존 금지(접근성): 아이콘 + 텍스트 라벨 + 색 3중 표기.
-export const RISK_META: Record<RiskLevel, { icon: string; label: string }> = {
-  danger: { icon: '🔴', label: '위험' },
-  warning: { icon: '🟠', label: '주의' },
-  safe: { icon: '🟢', label: '안전' },
-  neutral: { icon: '⚪', label: '일반' },
+// 색 단독 의존 금지(접근성): 아이콘 + 텍스트 라벨 + 색 3중 표기 (Lucide).
+export const RISK_META: Record<RiskLevel, { icon: LucideIcon; label: string }> = {
+  danger: { icon: AlertTriangle, label: '위험' },
+  warning: { icon: AlertCircle, label: '주의' },
+  safe: { icon: TrendingUp, label: '안전' },
+  neutral: { icon: Minus, label: '일반' },
 };
 
 const WEEKS_PER_MONTH = 4.3;

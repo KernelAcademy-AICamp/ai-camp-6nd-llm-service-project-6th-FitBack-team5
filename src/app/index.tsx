@@ -1,19 +1,12 @@
+import { LogOut, Plus } from 'lucide-react-native';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Card, Icon } from '@/components/ui';
+import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { computeRisk, sortByRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
 import { MembershipDetail } from '@/features/membership/MembershipDetail';
@@ -30,16 +23,20 @@ function AuthFooter() {
     await supabase.auth.signOut();
   }
   return (
-    <ThemedView type="backgroundElement" style={styles.authFooter}>
-      <ThemedText type="small" style={styles.authEmail}>
+    <View style={styles.authFooter}>
+      <ThemedText type="caption" themeColor="textSecondary" style={styles.authEmail}>
         {user?.email ?? '(no session)'}
       </ThemedText>
       <Pressable
         onPress={handleSignOut}
-        style={({ pressed }) => [styles.authButton, pressed && styles.authButtonPressed]}>
-        <ThemedText type="small">로그아웃</ThemedText>
+        style={({ pressed }) => [styles.authButton, pressed && styles.authButtonPressed]}
+        accessibilityRole="button">
+        <Icon icon={LogOut} size={16} color={Palette.gray500} />
+        <ThemedText type="caption" themeColor="textSecondary">
+          로그아웃
+        </ThemedText>
       </Pressable>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -81,12 +78,14 @@ export default function MembershipScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.titleRow}>
-          <ThemedText type="title">내 회원권</ThemedText>
+          <ThemedText type="h1">내 회원권</ThemedText>
           <Pressable
             onPress={() => setShowForm(true)}
-            style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
-            <ThemedText type="smallBold" style={styles.addButtonLabel}>
-              + 회원권 추가
+            style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
+            accessibilityRole="button">
+            <Icon icon={Plus} size={18} color={Palette.white} />
+            <ThemedText type="captionBold" style={styles.addButtonLabel}>
+              회원권 추가
             </ThemedText>
           </Pressable>
         </View>
@@ -103,16 +102,20 @@ export default function MembershipScreen() {
             </View>
           )}
           {isError && (
-            <ThemedView type="backgroundElement" style={styles.stateCard}>
-              <ThemedText type="default">회원권을 불러오지 못했어요.</ThemedText>
-              <ThemedText type="small">{(error as Error)?.message ?? '알 수 없는 오류'}</ThemedText>
-            </ThemedView>
+            <Card style={styles.stateCard}>
+              <ThemedText type="body">회원권을 불러오지 못했어요.</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">
+                {(error as Error)?.message ?? '알 수 없는 오류'}
+              </ThemedText>
+            </Card>
           )}
           {isEmpty && (
-            <ThemedView type="backgroundElement" style={styles.stateCard}>
-              <ThemedText type="default">등록된 회원권이 없어요.</ThemedText>
-              <ThemedText type="small">오른쪽 위 “+ 회원권 추가”로 등록해 보세요.</ThemedText>
-            </ThemedView>
+            <Card style={styles.stateCard}>
+              <ThemedText type="body">아직 등록된 회원권이 없어요.</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">
+                오른쪽 위 “회원권 추가”로 첫 회원권을 등록해 보세요.
+              </ThemedText>
+            </Card>
           )}
 
           {/* 위험순 회원권 카드 */}
@@ -177,16 +180,16 @@ export default function MembershipScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Palette.bgBase },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+    paddingHorizontal: ScreenPadding,
+    paddingTop: Spacing.md,
+    paddingBottom: BottomTabInset + Spacing.md,
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    gap: Spacing.three,
+    gap: Spacing.lg,
   },
   titleRow: {
     flexDirection: 'row',
@@ -194,44 +197,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    backgroundColor: '#111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.primary,
   },
-  addButtonPressed: { opacity: 0.8 },
-  addButtonLabel: { color: '#fff' },
+  addButtonPressed: { backgroundColor: Palette.primaryPressed },
+  addButtonLabel: { color: Palette.white },
   list: {
-    gap: Spacing.three,
-    paddingBottom: Spacing.three,
+    gap: Spacing.md,
+    paddingBottom: Spacing.md,
   },
   stateBox: {
-    paddingVertical: Spacing.four,
+    paddingVertical: Spacing.xl,
     alignItems: 'center',
   },
-  stateCard: {
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    gap: Spacing.two,
-  },
+  stateCard: { gap: Spacing.xs },
   authFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.xs,
+    paddingTop: Spacing.sm,
+    gap: Spacing.md,
   },
   authEmail: { flex: 1 },
   authButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
+    borderColor: Palette.lineStrong,
   },
   authButtonPressed: { opacity: 0.6 },
-  modalRoot: { flex: 1 },
+  modalRoot: { flex: 1, backgroundColor: Palette.bgBase },
   modalSafe: { flex: 1 },
 });

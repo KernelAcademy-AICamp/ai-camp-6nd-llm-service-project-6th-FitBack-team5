@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Palette, Radius, Spacing } from '@/constants/theme';
 
 // 2026 기준 모바일 날짜 선택의 표준인 3컬럼 스크롤 휠.
 // 크로스플랫폼: 네이티브는 스냅 스크롤, 웹/공통은 항목 탭으로도 선택 가능.
@@ -72,8 +72,8 @@ function WheelColumn({
                 ref.current?.scrollTo({ y: items.indexOf(it) * ITEM_HEIGHT, animated: true });
               }}>
               <ThemedText
-                type={selected ? 'subtitle' : 'default'}
-                style={selected ? undefined : styles.dim}>
+                type={selected ? 'h2' : 'body'}
+                style={selected ? styles.selectedText : styles.dim}>
                 {suffix === '년' ? it : pad2(it)}
                 {suffix}
               </ThemedText>
@@ -133,11 +133,13 @@ export function DateWheelPicker({
         <ThemedView style={styles.sheet}>
           <View style={styles.header}>
             <Pressable onPress={onCancel} hitSlop={8}>
-              <ThemedText type="default">취소</ThemedText>
+              <ThemedText type="body" style={styles.cancel}>
+                취소
+              </ThemedText>
             </Pressable>
-            <ThemedText type="smallBold">시작일 선택</ThemedText>
+            <ThemedText type="captionBold">시작일 선택</ThemedText>
             <Pressable onPress={handleConfirm} hitSlop={8}>
-              <ThemedText type="smallBold" style={styles.done}>
+              <ThemedText type="captionBold" style={styles.done}>
                 완료
               </ThemedText>
             </Pressable>
@@ -160,27 +162,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
-    borderTopLeftRadius: Spacing.three,
-    borderTopRightRadius: Spacing.three,
-    paddingBottom: Spacing.four,
+    backgroundColor: Palette.bgSurface,
+    borderTopLeftRadius: Radius.modal,
+    borderTopRightRadius: Radius.modal,
+    paddingBottom: Spacing.lg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.three,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(127,127,127,0.3)',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Palette.lineDefault,
   },
-  done: { color: '#22c55e' },
+  cancel: { color: Palette.gray500 },
+  done: { color: Palette.primary },
   wheels: {
     flexDirection: 'row',
     height: ITEM_HEIGHT * VISIBLE,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: Spacing.md,
   },
   column: { flex: 1 },
   item: { height: ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  selectedText: { color: Palette.primary },
   dim: { opacity: 0.35 },
   band: {
     position: 'absolute',
@@ -188,8 +193,8 @@ const styles = StyleSheet.create({
     right: 0,
     top: PAD,
     height: ITEM_HEIGHT,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(34,197,94,0.6)',
+    borderTopWidth: 0.5,
+    borderBottomWidth: 0.5,
+    borderColor: Palette.primary,
   },
 });
