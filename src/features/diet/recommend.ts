@@ -2,13 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 
 import { supabase } from '@/lib/supabase';
 
-export interface ComboFood {
+export interface RecFood {
   name: string;
   amount: number;
   unit: string;
-}
-export interface Combo {
-  foods: ComboFood[];
 }
 
 export interface RecDeficit {
@@ -17,21 +14,21 @@ export interface RecDeficit {
 }
 
 interface RecommendResponse {
-  combos?: Combo[];
+  foods?: RecFood[];
   error?: string;
 }
 
-async function fetchRecommend(deficits: RecDeficit[], context?: string): Promise<Combo[]> {
+async function fetchRecommend(deficits: RecDeficit[], context?: string): Promise<RecFood[]> {
   const { data, error } = await supabase.functions.invoke<RecommendResponse>('food-search', {
     body: { action: 'recommend', deficits, context },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
-  return data?.combos ?? [];
+  return data?.foods ?? [];
 }
 
 /**
- * 부족 영양소 기반 음식 조합 추천 (Claude). 부족 수치로 캐싱해 끼니가 바뀔 때만 재요청.
+ * 부족 영양소 기반 개별 음식 추천 (Claude). 부족 수치로 캐싱해 끼니가 바뀔 때만 재요청.
  * deficits가 비면 호출하지 않는다.
  */
 export function useRecommend(deficits: RecDeficit[], context?: string) {

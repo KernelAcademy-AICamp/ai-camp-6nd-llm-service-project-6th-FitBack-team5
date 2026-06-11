@@ -59,6 +59,7 @@ const D = {
   gray900: '#111827',
   gray700: '#374151',
   gray500: '#6B7280',
+  gray400: '#999999',
   gray300: '#D1D5DB',
   gray100: '#F3F4F6',
   line: 'rgba(0,0,0,0.07)',
@@ -122,10 +123,8 @@ function Card({ children, style }: { children: React.ReactNode; style?: object }
 const BURNED_KCAL = 420; // 운동 소모 칼로리 (운동 데이터 연계, 가데이터)
 const WORKOUT_MIN = 45; // 운동 시간(분) — 가데이터
 
-// 운동 밸런스 점수 — 식단 기여 / 유효방문·회당 비용 (membership 연동 전 가데이터)
+// 운동 밸런스 점수 — 식단 기여 / 유효방문 (membership 연동 전 가데이터)
 const BALANCE_MAX_SCORE = 8; // 오늘 식단으로 받을 수 있는 최대 기여 점수
-const COST_PER_VISIT = 9166; // 현재 회당 비용(원)
-const COST_PER_VISIT_VALID = 8400; // 유효방문 인정 시 회당 비용(원)
 
 // 탄단지 표시 정의 (순서: 단 → 탄 → 지). 목표 값은 가이드(guide.target)에서 가져온다.
 const MACRO_META = [
@@ -197,8 +196,8 @@ function SemiGauge({
   status: { label: string; color: string };
   active: boolean;
 }) {
-  const W = 116;
-  const SW = 10; // 아크 두께
+  const W = 148;
+  const SW = 13; // 아크 두께
   const r = (W - SW) / 2;
   const cx = W / 2;
   const cy = r + SW / 2;
@@ -220,10 +219,10 @@ function SemiGauge({
         )}
       </Svg>
       <View style={styles.gaugeLabel}>
-        <Txt variant="h2" weight="700" color={active ? D.gray900 : D.gray500}>
+        <Txt variant="h1" weight="700" color={active ? D.gray900 : D.gray500}>
           {active ? `${score}%` : '등록 전'}
         </Txt>
-        <Txt variant="label" weight="600" color={active ? status.color : D.gray500}>
+        <Txt variant="caption" weight="700" color={active ? status.color : D.gray500}>
           {active ? status.label : '운동 대비'}
         </Txt>
       </View>
@@ -880,6 +879,8 @@ export default function DietScreen() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const { data: meals = [], isLoading, isError, refetch } = useMeals(selectedDate);
   const addMeal = useAddMeal(selectedDate);
+  const addAnalyze = useAnalyzeMeal(); // 추천 음식 추가 시 영양값 계산용
+  const [addingName, setAddingName] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMealType, setModalMealType] = useState<MealType | undefined>(undefined);
 
@@ -887,6 +888,22 @@ export default function DietScreen() {
   function openRecord(type?: MealType) {
     setModalMealType(type);
     setModalOpen(true);
+  }
+
+  // 추천 음식 칩의 + → analyze로 영양값 계산 후 다음 끼니로 바로 기록
+  async function addRecommendedFood(name: string, amount: number, unit: string) {
+    if (addingName) return;
+    setAddingName(name);
+    try {
+      const recordedTypes = new Set(meals.map((m) => m.mealType));
+      const mealType = MEAL_TYPES.find((t) => !recordedTypes.has(t)) ?? '간식';
+      const r = await addAnalyze.mutateAsync({ text: `${name} ${amount}${unit}` });
+      addMeal.mutate({ mealType, name: r.name, kcal: r.kcal, carb: r.carb, protein: r.protein, fat: r.fat, inputMethod: 'manual' });
+    } catch {
+      // 실패 시 조용히 무시 (다시 누르면 재시도)
+    } finally {
+      setAddingName(null);
+    }
   }
 
 
@@ -921,17 +938,6 @@ export default function DietScreen() {
   const hasLog = meals.length > 0;
   const target = guide.target;
 
-  // 매크로 비중에 따른 한 줄 코멘트 (목표 대비 가장 높은 매크로 기준)
-  const macroHint = ((): string => {
-    if (!hasLog) return '오늘 식단을 기록해주세요.';
-    const rp = totals.protein / target.protein;
-    const rc = totals.carb / target.carb;
-    const rf = totals.fat / target.fat;
-    if (rp >= rc && rp >= rf) return '단백질을 잘 챙기고 있어요!';
-    if (rc >= rf) return '탄수화물 양이 좀 높아요.';
-    return '지방 비중이 좀 높아요.';
-  })();
-
   const calorieGoal = target.kcal;
   const remaining = calorieGoal - totals.kcal;
   const over = remaining < 0;
@@ -939,10 +945,28 @@ export default function DietScreen() {
   const netRatio = net / calorieGoal;
   const energyStatus = balanceStatus(netRatio);
 
-  // 운동 밸런스 점수 — 기록한 끼니 수에 비례(끼니당 2점, 최대 8). 저녁 기록 시 유효방문 인정(가데이터)
+  // 헤더 한 줄 코멘트 — 운동 상태(운동 대비 섭취) + 식단 상태(매크로 균형)에 따라 변동
+  const partLabel = MOCK_CONTEXT.part ? PART_LABEL[MOCK_CONTEXT.part] : null;
+  const stateHint = ((): string => {
+    if (!hasLog) {
+      return partLabel ? `${partLabel} 운동 후 식단을 기록해보세요.` : '오늘 식단을 기록해보세요.';
+    }
+    // 1순위: 운동량 대비 섭취 상태
+    if (netRatio < 0.9) return '운동량 대비 덜 먹었어요. 회복을 위해 더 채워보세요.';
+    if (netRatio > 1.05) return '운동량 대비 많이 먹었어요. 다음 끼니는 가볍게 가요.';
+    // 적정 범위 → 매크로 균형으로 코멘트
+    const rp = totals.protein / target.protein;
+    const rc = totals.carb / target.carb;
+    const rf = totals.fat / target.fat;
+    if (rp >= 1) return '단백질까지 잘 챙겼어요. 회복에 좋아요!';
+    if (rp >= rc && rp >= rf) return '단백질 위주로 잘 채우고 있어요!';
+    if (rc >= rf) return '탄수화물 비중이 조금 높아요.';
+    return '지방 비중이 조금 높아요.';
+  })();
+
+  // 운동 밸런스 점수 — 기록한 끼니 수에 비례(끼니당 2점, 최대 8). 가데이터
   const loggedTypes = new Set(meals.map((m) => m.mealType));
   const dietScore = Math.min(BALANCE_MAX_SCORE, loggedTypes.size * 2);
-  const dinnerLogged = loggedTypes.has('저녁');
 
   // 부족 영양소 (목표 - 섭취) — 결손 큰 상위 2개를 함께 고려해 균형 추천
   const deficits = [
@@ -1009,14 +1033,15 @@ export default function DietScreen() {
           </View>
           {/* ① 운동 맞춤 식단 가이드 — 운동 대비 섭취 상태 게이지 + 목표 매크로 */}
           <Card style={styles.guideCard}>
-            <View style={styles.guideHeadRow}>
-              <View style={styles.guideTitleCol}>
-                <Txt variant="h1">운동 대비 섭취 상태</Txt>
+            {/* 운동 대비 섭취 상태 게이지 + '오늘의 식단' 타이틀 (상단 중앙) */}
+            <View style={styles.guideHead}>
+              <SemiGauge ratio={netRatio} status={energyStatus} active={hasLog} />
+              <View style={styles.guideTitleWrap}>
+                <Txt variant="h2">오늘의 식단</Txt>
                 <Txt variant="caption" color={D.gray500}>
-                  {macroHint}
+                  {stateHint}
                 </Txt>
               </View>
-              <SemiGauge ratio={netRatio} status={energyStatus} active={hasLog} />
             </View>
 
             {/* 목표 매크로 (단 → 탄 → 지) */}
@@ -1025,6 +1050,28 @@ export default function DietScreen() {
                 <MacroProgress key={m.key} label={m.label} value={totals[m.key]} goal={target[m.key]} />
               ))}
             </View>
+
+            <View style={[styles.sectionDivider, styles.guideDivider]} />
+
+            {/* 운동 밸런스 점수 — 식단 기여 + 유효방문 (membership 연동 전 가데이터) */}
+            <View style={styles.balanceHead}>
+              <Txt variant="body" weight="700">
+                운동 밸런스 점수
+              </Txt>
+              <View style={styles.balanceContrib}>
+                <Txt variant="caption" color={D.gray500}>
+                  오늘 식단 기여{' '}
+                </Txt>
+                <Txt variant="caption" weight="700" color={D.primary}>
+                  +{dietScore}
+                </Txt>
+                <Txt variant="caption" color={D.gray500}>
+                  {' '}
+                  / +{BALANCE_MAX_SCORE}점
+                </Txt>
+              </View>
+            </View>
+            <ProgressBar ratio={dietScore / BALANCE_MAX_SCORE} color={D.gray300} />
           </Card>
 
           {/* ② 기록 전: 오늘의 식단 가이드 / 기록 후: 부족 영양소 기반 AI 식단 추천 */}
@@ -1067,10 +1114,6 @@ export default function DietScreen() {
                     </View>
                   ))}
                 </View>
-                <View style={styles.sectionDivider} />
-                <Txt variant="label" weight="600" color={D.gray500}>
-                  추천 조합
-                </Txt>
                 {recommend.isPending ? (
                   <View style={styles.recLoading}>
                     <ActivityIndicator color={D.primary} size="small" />
@@ -1084,16 +1127,30 @@ export default function DietScreen() {
                   </Txt>
                 ) : (recommend.data ?? []).length === 0 ? (
                   <Txt variant="caption" color={D.gray500}>
-                    추천할 조합이 없어요.
+                    추천할 음식이 없어요.
                   </Txt>
                 ) : (
-                  <View style={styles.comboList}>
-                    {(recommend.data ?? []).map((combo, i) => (
-                      <View key={i} style={styles.comboChip}>
-                        <Txt variant="caption" weight="600" color={D.gray700}>
-                          {combo.foods.map((f) => `${f.name} ${f.amount}${f.unit}`).join('  +  ')}
+                  <View style={styles.foodChipWrap}>
+                    {(recommend.data ?? []).slice(0, 5).map((f, i) => (
+                      <Pressable
+                        key={`${f.name}-${i}`}
+                        onPress={() => addRecommendedFood(f.name, f.amount, f.unit)}
+                        disabled={addingName !== null}
+                        style={styles.foodChip}>
+                        <Txt variant="label" weight="600" color={D.gray700}>
+                          {f.name}
                         </Txt>
-                      </View>
+                        <Txt variant="label" color={D.gray500}>
+                          {' '}
+                          {f.amount}
+                          {f.unit}
+                        </Txt>
+                        {addingName === f.name ? (
+                          <ActivityIndicator size="small" color={D.primary} style={styles.chipAdd} />
+                        ) : (
+                          <MaterialIcons name="add" size={15} color={D.gray500} style={styles.chipAdd} />
+                        )}
+                      </Pressable>
                     ))}
                   </View>
                 )}
@@ -1112,45 +1169,6 @@ export default function DietScreen() {
                 </Txt>
               </>
             )}
-          </Card>
-
-          {/* ②-b 운동 밸런스 점수 — 식단 기여 + 유효방문/회당 비용 (membership 연동 전 가데이터) */}
-          <Card style={styles.balanceCard}>
-            <View style={styles.balanceHead}>
-              <Txt variant="body" weight="700">
-                운동 밸런스 점수
-              </Txt>
-              <View style={styles.balanceContrib}>
-                <Txt variant="caption" color={D.gray500}>
-                  오늘 식단 기여{' '}
-                </Txt>
-                <Txt variant="caption" weight="700" color={D.primary}>
-                  +{dietScore}
-                </Txt>
-                <Txt variant="caption" color={D.gray500}>
-                  {' '}
-                  / +{BALANCE_MAX_SCORE}점
-                </Txt>
-              </View>
-            </View>
-            <ProgressBar ratio={dietScore / BALANCE_MAX_SCORE} />
-            <Txt variant="caption" color={D.gray700}>
-              {dinnerLogged
-                ? '오늘 방문이 유효방문으로 인정됐어요.'
-                : '저녁 기록까지 마치면 오늘 방문이 유효방문으로 인정돼요.'}
-            </Txt>
-            <View style={styles.costRow}>
-              <Txt variant="label" color={D.gray500}>
-                회당 비용
-              </Txt>
-              <Txt variant="label" color={D.gray500} style={styles.costOld}>
-                ₩{COST_PER_VISIT.toLocaleString()}
-              </Txt>
-              <MaterialIcons name="arrow-forward" size={12} color={D.gray300} />
-              <Txt variant="label" weight="700" color={D.success}>
-                ₩{COST_PER_VISIT_VALID.toLocaleString()}
-              </Txt>
-            </View>
           </Card>
 
           {/* ③ 오늘 섭취 칼로리 — 타이틀을 카드 밖으로 (오늘 기록과 동일 패턴) */}
@@ -1307,15 +1325,17 @@ const styles = StyleSheet.create({
   guideCard: { padding: S.lg, gap: S.md },
   // 가이드 카드 ↔ 이 카드 사이 여백 8px (스크롤 gap 16 - 8)
   aiRecCard: { marginTop: -S.sm },
-  guideHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
-  guideTitleCol: { flex: 1, gap: S.xs },
+  // 가이드 카드 헤더 — 게이지 + '오늘의 식단' 타이틀을 상단 중앙 정렬 (여백 넉넉히)
+  guideHead: { alignItems: 'center', gap: S.sm, paddingTop: S.sm, paddingBottom: S.xs },
+  // 타이틀 ↔ 코멘트는 바짝 붙임
+  guideTitleWrap: { alignItems: 'center', gap: 2 },
 
   // 반원형 게이지
   gaugeWrap: { position: 'relative', alignItems: 'center', justifyContent: 'flex-end' },
   gaugeLabel: { position: 'absolute', bottom: 2, left: 0, right: 0, alignItems: 'center' },
 
   // 목표 매크로
-  macroRow: { flexDirection: 'row', gap: S.md, marginTop: S.md },
+  macroRow: { flexDirection: 'row', gap: S.md, marginTop: 0 },
   macroCol: { flex: 1, gap: S.xs },
   macroValueRow: { flexDirection: 'row', alignItems: 'baseline' },
   macroBar: { marginTop: S.sm },
@@ -1325,13 +1345,12 @@ const styles = StyleSheet.create({
   fill: { height: '100%', borderRadius: R.full },
 
   sectionDivider: { height: StyleSheet.hairlineWidth, backgroundColor: D.line, marginVertical: S.sm },
+  // 매크로 ↔ 운동 밸런스 점수 사이 구분선만 위아래 간격 축소 (카드 기본 gap 상쇄)
+  guideDivider: { marginVertical: 0 },
 
-  // 운동 밸런스 점수 (식단 기여 + 유효방문/회당 비용)
-  balanceCard: { gap: S.sm },
+  // 운동 밸런스 점수 (식단 기여 + 유효방문)
   balanceHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
   balanceContrib: { flexDirection: 'row', alignItems: 'baseline' },
-  costRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
-  costOld: { textDecorationLine: 'line-through' },
 
   // 코칭 — 부족 영양소 + 추천 식품 칩
   deficitList: { flexDirection: 'row', flexWrap: 'wrap', gap: S.md },
@@ -1349,13 +1368,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    paddingHorizontal: 12,
+    paddingLeft: 12,
+    paddingRight: S.sm,
     paddingVertical: S.xs,
     borderRadius: R.full,
     borderWidth: 1,
     borderColor: D.lineStrong,
     backgroundColor: 'transparent',
   },
+  chipAdd: { marginLeft: 2 },
 
   // 칼로리
   kcalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: S.sm },

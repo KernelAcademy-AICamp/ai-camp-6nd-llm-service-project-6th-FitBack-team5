@@ -215,49 +215,39 @@ async function handleAnalyzeImage(anthropicKey: string, foodKey: string | undefi
 
 // ── action: recommend ───────────────────────────────────
 const RECOMMEND_TOOL = {
-  name: 'recommend_combos',
-  description: '부족한 영양소를 채울 한국식 음식 조합을 추천한다.',
+  name: 'recommend_foods',
+  description: '부족한 영양소를 채울 한국식 음식을 개별로 추천한다.',
   input_schema: {
     type: 'object',
     properties: {
-      combos: {
+      foods: {
         type: 'array',
-        description: '음식 조합 2~3개',
+        description: '추천 음식 4~6개',
         items: {
           type: 'object',
           properties: {
-            foods: {
-              type: 'array',
-              description: '한 조합의 음식 2~3개',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string', description: '음식명 (간결하게)' },
-                  amount: { type: 'number', description: '분량 수치' },
-                  unit: { type: 'string', description: '단위 (g, 개, 컵, 공기 등)' },
-                },
-                required: ['name', 'amount', 'unit'],
-              },
-            },
+            name: { type: 'string', description: '음식명 (간결하게, 예: "닭가슴살", "고구마")' },
+            amount: { type: 'number', description: '분량 수치' },
+            unit: { type: 'string', description: '단위 (g, 개, 컵, 공기 등)' },
           },
-          required: ['foods'],
+          required: ['name', 'amount', 'unit'],
         },
       },
     },
-    required: ['combos'],
+    required: ['foods'],
   },
 } as const;
 const RECOMMEND_SYSTEM =
-  'You are FitBack, a Korean nutrition coach. 부족한 영양소를 효율적으로 채울 한국식 음식 조합 2~3개를 추천하라. ' +
-  '각 조합은 함께 먹기 좋은 음식 2~3개와 현실적인 분량으로 구성하라. 운동 회복 맥락이 있으면 반영. 반드시 recommend_combos 도구를 호출하라.';
+  'You are FitBack, a Korean nutrition coach. 부족한 영양소를 효율적으로 채울 한국식 음식 4~6개를 개별로 추천하라. ' +
+  '서로 다른 음식으로 다양하게, 각 음식에 현실적인 분량을 붙여라. 운동 회복 맥락이 있으면 반영. 반드시 recommend_foods 도구를 호출하라.';
 
 async function handleRecommend(anthropicKey: string, deficits: { label?: string; g?: number }[], context?: string) {
   const lines = (Array.isArray(deficits) ? deficits : [])
     .filter((d) => d && d.label && num(d.g) > 0)
     .map((d) => `${d.label} ${Math.round(num(d.g))}g`)
     .join(', ');
-  if (!lines) return json({ combos: [] });
-  const userMsg = `부족한 영양소: ${lines}.${context ? ` 맥락: ${context}.` : ''} 한 끼에 먹기 좋은 음식 조합을 추천해줘.`;
+  if (!lines) return json({ foods: [] });
+  const userMsg = `부족한 영양소: ${lines}.${context ? ` 맥락: ${context}.` : ''} 이를 채울 음식을 개별로 추천해줘.`;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -267,24 +257,20 @@ async function handleRecommend(anthropicKey: string, deficits: { label?: string;
       max_tokens: 1024,
       system: RECOMMEND_SYSTEM,
       tools: [RECOMMEND_TOOL],
-      tool_choice: { type: 'tool', name: 'recommend_combos' },
+      tool_choice: { type: 'tool', name: 'recommend_foods' },
       messages: [{ role: 'user', content: userMsg }],
     }),
   });
   if (!res.ok) return json({ error: 'Claude API error', status: res.status, detail: await res.text() }, 502);
   const claude = await res.json();
   const block = Array.isArray(claude?.content) ? claude.content.find((c: { type?: string }) => c?.type === 'tool_use') : null;
-  const rawCombos = block?.input?.combos;
-  if (!Array.isArray(rawCombos)) return json({ combos: [] });
+  const rawFoods = block?.input?.foods;
+  if (!Array.isArray(rawFoods)) return json({ foods: [] });
 
-  const combos = rawCombos
-    .map((c: { foods?: unknown }) => ({
-      foods: (Array.isArray(c.foods) ? c.foods : [])
-        .map((f: Record<string, unknown>) => ({ name: str(f.name), amount: Math.round(num(f.amount)), unit: str(f.unit) || 'g' }))
-        .filter((f: { name: string }) => f.name),
-    }))
-    .filter((c: { foods: unknown[] }) => c.foods.length > 0);
-  return json({ combos });
+  const foods = rawFoods
+    .map((f: Record<string, unknown>) => ({ name: str(f.name), amount: Math.round(num(f.amount)), unit: str(f.unit) || 'g' }))
+    .filter((f: { name: string }) => f.name);
+  return json({ foods });
 }
 
 // ── 라우터 ──────────────────────────────────────────────
