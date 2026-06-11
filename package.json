@@ -17,12 +17,14 @@
     "expo-image-manipulator": "~56.0.18",
     "expo-image-picker": "~56.0.17",
     "expo-linking": "~56.0.13",
+    "expo-location": "~56.0.16",
     "expo-router": "~56.2.9",
     "expo-splash-screen": "~56.0.10",
     "expo-status-bar": "~56.0.4",
     "expo-symbols": "~56.0.6",
     "expo-system-ui": "~56.0.5",
     "expo-web-browser": "~56.0.5",
+    "lucide-react-native": "^1.17.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
@@ -38,6 +40,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "pg": "^8.21.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -46,7 +49,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "db:build": "node ./scripts/build-setup-sql.js",
+    "db:push": "node ./scripts/build-setup-sql.js && node ./scripts/db-push.js"
   },
   "private": true
 }

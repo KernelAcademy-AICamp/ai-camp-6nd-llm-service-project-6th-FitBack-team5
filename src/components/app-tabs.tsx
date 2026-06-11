@@ -1,21 +1,14 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { Palette } from '@/constants/theme';
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-
-  // design.md §9 바텀 네비게이션 — 활성 Primary #6675FF
-  const PRIMARY = '#6675FF';
-
   return (
     <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      tintColor={PRIMARY}
-      labelStyle={{ selected: { color: PRIMARY } }}>
+      backgroundColor={Palette.bgSurface}
+      indicatorColor={Palette.primaryLight}
+      labelStyle={{ color: Palette.gray300, selected: { color: Palette.primary } }}>
+
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>회원권</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

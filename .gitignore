@@ -43,3 +43,6 @@ example
 # generated native folders
 /ios
 /android
+
+# supabase CLI 로컬 임시 파일
+supabase/.temp/
