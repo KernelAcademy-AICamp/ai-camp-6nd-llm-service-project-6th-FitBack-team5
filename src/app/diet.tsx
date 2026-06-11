@@ -166,7 +166,7 @@ function ProgressBar({ ratio, color = D.primary }: { ratio: number; color?: stri
 function MacroProgress({ label, value, goal }: { label: string; value: number; goal: number }) {
   return (
     <View style={styles.macroCol}>
-      <Txt variant="label" color={D.gray500}>
+      <Txt variant="caption" color={D.gray500}>
         {label}
       </Txt>
       <View style={styles.macroValueRow}>
@@ -202,7 +202,7 @@ function SemiGauge({
   const cx = W / 2;
   const cy = r + SW / 2;
   const H = cy + SW / 2;
-  const p = active ? Math.min(Math.max(ratio / 1.5, 0), 1) : 0; // 좌→우 채움 비율
+  const p = active ? Math.min(Math.max(ratio, 0), 1) : 0; // 좌→우 채움 비율 (100% = 가득)
   const theta = Math.PI * (1 - p); // 좌(π) → 우(0)
   const ex = cx + r * Math.cos(theta);
   const ey = cy - r * Math.sin(theta);
@@ -941,27 +941,26 @@ export default function DietScreen() {
   const calorieGoal = target.kcal;
   const remaining = calorieGoal - totals.kcal;
   const over = remaining < 0;
-  const net = totals.kcal - BURNED_KCAL;
-  const netRatio = net / calorieGoal;
-  const energyStatus = balanceStatus(netRatio);
+  // 운동 대비 섭취 게이지 — 섭취 ÷ (목표 + 운동소모). 활동 후(목표+소모)가 100%.
+  const energyTarget = calorieGoal + BURNED_KCAL;
+  const intakeRatio = energyTarget > 0 ? totals.kcal / energyTarget : 0;
+  const energyStatus = balanceStatus(intakeRatio);
 
   // 헤더 한 줄 코멘트 — 운동 상태(운동 대비 섭취) + 식단 상태(매크로 균형)에 따라 변동
   const partLabel = MOCK_CONTEXT.part ? PART_LABEL[MOCK_CONTEXT.part] : null;
   const stateHint = ((): string => {
-    if (!hasLog) {
-      return partLabel ? `${partLabel} 운동 후 식단을 기록해보세요.` : '오늘 식단을 기록해보세요.';
-    }
+    if (!hasLog) return partLabel ? `${partLabel} 후 식단을 기록해보세요.` : '식단을 기록해보세요.';
     // 1순위: 운동량 대비 섭취 상태
-    if (netRatio < 0.9) return '운동량 대비 덜 먹었어요. 회복을 위해 더 채워보세요.';
-    if (netRatio > 1.05) return '운동량 대비 많이 먹었어요. 다음 끼니는 가볍게 가요.';
+    if (intakeRatio < 0.9) return '운동량 대비 덜 먹었어요.';
+    if (intakeRatio > 1.05) return '운동량 대비 많이 먹었어요.';
     // 적정 범위 → 매크로 균형으로 코멘트
     const rp = totals.protein / target.protein;
     const rc = totals.carb / target.carb;
     const rf = totals.fat / target.fat;
-    if (rp >= 1) return '단백질까지 잘 챙겼어요. 회복에 좋아요!';
-    if (rp >= rc && rp >= rf) return '단백질 위주로 잘 채우고 있어요!';
-    if (rc >= rf) return '탄수화물 비중이 조금 높아요.';
-    return '지방 비중이 조금 높아요.';
+    if (rp >= 1) return '단백질까지 잘 챙겼어요!';
+    if (rp >= rc && rp >= rf) return '단백질 위주로 잘 챙겼어요!';
+    if (rc >= rf) return '탄수화물이 조금 높아요.';
+    return '지방이 조금 높아요.';
   })();
 
   // 운동 밸런스 점수 — 기록한 끼니 수에 비례(끼니당 2점, 최대 8). 가데이터
@@ -1035,10 +1034,9 @@ export default function DietScreen() {
           <Card style={styles.guideCard}>
             {/* 운동 대비 섭취 상태 게이지 + '오늘의 식단' 타이틀 (상단 중앙) */}
             <View style={styles.guideHead}>
-              <SemiGauge ratio={netRatio} status={energyStatus} active={hasLog} />
+              <SemiGauge ratio={intakeRatio} status={energyStatus} active={hasLog} />
               <View style={styles.guideTitleWrap}>
-                <Txt variant="h2">오늘의 식단</Txt>
-                <Txt variant="caption" color={D.gray500}>
+                <Txt variant="body" color={D.gray500}>
                   {stateHint}
                 </Txt>
               </View>
@@ -1055,7 +1053,7 @@ export default function DietScreen() {
 
             {/* 운동 밸런스 점수 — 식단 기여 + 유효방문 (membership 연동 전 가데이터) */}
             <View style={styles.balanceHead}>
-              <Txt variant="body" weight="700">
+              <Txt variant="caption" weight="600" color={D.gray700}>
                 운동 밸런스 점수
               </Txt>
               <View style={styles.balanceContrib}>
@@ -1307,7 +1305,8 @@ const styles = StyleSheet.create({
   calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   calCell: { width: `${100 / 7}%`, alignItems: 'center', justifyContent: 'center', paddingVertical: S.xs },
   calDay: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  scroll: { paddingHorizontal: SIDE, paddingTop: 0, paddingBottom: NAV_HEIGHT + S.xxl + S.md, gap: S.md },
+  // paddingTop = FadeTop 높이(S.md) → 첫 콘텐츠가 그라데이션 아래에서 시작(가림 방지)
+  scroll: { paddingHorizontal: SIDE, paddingTop: S.md, paddingBottom: NAV_HEIGHT + S.xxl + S.md, gap: S.md },
   flex1: { flex: 1 },
 
   card: {
@@ -1326,7 +1325,7 @@ const styles = StyleSheet.create({
   // 가이드 카드 ↔ 이 카드 사이 여백 8px (스크롤 gap 16 - 8)
   aiRecCard: { marginTop: -S.sm },
   // 가이드 카드 헤더 — 게이지 + '오늘의 식단' 타이틀을 상단 중앙 정렬 (여백 넉넉히)
-  guideHead: { alignItems: 'center', gap: S.sm, paddingTop: S.sm, paddingBottom: S.xs },
+  guideHead: { alignItems: 'center', gap: S.sm, paddingTop: S.sm, paddingBottom: 0 },
   // 타이틀 ↔ 코멘트는 바짝 붙임
   guideTitleWrap: { alignItems: 'center', gap: 2 },
 
@@ -1335,10 +1334,10 @@ const styles = StyleSheet.create({
   gaugeLabel: { position: 'absolute', bottom: 2, left: 0, right: 0, alignItems: 'center' },
 
   // 목표 매크로
-  macroRow: { flexDirection: 'row', gap: S.md, marginTop: 0 },
-  macroCol: { flex: 1, gap: S.xs },
+  macroRow: { flexDirection: 'row', gap: S.md, marginTop: S.md },
+  macroCol: { flex: 1, gap: 2 },
   macroValueRow: { flexDirection: 'row', alignItems: 'baseline' },
-  macroBar: { marginTop: S.sm },
+  macroBar: { marginTop: 0 },
 
   // progress
   track: { height: 6, borderRadius: R.full, backgroundColor: D.gray100, overflow: 'hidden' },
