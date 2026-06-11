@@ -313,38 +313,63 @@ function PrimaryButton({
   );
 }
 
-function MealRow({ item }: { item: Meal }) {
-  const [open, setOpen] = useState(false);
+// 끼니별 아이콘·색 (간식은 MaterialIcons에 사과가 없어 이모지 사용)
+const MEAL_VISUAL: Record<MealType, { icon?: React.ComponentProps<typeof MaterialIcons>['name']; emoji?: string; bg: string; tint: string }> = {
+  아침: { icon: 'wb-twilight', bg: '#FFEFD9', tint: '#F5A623' },
+  점심: { icon: 'wb-sunny', bg: '#FFF6D6', tint: '#F2B807' },
+  저녁: { icon: 'bedtime', bg: '#ECE9FD', tint: '#7C6CF0' },
+  간식: { emoji: '🍎', bg: '#FFE3E3', tint: '#FF6B6B' },
+};
+
+// 끼니 슬롯 — 해당 끼니의 기록을 요약(없으면 추가 버튼). 탭하면 그 끼니로 기록 추가.
+function MealSlot({ type, meals, onPress }: { type: MealType; meals: Meal[]; onPress: (t: MealType) => void }) {
+  const v = MEAL_VISUAL[type];
+  const mine = meals.filter((m) => m.mealType === type);
+  const has = mine.length > 0;
+  const name = mine.map((m) => m.name).join(', ');
+  const kcal = mine.reduce((s, m) => s + m.kcal, 0);
+  const time = mine[0]?.time;
   return (
-    <Pressable onPress={() => setOpen((o) => !o)}>
-      <View style={styles.mealRow}>
-        <View style={styles.mealLeft}>
-          <View style={styles.mealTag}>
-            <Txt variant="label" color={D.gray700}>
-              {item.mealType}
-            </Txt>
-          </View>
-          <View style={styles.mealInfo}>
-            <Txt variant="body" numberOfLines={1}>
-              {item.name}
+    <Pressable onPress={() => onPress(type)} style={styles.slotCard}>
+      <View style={[styles.slotIcon, { backgroundColor: v.bg }]}>
+        {v.emoji ? (
+          <Txt variant="body">{v.emoji}</Txt>
+        ) : (
+          <MaterialIcons name={v.icon} size={24} color={v.tint} />
+        )}
+      </View>
+      <View style={styles.flex1}>
+        <Txt variant="body" weight="700">
+          {type}
+        </Txt>
+        {has ? (
+          <>
+            <Txt variant="caption" color={D.gray700} numberOfLines={1}>
+              {name}
             </Txt>
             <Txt variant="caption" color={D.gray500}>
-              {item.time}
+              {time} · {kcal} kcal
+            </Txt>
+          </>
+        ) : (
+          <Txt variant="caption" color={D.gray500}>
+            아직 기록 없음
+          </Txt>
+        )}
+      </View>
+      {has ? (
+        <View style={styles.slotRight}>
+          <View style={styles.slotBadge}>
+            <MaterialIcons name="check" size={12} color={D.success} />
+            <Txt variant="label" weight="600" color={D.success}>
+              기록됨
             </Txt>
           </View>
+          <MaterialIcons name="chevron-right" size={20} color={D.gray300} />
         </View>
-        <View style={styles.mealRight}>
-          <Txt variant="body" weight="600">
-            {item.kcal} kcal
-          </Txt>
-          <MaterialIcons name={open ? 'expand-less' : 'expand-more'} size={20} color={D.gray300} />
-        </View>
-      </View>
-      {open && (
-        <View style={styles.mealMacros}>
-          <Txt variant="caption" color={D.gray500}>
-            탄 {item.carb}g · 단 {item.protein}g · 지 {item.fat}g
-          </Txt>
+      ) : (
+        <View style={styles.slotAddBtn}>
+          <MaterialIcons name="add" size={20} color={D.primary} />
         </View>
       )}
     </Pressable>
@@ -362,13 +387,17 @@ const REC_TABS: { key: RecTab; label: string; icon: React.ComponentProps<typeof 
 
 function RecordModal({
   visible,
+  initialMealType,
   onClose,
   onSave,
 }: {
   visible: boolean;
+  initialMealType?: MealType;
   onClose: () => void;
   onSave: (meal: Omit<Meal, 'id' | 'time'>) => void;
 }) {
+  // 슬롯에서 열면 그 끼니로, 아니면 시간대 기본 끼니
+  const mealType = initialMealType ?? currentMealType();
   const [tab, setTab] = useState<RecTab>('image');
   const [step, setStep] = useState<RecStep>('input');
   const [textInput, setTextInput] = useState('');
@@ -400,7 +429,7 @@ function RecordModal({
     try {
       const r = await analyzeMeal.mutateAsync({ text, grams: Number.isFinite(grams) && grams > 0 ? grams : undefined });
       setDraft({
-        mealType: currentMealType(),
+        mealType,
         name: r.name,
         kcal: r.kcal,
         carb: r.carb,
@@ -430,7 +459,7 @@ function RecordModal({
     try {
       const r = await analyzeImage.mutateAsync(picked);
       setDraft({
-        mealType: currentMealType(),
+        mealType,
         name: r.name,
         kcal: r.kcal,
         carb: r.carb,
@@ -447,7 +476,7 @@ function RecordModal({
 
   function pickFood(food: FoodSearchResult) {
     setDraft({
-      mealType: currentMealType(),
+      mealType,
       name: food.name,
       kcal: food.kcal,
       carb: food.carb,
@@ -861,6 +890,13 @@ export default function DietScreen() {
   const { data: meals = [], isLoading, isError, refetch } = useMeals(selectedDate);
   const addMeal = useAddMeal(selectedDate);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalMealType, setModalMealType] = useState<MealType | undefined>(undefined);
+
+  // 기록 모달 열기 — 끼니 슬롯에서 열면 그 끼니로 초기 선택
+  function openRecord(type?: MealType) {
+    setModalMealType(type);
+    setModalOpen(true);
+  }
 
 
   // 가이드 목표 — 회원 신체정보(profiles) 기반. 단백질=체중×1.5g, 칼로리=TDEE×목표보정.
@@ -1096,19 +1132,29 @@ export default function DietScreen() {
             <CalorieBar consumed={totals.kcal} goal={calorieGoal} burned={BURNED_KCAL} />
           </Card>
 
-          {/* ④ 오늘 기록 */}
-          <Txt variant="body" weight="600" color={D.gray700} style={styles.listHead}>
-            오늘 기록 {meals.length}
-          </Txt>
-          <Card style={hasLog ? styles.listCard : undefined}>
-            {isLoading ? (
+          {/* ④ 오늘 기록 — 끼니별 슬롯 */}
+          <View style={styles.listHeadRow}>
+            <Txt variant="body" weight="700" color={D.gray900}>
+              오늘 기록
+            </Txt>
+            <Pressable onPress={() => openRecord()} hitSlop={8} style={styles.addMealBtn}>
+              <MaterialIcons name="add" size={16} color={D.primary} />
+              <Txt variant="caption" weight="700" color={D.primary}>
+                식사 추가
+              </Txt>
+            </Pressable>
+          </View>
+          {isLoading ? (
+            <Card>
               <View style={styles.listState}>
                 <ActivityIndicator color={D.primary} />
                 <Txt variant="caption" color={D.gray500}>
                   기록을 불러오는 중…
                 </Txt>
               </View>
-            ) : isError ? (
+            </Card>
+          ) : isError ? (
+            <Card>
               <View style={styles.listState}>
                 <Txt variant="caption" color={D.gray500}>
                   기록을 불러오지 못했어요.
@@ -1119,32 +1165,21 @@ export default function DietScreen() {
                   </Txt>
                 </Pressable>
               </View>
-            ) : !hasLog ? (
-              <View style={styles.listState}>
-                <MaterialIcons name="restaurant" size={36} color={D.gray300} />
-                <Txt variant="body" weight="600" style={styles.center}>
-                  오늘 가이드대로 첫 끼를 기록해보세요
-                </Txt>
-                <Txt variant="caption" color={D.gray500} style={styles.center}>
-                  한 끼만 기록해도 회복 달성률이 올라가요
-                </Txt>
-              </View>
-            ) : (
-              meals.map((m, i) => (
-                <View key={m.id}>
-                  {i > 0 && <View style={styles.divider} />}
-                  <MealRow item={m} />
-                </View>
-              ))
-            )}
-          </Card>
+            </Card>
+          ) : (
+            <View style={styles.slotList}>
+              {MEAL_TYPES.map((t) => (
+                <MealSlot key={t} type={t} meals={meals} onPress={openRecord} />
+              ))}
+            </View>
+          )}
         </ScrollView>
           <FadeTop />
         </View>
 
       </SafeAreaView>
 
-      <RecordModal visible={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} />
+      <RecordModal visible={modalOpen} initialMealType={modalMealType} onClose={() => setModalOpen(false)} onSave={handleSave} />
       <CalendarModal
         visible={calendarOpen}
         selected={selectedDate}
@@ -1291,6 +1326,43 @@ const styles = StyleSheet.create({
 
   // list
   listHead: { marginTop: S.xs, marginLeft: S.xs, marginBottom: -S.sm },
+  listHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: S.xs,
+    marginHorizontal: S.xs,
+  },
+  addMealBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  slotList: { gap: S.sm },
+  slotCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.md,
+    backgroundColor: D.surface,
+    borderRadius: R.card,
+    padding: S.md,
+    ...LEVEL1,
+  },
+  slotIcon: { width: 48, height: 48, borderRadius: R.card, alignItems: 'center', justifyContent: 'center' },
+  slotRight: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+  slotBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#EAF8EF',
+    borderRadius: R.full,
+    paddingHorizontal: S.sm,
+    paddingVertical: 3,
+  },
+  slotAddBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: R.full,
+    backgroundColor: D.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // 섹션 위 여백 32px (스크롤 gap 16 + marginTop 16)
   kcalTitle: { marginTop: S.md, marginLeft: S.xs, marginBottom: -S.sm },
   listCard: { paddingVertical: 0 },
