@@ -126,6 +126,13 @@ const MACRO_META = [
   { key: 'fat', label: '지방' },
 ] as const;
 
+// 매크로별 아이콘·색 (다음 식사 추천 표시용)
+const MACRO_ICON: Record<'protein' | 'carb' | 'fat', { icon: React.ComponentProps<typeof MaterialIcons>['name']; color: string }> = {
+  protein: { icon: 'local-fire-department', color: '#F5A623' },
+  carb: { icon: 'bolt', color: '#F2B807' },
+  fat: { icon: 'water-drop', color: '#6675FF' },
+};
+
 function currentMealType(): MealType {
   return '저녁'; // 가데이터: 시간대 기본 끼니 (라이브 시각 미사용)
 }
@@ -313,12 +320,12 @@ function PrimaryButton({
   );
 }
 
-// 끼니별 아이콘·색 (간식은 MaterialIcons에 사과가 없어 이모지 사용)
-const MEAL_VISUAL: Record<MealType, { icon?: React.ComponentProps<typeof MaterialIcons>['name']; emoji?: string; bg: string; tint: string }> = {
-  아침: { icon: 'wb-twilight', bg: '#FFEFD9', tint: '#F5A623' },
-  점심: { icon: 'wb-sunny', bg: '#FFF6D6', tint: '#F2B807' },
-  저녁: { icon: 'bedtime', bg: '#ECE9FD', tint: '#7C6CF0' },
-  간식: { emoji: '🍎', bg: '#FFE3E3', tint: '#FF6B6B' },
+// 끼니별 아이콘·색 (배경 없이 아이콘 틴트만)
+const MEAL_VISUAL: Record<MealType, { icon: React.ComponentProps<typeof MaterialIcons>['name']; tint: string }> = {
+  아침: { icon: 'wb-twilight', tint: '#F5A623' },
+  점심: { icon: 'wb-sunny', tint: '#F2B807' },
+  저녁: { icon: 'bedtime', tint: '#7C6CF0' },
+  간식: { icon: 'egg', tint: '#F5A623' },
 };
 
 // 끼니 슬롯 — 해당 끼니의 기록을 요약(없으면 추가 버튼). 탭하면 그 끼니로 기록 추가.
@@ -331,12 +338,8 @@ function MealSlot({ type, meals, onPress }: { type: MealType; meals: Meal[]; onP
   const time = mine[0]?.time;
   return (
     <Pressable onPress={() => onPress(type)} style={styles.slotCard}>
-      <View style={[styles.slotIcon, { backgroundColor: v.bg }]}>
-        {v.emoji ? (
-          <Txt variant="body">{v.emoji}</Txt>
-        ) : (
-          <MaterialIcons name={v.icon} size={24} color={v.tint} />
-        )}
+      <View style={styles.slotIcon}>
+        <MaterialIcons name={v.icon} size={28} color={v.tint} />
       </View>
       <View style={styles.flex1}>
         <Txt variant="body" weight="700">
@@ -968,6 +971,8 @@ export default function DietScreen() {
   );
   const deficitLines = deficits.filter((d) => topKeys.has(d.key)); // 매크로 순서(단·탄·지) 유지
   const recFoods = deficitLines.flatMap((d) => FOOD_REC[d.key].slice(0, 2)); // 각 영양소당 2개씩 균형
+  // 하루 3끼 기준 한 끼 분량(1/3)으로 추천
+  const nextMealG = (g: number) => Math.max(1, Math.round(g / 3));
 
   function handleSave(meal: Omit<Meal, 'id' | 'time'>) {
     addMeal.mutate(meal);
@@ -987,7 +992,7 @@ export default function DietScreen() {
           <Card style={styles.guideCard}>
             <View style={styles.guideHeadRow}>
               <View style={styles.flex1}>
-                <Txt variant="h1">오늘의 식단 목표</Txt>
+                <Txt variant="h1">운동 기반 식단</Txt>
                 <Txt variant="caption" color={D.gray500}>
                   {macroHint}
                 </Txt>
@@ -1055,17 +1060,20 @@ export default function DietScreen() {
                 <View style={styles.aiHead}>
                   <MaterialIcons name="auto-awesome" size={16} color={D.primary} />
                   <Txt variant="label" weight="600" color={D.primary}>
-                    AI 식단 추천
+                    다음 식단 추천
                   </Txt>
                 </View>
-                <Txt variant="caption" color={D.gray500}>
-                  다음 식사에서 채워보세요.
-                </Txt>
                 <View style={styles.deficitList}>
                   {deficitLines.map((d) => (
-                    <Txt key={d.key} variant="body" weight="700">
-                      {d.label} {d.g}g 부족
-                    </Txt>
+                    <View key={d.key} style={styles.deficitRow}>
+                      <MaterialIcons name={MACRO_ICON[d.key].icon} size={16} color={D.gray500} />
+                      <Txt variant="caption" color={D.gray700}>
+                        {d.label}
+                      </Txt>
+                      <Txt variant="caption" weight="700">
+                        {nextMealG(d.g)}g
+                      </Txt>
+                    </View>
                   ))}
                 </View>
                 <View style={styles.foodChipWrap}>
@@ -1087,7 +1095,7 @@ export default function DietScreen() {
                 <View style={styles.aiHead}>
                   <MaterialIcons name="auto-awesome" size={16} color={D.primary} />
                   <Txt variant="label" weight="600" color={D.primary}>
-                    AI 식단 추천
+                    다음 식단 추천
                   </Txt>
                 </View>
                 <Txt variant="body" weight="600">
@@ -1137,12 +1145,6 @@ export default function DietScreen() {
             <Txt variant="body" weight="700" color={D.gray900}>
               오늘 기록
             </Txt>
-            <Pressable onPress={() => openRecord()} hitSlop={8} style={styles.addMealBtn}>
-              <MaterialIcons name="add" size={16} color={D.primary} />
-              <Txt variant="caption" weight="700" color={D.primary}>
-                식사 추가
-              </Txt>
-            </Pressable>
           </View>
           {isLoading ? (
             <Card>
@@ -1275,7 +1277,8 @@ const styles = StyleSheet.create({
   meterLabels: { flexDirection: 'row', justifyContent: 'space-between' },
 
   // 코칭 — 부족 영양소 + 추천 식품 칩
-  deficitList: { gap: 2 },
+  deficitList: { flexDirection: 'row', flexWrap: 'wrap', gap: S.md },
+  deficitRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
   foodChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs },
   foodChip: {
     flexDirection: 'row',
@@ -1344,7 +1347,7 @@ const styles = StyleSheet.create({
     padding: S.md,
     ...LEVEL1,
   },
-  slotIcon: { width: 48, height: 48, borderRadius: R.card, alignItems: 'center', justifyContent: 'center' },
+  slotIcon: { width: 48, height: 48, borderRadius: R.card, backgroundColor: D.muted, alignItems: 'center', justifyContent: 'center' },
   slotRight: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
   slotBadge: {
     flexDirection: 'row',
