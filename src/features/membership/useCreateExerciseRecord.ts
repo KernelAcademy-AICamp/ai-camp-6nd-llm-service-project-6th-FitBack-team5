@@ -5,10 +5,12 @@ import { useCurrentUser } from '@/stores/auth';
 
 export interface NewExerciseInput {
   visitId: string;
-  exercisePart: string;
+  exercisePart: string | null; // 자유이용권만 사용. PT/클래스는 null.
   intensity: string | null; // 'easy' | 'normal' | 'hard'
   duration: number | null; // 분
   notes: string | null;
+  /** 형태별 부가정보: { kind, trainer?, className?, status }. */
+  autoData?: Record<string, unknown> | null;
 }
 
 /** 한 방문(visit)에 운동 기록 1건 추가. 성공 시 이번달 통계 무효화. */
@@ -27,6 +29,7 @@ export function useCreateExerciseRecord() {
           intensity: input.intensity,
           duration: input.duration,
           notes: input.notes,
+          auto_data: input.autoData ?? null,
         })
         .select()
         .single();

@@ -7,6 +7,7 @@ import {
   MapPin,
   Navigation,
   Search,
+  Sparkles,
   TrainFront,
   X,
 } from 'lucide-react-native';
@@ -56,6 +57,15 @@ function distanceKm(a: Pt, b: Pt): number {
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
+}
+
+// 4-2: 도착이 가까워질수록 거리(m) 기준 격려 문구 3단계. (Voice&Tone: 압박 X, 응원·본전 톤)
+function encourageMsg(remainM: number | null): string | null {
+  if (remainM == null) return null;
+  if (remainM <= 120) return '도착 직전! 오늘도 본전 찾기 성공이에요.';
+  if (remainM <= 300) return '코앞이에요. 이 페이스면 충분해요.';
+  if (remainM <= 600) return '거의 다 왔어요. 조금만 더!';
+  return null;
 }
 
 function CheckItem({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
@@ -535,6 +545,18 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
               </View>
             </Card>
 
+            {(() => {
+              const msg = encourageMsg(remainKm != null ? remainKm * 1000 : null);
+              return msg ? (
+                <View style={styles.encourageRow}>
+                  <Icon icon={Sparkles} size={16} color={Palette.primary} />
+                  <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                    {msg}
+                  </ThemedText>
+                </View>
+              ) : null;
+            })()}
+
             {usingSim ? (
               <ThemedText type="label" themeColor="textSecondary">
                 · 이 기기에서 GPS를 못 잡아 가상 이동으로 표시 중이에요 (실기기에선 실제 위치로 갱신).
@@ -639,7 +661,13 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         ) : null}
 
         {step === 'exercise' && visitId ? (
-          <ExerciseRecordForm visitId={visitId} onDone={() => setStep('logged')} onSkip={onClose} />
+          <ExerciseRecordForm
+            visitId={visitId}
+            membershipType={selected?.type ?? 'free'}
+            remainingVisits={selected?.remainingVisits ?? null}
+            onDone={() => setStep('logged')}
+            onSkip={onClose}
+          />
         ) : null}
 
         {step === 'logged' ? (
@@ -751,4 +779,13 @@ const styles = StyleSheet.create({
   },
   skip: { alignItems: 'center', paddingVertical: Spacing.sm },
   center: { textAlign: 'center' },
+  encourageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.small,
+    backgroundColor: Palette.primaryLight,
+  },
 });
