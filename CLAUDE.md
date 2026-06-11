@@ -23,6 +23,31 @@
 | 클라이언트 상태 | Zustand ([src/stores/auth.ts](src/stores/auth.ts)) |
 | 언어 | TypeScript |
 
+## 디자인 시스템
+
+전체 스펙은 [design.md](design.md) 참고. 코드 토큰은 [src/constants/theme.ts](src/constants/theme.ts)에 정의.
+
+**적용된 것**
+- 컬러 팔레트 (Primary `#6675FF`, BG Base `#FAF9F7`, Semantic UI/손익, Neutral, Line)
+- Spacing — 8pt 그리드 (semantic 별칭 `xs/sm/md/lg/xl/xxl`) + 좌우 여백 `ScreenPaddingX = 20`
+- Radius — `small(8)/button(12)/card(20)/modal(20)/full(100)`
+- Elevation — `level1/level2` (웹 `boxShadow` + 네이티브 `shadow*` 자동 분기)
+- 타입 스케일 — [ThemedText](src/components/themed-text.tsx) `default/display/title/subtitle/small/smallBold` 가 design §5 기준으로 매핑됨, 자간 -2.5% 자동 적용
+- 화면 적용 — 로그인, 회원권, 식단, 홈트, 탭바(웹/네이티브), 로딩 상태
+
+**보류 (별도 작업 필요)**
+- **Pretendard 폰트** — `expo-font` 셋업 + 폰트 파일 추가 필요. 현재 시스템 sans-serif fallback.
+- **Lucide 아이콘** — `lucide-react-native` 설치 + 탭/UI 아이콘 교체. 현재 템플릿 PNG 재사용.
+- **AI 피드백 Voice/Tone** — 아직 AI 기능 없음. AI 멘트 도입 시 design §12 톤 가이드 적용.
+
+**디자인 사용 금지 (design.md §14) — 코드 작성 시 준수**
+- 그라데이션 배경 (손익 게이지 제외)
+- Primary 컬러를 에러/경고에 사용 금지
+- 손익 컬러(흑자/적자)를 일반 성공/실패에 혼용 금지
+- 카드 내 카드 중첩 금지
+- Primary 버튼 화면당 1개
+- 이모티콘 금지 (Lucide 아이콘 사용)
+
 ## 프로젝트 구조
 
 `create-expo-app` 기본 템플릿(SDK 56) 그대로 사용 중. 라우트는 `app/`이 아니라 `src/app/`에 위치한다.

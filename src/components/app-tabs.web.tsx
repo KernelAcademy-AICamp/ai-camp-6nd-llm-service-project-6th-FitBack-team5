@@ -1,11 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import {
-  Tabs,
   TabList,
-  TabTrigger,
-  TabSlot,
-  TabTriggerSlotProps,
   TabListProps,
+  Tabs,
+  TabSlot,
+  TabTrigger,
+  TabTriggerSlotProps,
 } from 'expo-router/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
