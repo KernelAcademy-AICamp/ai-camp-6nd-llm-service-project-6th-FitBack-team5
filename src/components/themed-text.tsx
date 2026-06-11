@@ -1,6 +1,6 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
-import { ThemeColor } from '@/constants/theme';
+import { Palette, ThemeColor, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ThemedTextType =
@@ -37,45 +37,23 @@ export function ThemedText({ style, type = 'body', themeColor, ...rest }: Themed
   );
 }
 
-// design.md §5 타입 스케일
 const styles = StyleSheet.create({
-  small: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: 500,
-  },
-  smallBold: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: 700,
-  },
-  default: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: 500,
-  },
-  title: {
-    fontSize: 48,
-    fontWeight: 600,
-    lineHeight: 52,
-  },
-  subtitle: {
-    fontSize: 32,
-    lineHeight: 44,
-    fontWeight: 600,
-  },
-  link: {
-    lineHeight: 30,
-    fontSize: 14,
-  },
-  linkPrimary: {
-    lineHeight: 30,
-    fontSize: 14,
-    color: '#3c87f7',
-  },
-  code: {
-    fontFamily: Fonts.mono,
-    fontWeight: Platform.select({ android: 700 }) ?? 500,
-    fontSize: 12,
-  },
+  // 디자인 시스템 타입 스케일
+  display: Typography.display,
+  h1: Typography.h1,
+  h2: Typography.h2,
+  body: Typography.body,
+  caption: Typography.caption,
+  captionBold: Typography.captionBold,
+  label: Typography.label,
+
+  // 레거시 별칭 → 디자인 토큰 매핑
+  default: Typography.body,
+  title: Typography.h1,
+  subtitle: Typography.h2,
+  small: Typography.caption,
+  smallBold: Typography.captionBold,
+  link: { ...Typography.caption, color: Palette.primary },
+  linkPrimary: { ...Typography.caption, color: Palette.primary },
+  code: { fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
 });

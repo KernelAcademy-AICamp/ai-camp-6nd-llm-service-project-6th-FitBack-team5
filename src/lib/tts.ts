@@ -4,9 +4,31 @@
  * 1단계: expo-speech 만 구현 (캐시된 audioUrl이 있어도 무시하고 speak).
  * 추후 클라우드 TTS 도입 시 playCue 내부에서 expo-av로 캐시 재생 분기 추가.
  */
+import { Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 
 export const TTS_VERSION = 1;
+
+/**
+ * 웹 SpeechSynthesis 자동재생 게이트 해제용. 유저 제스처(클릭/탭) 콜스택에서
+ * 호출해야 효과가 있다. native에서는 no-op.
+ *
+ * 무음·짧은 utterance를 한 번 speak해두면 같은 탭의 이후 speak가 무성 처리되지 않는다.
+ */
+let primed = false;
+export function primeTts(): void {
+  if (Platform.OS !== 'web' || primed) return;
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  try {
+    const u = new window.SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    u.lang = 'ko-KR';
+    window.speechSynthesis.speak(u);
+    primed = true;
+  } catch {
+    // 일부 브라우저/환경 비대응 — 조용히 무시
+  }
+}
 
 interface SpeakOptions {
   rate?: number;
@@ -28,11 +50,78 @@ export function getTtsRate(): number {
   return globalRate;
 }
 
+// ── 웹: window.speechSynthesis 직접 사용 (expo-speech 우회) ─────────────
+//
+// 이유: expo-speech 웹 셈이 보이스 로딩 race, onend 누락, 동시 utterance 처리
+// 등에서 종종 무음이 됨. 직접 API를 쓰면 보이스 선택과 큐 동작을 통제 가능.
+
+function pickKoreanVoice(): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  return (
+    voices.find((v) => v.lang === 'ko-KR') ??
+    voices.find((v) => v.lang?.startsWith('ko')) ??
+    voices.find((v) => v.default) ??
+    voices[0] ??
+    null
+  );
+}
+
+function webSpeak(text: string, opts?: SpeakOptions): void {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    opts?.onDone?.();
+    return;
+  }
+  const synth = window.speechSynthesis;
+
+  // Chrome 알려진 버그: ~15초 이상 idle 또는 이전 utterance가 깔끔히 정리 안 되면
+  // 내부 큐가 paused/stuck 상태로 빠져 다음 speak가 무음. cancel + resume으로 강제 해제.
+  synth.cancel();
+  if (synth.paused) synth.resume();
+
+  const u = new window.SpeechSynthesisUtterance(text);
+  u.lang = 'ko-KR';
+  u.rate = opts?.rate ?? 1.0;
+  u.volume = 1;
+  const voice = pickKoreanVoice();
+  if (voice) u.voice = voice;
+  u.onend = () => opts?.onDone?.();
+  u.onerror = () => (opts?.onError ?? opts?.onDone)?.();
+
+  // 첫 호출 시점에 voices가 아직 비어있으면 voiceschanged 이후 다시 시도
+  if (!synth.getVoices().length) {
+    const handler = () => {
+      synth.removeEventListener('voiceschanged', handler);
+      const v = pickKoreanVoice();
+      if (v) u.voice = v;
+      synth.speak(u);
+    };
+    synth.addEventListener('voiceschanged', handler);
+    // 200ms 안에 voiceschanged 안 오면 그냥 speak (기본 보이스)
+    setTimeout(() => {
+      synth.removeEventListener('voiceschanged', handler);
+      if (!u.voice) synth.speak(u);
+    }, 200);
+    return;
+  }
+  synth.speak(u);
+}
+
+function webStop(): void {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+}
+
 export const tts: Tts = {
   speak(text, opts) {
     const trimmed = text?.trim();
     if (!trimmed) {
       opts?.onDone?.();
+      return;
+    }
+    if (Platform.OS === 'web') {
+      webSpeak(trimmed, opts);
       return;
     }
     Speech.speak(trimmed, {
@@ -43,6 +132,10 @@ export const tts: Tts = {
     });
   },
   stop() {
+    if (Platform.OS === 'web') {
+      webStop();
+      return;
+    }
     Speech.stop();
   },
 };

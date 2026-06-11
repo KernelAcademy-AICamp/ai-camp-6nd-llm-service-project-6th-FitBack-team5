@@ -5,16 +5,10 @@ import { Palette } from '@/constants/theme';
 export default function AppTabs() {
   return (
     <NativeTabs
-<<<<<<< HEAD
-      backgroundColor={colors.backgroundElement}
-      indicatorColor={colors.primaryLight}
-      labelStyle={{ selected: { color: colors.primary } }}>
-=======
       backgroundColor={Palette.bgSurface}
       indicatorColor={Palette.primaryLight}
       labelStyle={{ color: Palette.gray300, selected: { color: Palette.primary } }}>
 
->>>>>>> origin/main
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>회원권</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

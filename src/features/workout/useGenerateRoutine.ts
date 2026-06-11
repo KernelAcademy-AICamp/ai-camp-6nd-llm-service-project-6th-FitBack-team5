@@ -223,7 +223,7 @@ async function generateRoutine(input: RoutineInput): Promise<Routine> {
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
+    max_tokens: 5048,
     system: systemPrompt,
     messages: [{ role: 'user', content: buildUserPrompt(input) }],
     output_config: {

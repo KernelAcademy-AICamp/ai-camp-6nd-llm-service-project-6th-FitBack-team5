@@ -20,8 +20,9 @@ import {
   BottomTabInset,
   Elevation,
   MaxContentWidth,
+  Palette,
   Radius,
-  ScreenPaddingX,
+  ScreenPadding,
   Spacing,
 } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -245,8 +246,8 @@ export default function CompleteScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled">
             <View style={styles.header}>
-              <ThemedText type="title">오늘도 해냈어요! 🎉</ThemedText>
-              <ThemedText type="subtitle" themeColor="textBody">
+              <ThemedText type="title">오늘도 해냈어요!</ThemedText>
+              <ThemedText type="subtitle">
                 {routine.title}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
@@ -255,7 +256,7 @@ export default function CompleteScreen() {
             </View>
 
             <View style={styles.section}>
-              <ThemedText type="smallBold" themeColor="textBody">
+              <ThemedText type="smallBold">
                 운동 난이도
               </ThemedText>
               <View style={styles.chipRow}>
@@ -269,14 +270,14 @@ export default function CompleteScreen() {
                         styles.chip,
                         {
                           backgroundColor: active
-                            ? theme.primary
-                            : theme.backgroundMuted,
+                            ? Palette.primary
+                            : Palette.bgMuted,
                           opacity: pressed ? 0.7 : 1,
                         },
                       ]}>
                       <ThemedText
                         type="smallBold"
-                        style={{ color: active ? '#FFFFFF' : theme.textBody }}>
+                        style={{ color: active ? Palette.white : Palette.gray700 }}>
                         {opt.label}
                       </ThemedText>
                     </Pressable>
@@ -286,7 +287,7 @@ export default function CompleteScreen() {
             </View>
 
             <View style={styles.section}>
-              <ThemedText type="smallBold" themeColor="textBody">
+              <ThemedText type="smallBold">
                 통증/불편 부위
               </ThemedText>
               <View style={styles.chipRow}>
@@ -300,14 +301,14 @@ export default function CompleteScreen() {
                         styles.chip,
                         {
                           backgroundColor: active
-                            ? theme.primary
-                            : theme.backgroundMuted,
+                            ? Palette.primary
+                            : Palette.bgMuted,
                           opacity: pressed ? 0.7 : 1,
                         },
                       ]}>
                       <ThemedText
                         type="smallBold"
-                        style={{ color: active ? '#FFFFFF' : theme.textBody }}>
+                        style={{ color: active ? Palette.white : Palette.gray700 }}>
                         {opt}
                       </ThemedText>
                     </Pressable>
@@ -317,7 +318,7 @@ export default function CompleteScreen() {
             </View>
 
             <View style={styles.section}>
-              <ThemedText type="smallBold" themeColor="textBody">
+              <ThemedText type="smallBold">
                 완료 여부
               </ThemedText>
               <View style={styles.chipRow}>
@@ -331,14 +332,14 @@ export default function CompleteScreen() {
                         styles.chip,
                         {
                           backgroundColor: active
-                            ? theme.primary
-                            : theme.backgroundMuted,
+                            ? Palette.primary
+                            : Palette.bgMuted,
                           opacity: pressed ? 0.7 : 1,
                         },
                       ]}>
                       <ThemedText
                         type="smallBold"
-                        style={{ color: active ? '#FFFFFF' : theme.textBody }}>
+                        style={{ color: active ? Palette.white : Palette.gray700 }}>
                         {opt.label}
                       </ThemedText>
                     </Pressable>
@@ -348,7 +349,7 @@ export default function CompleteScreen() {
             </View>
 
             <View style={styles.section}>
-              <ThemedText type="smallBold" themeColor="textBody">
+              <ThemedText type="smallBold">
                 메모 (선택)
               </ThemedText>
               <TextInput
@@ -362,7 +363,7 @@ export default function CompleteScreen() {
                   styles.memoInput,
                   {
                     backgroundColor: theme.backgroundElement,
-                    borderColor: theme.lineDefault,
+                    borderColor: Palette.lineDefault,
                     color: theme.text,
                   },
                 ]}
@@ -383,20 +384,20 @@ export default function CompleteScreen() {
                   styles.primaryCta,
                   {
                     backgroundColor: !canSave
-                      ? theme.backgroundMuted
+                      ? Palette.bgMuted
                       : pressed
-                        ? theme.primaryPressed
-                        : theme.primary,
+                        ? Palette.primaryPressed
+                        : Palette.primary,
                     opacity: isSaving ? 0.7 : 1,
                   },
                 ]}>
                 {isSaving ? (
-                  <ActivityIndicator color={canSave ? '#FFFFFF' : theme.text} />
+                  <ActivityIndicator color={canSave ? Palette.white : theme.text} />
                 ) : (
                   <ThemedText
                     type="subtitle"
                     style={{
-                      color: canSave ? '#FFFFFF' : theme.textSecondary,
+                      color: canSave ? Palette.white : theme.textSecondary,
                     }}>
                     기록 저장하기
                   </ThemedText>
@@ -409,12 +410,12 @@ export default function CompleteScreen() {
                 type="backgroundElement"
                 style={[
                   styles.feedbackCard,
-                  { borderColor: theme.lineDefault },
+                  { borderColor: Palette.lineDefault },
                   Elevation.level1,
                 ]}>
                 {isFeedbackLoading && (
                   <View style={styles.feedbackLoading}>
-                    <ActivityIndicator color={theme.primary} />
+                    <ActivityIndicator color={Palette.primary} />
                     <ThemedText
                       type="small"
                       themeColor="textSecondary"
@@ -425,13 +426,13 @@ export default function CompleteScreen() {
                 )}
                 {feedback && (
                   <View style={styles.feedbackContent}>
-                    <ThemedText type="default" themeColor="textBody">
+                    <ThemedText type="default">
                       {feedback.summary}
                     </ThemedText>
-                    <ThemedText type="default" themeColor="textBody">
+                    <ThemedText type="default">
                       {feedback.nextAdjustment}
                     </ThemedText>
-                    <ThemedText type="default" themeColor="textBody">
+                    <ThemedText type="default">
                       {feedback.encouragement}
                     </ThemedText>
                   </View>
@@ -454,11 +455,11 @@ export default function CompleteScreen() {
                   styles.primaryCta,
                   {
                     backgroundColor: pressed
-                      ? theme.primaryPressed
-                      : theme.primary,
+                      ? Palette.primaryPressed
+                      : Palette.primary,
                   },
                 ]}>
-                <ThemedText type="subtitle" style={{ color: '#FFFFFF' }}>
+                <ThemedText type="subtitle" style={{ color: Palette.white }}>
                   내일 운동 만들기
                 </ThemedText>
               </Pressable>
@@ -479,7 +480,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   scrollContent: {
-    paddingHorizontal: ScreenPaddingX,
+    paddingHorizontal: ScreenPadding,
     paddingTop: Spacing.lg,
     paddingBottom: BottomTabInset + Spacing.lg,
     gap: Spacing.lg,

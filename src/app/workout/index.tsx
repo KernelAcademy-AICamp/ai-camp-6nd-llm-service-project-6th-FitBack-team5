@@ -9,14 +9,15 @@ import {
   BottomTabInset,
   Elevation,
   MaxContentWidth,
+  Palette,
   Radius,
-  ScreenPaddingX,
+  ScreenPadding,
   Spacing,
 } from '@/constants/theme';
 import { persistRoutineExercises } from '@/features/workout/exercises';
 import { Routine, useGenerateRoutine } from '@/features/workout/useGenerateRoutine';
 import { useTheme } from '@/hooks/use-theme';
-import { getOrCreateAudio } from '@/lib/tts';
+import { getOrCreateAudio, primeTts } from '@/lib/tts';
 import { useWorkoutSession } from '@/stores/workout-session';
 
 const goals = ['체력 향상', '체중 감량', '자세 개선'] as const;
@@ -35,7 +36,6 @@ function ChipGroup<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
-  const theme = useTheme();
   return (
     <View style={styles.chipGroup}>
       {options.map((opt) => {
@@ -47,13 +47,13 @@ function ChipGroup<T extends string>({
             style={({ pressed }) => [
               styles.chip,
               {
-                backgroundColor: active ? theme.primary : theme.backgroundMuted,
+                backgroundColor: active ? Palette.primary : Palette.bgMuted,
                 opacity: pressed ? 0.7 : 1,
               },
             ]}>
             <ThemedText
               type="smallBold"
-              style={{ color: active ? '#FFFFFF' : theme.textBody }}>
+              style={{ color: active ? Palette.white : Palette.gray700 }}>
               {opt}
             </ThemedText>
           </Pressable>
@@ -74,7 +74,6 @@ function OptionRow({
     <View style={styles.optionRow}>
       <ThemedText
         type="smallBold"
-        themeColor="textBody"
         style={styles.optionLabel}
         numberOfLines={1}>
         {label}
@@ -108,6 +107,7 @@ export default function WorkoutScreen() {
 
   function handleStartSession() {
     if (!recommendation) return;
+    primeTts();
     setSessionRoutine(recommendation);
     // 운동 마스터를 exercises 테이블에 백그라운드 upsert (실패해도 진행)
     persistRoutineExercises(recommendation).catch(() => {});
@@ -135,7 +135,7 @@ export default function WorkoutScreen() {
 
           <ThemedView
             type="backgroundElement"
-            style={[styles.formCard, { borderColor: theme.lineDefault }, Elevation.level1]}>
+            style={[styles.formCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
             <OptionRow label="운동 목표">
               <ChipGroup options={goals} value={goal} onChange={setGoal} />
             </OptionRow>
@@ -163,19 +163,19 @@ export default function WorkoutScreen() {
               styles.cta,
               {
                 backgroundColor: hasResult
-                  ? theme.backgroundMuted
+                  ? Palette.bgMuted
                   : pressed
-                    ? theme.primaryPressed
-                    : theme.primary,
+                    ? Palette.primaryPressed
+                    : Palette.primary,
                 opacity: isPending ? 0.7 : 1,
               },
             ]}>
             {isPending ? (
-              <ActivityIndicator color={hasResult ? theme.text : '#FFFFFF'} />
+              <ActivityIndicator color={hasResult ? theme.text : Palette.white} />
             ) : (
               <ThemedText
                 type="subtitle"
-                style={{ color: hasResult ? theme.text : '#FFFFFF' }}>
+                style={{ color: hasResult ? theme.text : Palette.white }}>
                 {hasResult ? 'AI 루틴 다시 생성하기' : 'AI 루틴 생성하기'}
               </ThemedText>
             )}
@@ -185,12 +185,12 @@ export default function WorkoutScreen() {
             <View
               style={[
                 styles.errorCard,
-                { backgroundColor: theme.backgroundElement, borderColor: theme.error },
+                { backgroundColor: theme.backgroundElement, borderColor: Palette.error },
               ]}>
-              <ThemedText type="smallBold" themeColor="error">
+              <ThemedText type="smallBold" style={{ color: Palette.error }}>
                 루틴을 만들지 못했어요
               </ThemedText>
-              <ThemedText type="small" themeColor="textBody">
+              <ThemedText type="small">
                 {error instanceof Error
                   ? error.message
                   : '알 수 없는 오류가 발생했어요. 잠시 후 다시 시도해주세요.'}
@@ -203,11 +203,11 @@ export default function WorkoutScreen() {
               type="backgroundElement"
               style={[
                 styles.resultCard,
-                { borderColor: theme.lineDefault },
+                { borderColor: Palette.lineDefault },
                 Elevation.level1,
               ]}>
-              <View style={[styles.aiBadge, { backgroundColor: theme.primaryLight }]}>
-                <ThemedText type="smallBold" style={{ color: theme.primary }}>
+              <View style={[styles.aiBadge, { backgroundColor: Palette.primaryLight }]}>
+                <ThemedText type="smallBold" style={{ color: Palette.primary }}>
                   AI 추천
                 </ThemedText>
               </View>
@@ -216,7 +216,7 @@ export default function WorkoutScreen() {
               <ThemedText type="small" themeColor="textSecondary">
                 {recommendation.meta}
               </ThemedText>
-              <ThemedText type="default" themeColor="textBody">
+              <ThemedText type="default">
                 {recommendation.intro}
               </ThemedText>
 
@@ -227,22 +227,21 @@ export default function WorkoutScreen() {
                     style={[
                       styles.exerciseRow,
                       idx !== 0 && {
-                        borderTopColor: theme.lineDefault,
+                        borderTopColor: Palette.lineDefault,
                         borderTopWidth: StyleSheet.hairlineWidth,
                       },
                     ]}>
                     <View
                       style={[
                         styles.exerciseNum,
-                        { backgroundColor: theme.primaryLight },
+                        { backgroundColor: Palette.primaryLight },
                       ]}>
-                      <ThemedText type="smallBold" style={{ color: theme.primary }}>
+                      <ThemedText type="smallBold" style={{ color: Palette.primary }}>
                         {idx + 1}
                       </ThemedText>
                     </View>
                     <ThemedText
                       type="default"
-                      themeColor="textBody"
                       style={styles.exerciseName}>
                       {ex.name}
                     </ThemedText>
@@ -258,7 +257,7 @@ export default function WorkoutScreen() {
                 style={({ pressed }) => [
                   styles.cta,
                   {
-                    backgroundColor: pressed ? theme.primaryPressed : theme.primary,
+                    backgroundColor: pressed ? Palette.primaryPressed : Palette.primary,
                   },
                 ]}>
                 <ThemedText type="subtitle" style={{ color: '#FFFFFF' }}>
@@ -292,7 +291,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   scrollContent: {
-    paddingHorizontal: ScreenPaddingX,
+    paddingHorizontal: ScreenPadding,
     paddingTop: Spacing.lg,
     paddingBottom: BottomTabInset + Spacing.lg,
     gap: Spacing.md,

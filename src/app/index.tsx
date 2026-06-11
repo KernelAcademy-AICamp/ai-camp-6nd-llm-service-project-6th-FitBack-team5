@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card, Icon } from '@/components/ui';
-import { BottomTabInset, MaxContentWidth, Palette, ScreenPadding, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { computeRisk, sortByRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
 import { MembershipDetail } from '@/features/membership/MembershipDetail';
@@ -17,80 +17,7 @@ import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
-type MembershipStatus = 'active' | 'expired' | 'paused';
-
-interface Membership {
-  id: string;
-  name: string;
-  totalSessions: number | null;
-  remainingSessions: number | null;
-  expiresAt: string;
-  status: MembershipStatus;
-}
-
-const dummyMemberships: Membership[] = [
-  {
-    id: '1',
-    name: 'PT 30회',
-    totalSessions: 30,
-    remainingSessions: 23,
-    expiresAt: '2026-12-31',
-    status: 'active',
-  },
-  {
-    id: '2',
-    name: '요가 1개월권',
-    totalSessions: null,
-    remainingSessions: null,
-    expiresAt: '2026-07-15',
-    status: 'active',
-  },
-  {
-    id: '3',
-    name: '필라테스 10회',
-    totalSessions: 10,
-    remainingSessions: 0,
-    expiresAt: '2026-05-30',
-    status: 'expired',
-  },
-];
-
-const statusLabels: Record<MembershipStatus, string> = {
-  active: '사용중',
-  expired: '만료',
-  paused: '일시중지',
-};
-
-function statusBadgeColor(status: MembershipStatus) {
-  if (status === 'active') return '#22c55e';
-  if (status === 'paused') return '#f59e0b';
-  return '#9ca3af';
-}
-
-function MembershipCard({ item }: { item: Membership }) {
-  const isSession = item.totalSessions !== null;
-  return (
-    <ThemedView type="backgroundElement" style={styles.card}>
-      <View style={styles.cardHeader}>
-        <ThemedText type="subtitle">{item.name}</ThemedText>
-        <View style={[styles.badge, { backgroundColor: statusBadgeColor(item.status) }]}>
-          <ThemedText type="smallBold" style={styles.badgeText}>
-            {statusLabels[item.status]}
-          </ThemedText>
-        </View>
-      </View>
-      {isSession && (
-        <ThemedText type="default">
-          남은 {item.remainingSessions} / {item.totalSessions}회
-        </ThemedText>
-      )}
-      <ThemedText type="small">만료일 · {item.expiresAt}</ThemedText>
-    </ThemedView>
-  );
-}
-
 function AuthFooter() {
-  const theme = useTheme();
   const user = useCurrentUser();
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -262,21 +189,21 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    gap: Spacing.three,
-  },
-  list: {
-    gap: Spacing.three,
-    paddingBottom: Spacing.three,
+    gap: Spacing.lg,
   },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  badge: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: 2,
-    borderRadius: Spacing.two,
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.primary,
   },
   addButtonPressed: { backgroundColor: Palette.primaryPressed },
   addButtonLabel: { color: Palette.white },
@@ -293,18 +220,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.xs,
+    paddingTop: Spacing.sm,
+    gap: Spacing.md,
   },
   authEmail: { flex: 1 },
   authButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: 'rgba(127,127,127,0.4)',
+    borderColor: Palette.lineStrong,
   },
   authButtonPressed: { opacity: 0.6 },
   modalRoot: { flex: 1, backgroundColor: Palette.bgBase },

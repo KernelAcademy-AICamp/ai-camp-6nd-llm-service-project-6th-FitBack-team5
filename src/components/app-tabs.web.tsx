@@ -55,7 +55,6 @@ export function TabButton({ children, isFocused, icon, ...props }: TabButtonProp
 }
 
 export function CustomTabList(props: TabListProps) {
-  const theme = useTheme();
   return (
     <View {...props} style={styles.tabListContainer}>
       <View style={styles.innerContainer}>{props.children}</View>

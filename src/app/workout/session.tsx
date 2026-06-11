@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,8 +8,9 @@ import { ThemedView } from '@/components/themed-view';
 import {
   Elevation,
   MaxContentWidth,
+  Palette,
   Radius,
-  ScreenPaddingX,
+  ScreenPadding,
   Spacing,
 } from '@/constants/theme';
 import { koreanCount } from '@/features/workout/rep-scripts';
@@ -159,7 +160,10 @@ export default function SessionScreen() {
 
   const total = routine?.exercises.length ?? 0;
   const current = routine?.exercises[exerciseIdx];
-  const parsed = current ? parseDetail(current.detail) : null;
+  const parsed = useMemo(
+    () => (current ? parseDetail(current.detail) : null),
+    [current],
+  );
 
   // 운동 종료 멘트 phase로 우회 (exercise-finish → 다음 운동의 intro 또는 finish)
   function advanceExercise() {
@@ -534,11 +538,11 @@ export default function SessionScreen() {
           <Pressable
             onPress={handleClose}
             style={({ pressed }) => [styles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}>
-            <ThemedText type="subtitle" themeColor="textBody">
+            <ThemedText type="subtitle">
               ✕
             </ThemedText>
           </Pressable>
-          <ThemedText type="smallBold" themeColor="textBody">
+          <ThemedText type="smallBold">
             오늘의 운동 진행 중
           </ThemedText>
           <ThemedText type="smallBold" themeColor="textSecondary">
@@ -546,13 +550,13 @@ export default function SessionScreen() {
           </ThemedText>
         </View>
 
-        <View style={[styles.progressTrack, { backgroundColor: theme.backgroundMuted }]}>
+        <View style={[styles.progressTrack, { backgroundColor: Palette.bgMuted }]}>
           <View
             style={[
               styles.progressFill,
               {
                 width: `${Math.max(0, Math.min(1, overallProgress)) * 100}%`,
-                backgroundColor: theme.primary,
+                backgroundColor: Palette.primary,
               },
             ]}
           />
@@ -569,7 +573,7 @@ export default function SessionScreen() {
             {current.detail}
           </ThemedText>
           {phase.kind === 'rep' && parsed?.type === 'reps' ? (
-            <ThemedText type="smallBold" themeColor="primary">
+            <ThemedText type="smallBold" style={{ color: Palette.primary }}>
               {phase.set}세트 / {parsed.sets}세트  ·  현재 {phase.rep}/{parsed.reps}회
             </ThemedText>
           ) : null}
@@ -577,12 +581,12 @@ export default function SessionScreen() {
           <View
             style={[
               styles.phaseCard,
-              { borderColor: theme.lineDefault },
+              { borderColor: Palette.lineDefault },
               Elevation.level1,
             ]}>
             <PhaseDisplay phase={phase} parsed={parsed} current={current} />
             {isPaused ? (
-              <ThemedText type="smallBold" themeColor="warning">
+              <ThemedText type="smallBold" style={{ color: Palette.warning }}>
                 일시정지
               </ThemedText>
             ) : null}
@@ -594,13 +598,13 @@ export default function SessionScreen() {
                 styles.cautionCard,
                 {
                   backgroundColor: theme.backgroundElement,
-                  borderColor: theme.warning,
+                  borderColor: Palette.warning,
                 },
               ]}>
-              <ThemedText type="smallBold" themeColor="warning">
+              <ThemedText type="smallBold" style={{ color: Palette.warning }}>
                 주의할 점
               </ThemedText>
-              <ThemedText type="small" themeColor="textBody">
+              <ThemedText type="small">
                 {current.caution}
               </ThemedText>
             </View>
@@ -617,9 +621,9 @@ export default function SessionScreen() {
             onPress={handlePauseToggle}
             style={({ pressed }) => [
               styles.primaryCta,
-              { backgroundColor: pressed ? theme.primaryPressed : theme.primary },
+              { backgroundColor: pressed ? Palette.primaryPressed : Palette.primary },
             ]}>
-            <ThemedText type="subtitle" style={{ color: '#FFFFFF' }}>
+            <ThemedText type="subtitle" style={{ color: Palette.white }}>
               {isPaused ? '재개' : '일시정지'}
             </ThemedText>
           </Pressable>
@@ -629,9 +633,9 @@ export default function SessionScreen() {
               onPress={handleReplay}
               style={({ pressed }) => [
                 styles.subBtn,
-                { borderColor: theme.lineDefault, opacity: pressed ? 0.6 : 1 },
+                { borderColor: Palette.lineDefault, opacity: pressed ? 0.6 : 1 },
               ]}>
-              <ThemedText type="smallBold" themeColor="textBody">
+              <ThemedText type="smallBold">
                 다시 듣기
               </ThemedText>
             </Pressable>
@@ -639,9 +643,9 @@ export default function SessionScreen() {
               onPress={handleSkip}
               style={({ pressed }) => [
                 styles.subBtn,
-                { borderColor: theme.lineDefault, opacity: pressed ? 0.6 : 1 },
+                { borderColor: Palette.lineDefault, opacity: pressed ? 0.6 : 1 },
               ]}>
-              <ThemedText type="smallBold" themeColor="textBody">
+              <ThemedText type="smallBold">
                 건너뛰기
               </ThemedText>
             </Pressable>
@@ -653,9 +657,9 @@ export default function SessionScreen() {
               }}
               style={({ pressed }) => [
                 styles.subBtn,
-                { borderColor: theme.lineDefault, opacity: pressed ? 0.6 : 1 },
+                { borderColor: Palette.lineDefault, opacity: pressed ? 0.6 : 1 },
               ]}>
-              <ThemedText type="smallBold" themeColor="textBody">
+              <ThemedText type="smallBold">
                 속도 {rate}x
               </ThemedText>
             </Pressable>
@@ -680,17 +684,15 @@ function PhaseDisplay({
   parsed: ParsedDetail | null;
   current: { name: string; description: string; caution: string };
 }) {
-  const theme = useTheme();
-
   if (phase.kind === 'intro') {
     return (
       <>
-        <View style={[styles.badge, { backgroundColor: theme.primaryLight }]}>
-          <ThemedText type="smallBold" style={{ color: theme.primary }}>
+        <View style={[styles.badge, { backgroundColor: Palette.primaryLight }]}>
+          <ThemedText type="smallBold" style={{ color: Palette.primary }}>
             오디오 코칭 재생 중
           </ThemedText>
         </View>
-        <ThemedText type="default" themeColor="textBody" style={styles.center}>
+        <ThemedText type="default" style={styles.center}>
           {current.description}
         </ThemedText>
       </>
@@ -700,12 +702,12 @@ function PhaseDisplay({
   if (phase.kind === 'caution') {
     return (
       <>
-        <View style={[styles.badge, { backgroundColor: theme.primaryLight }]}>
-          <ThemedText type="smallBold" style={{ color: theme.warning }}>
+        <View style={[styles.badge, { backgroundColor: Palette.primaryLight }]}>
+          <ThemedText type="smallBold" style={{ color: Palette.warning }}>
             주의사항 안내 중
           </ThemedText>
         </View>
-        <ThemedText type="default" themeColor="textBody" style={styles.center}>
+        <ThemedText type="default" style={styles.center}>
           {current.caution}
         </ThemedText>
       </>
@@ -788,7 +790,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: {
     flex: 1,
-    paddingHorizontal: ScreenPaddingX,
+    paddingHorizontal: ScreenPadding,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.lg,
     maxWidth: MaxContentWidth,

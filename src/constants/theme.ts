@@ -58,20 +58,19 @@ const lightTheme = {
 } as const;
 
 export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
+  light: lightTheme,
+  dark: lightTheme, // 라이트 전용: 다크도 라이트로 매핑
+} as const;
+
+export type ThemeColor = keyof typeof Colors.light;
+
+// ── 5. 타이포그래피 ───────────────────────────────────────
+// Pretendard. 자간 -2.5% = -0.025 * fontSize (RN은 px 단위).
+export const FontFamily = {
+  regular: 'Pretendard',
+  medium: 'PretendardMedium',
+  semibold: 'PretendardSemiBold',
+  bold: 'PretendardBold',
 } as const;
 
 type TypeToken = Pick<
@@ -96,15 +95,6 @@ export const Fonts = Platform.select({
   web: { sans: FontFamily.regular, serif: 'var(--font-serif)', rounded: FontFamily.regular, mono: 'var(--font-mono)' },
 });
 
-/** -2.5% 자간을 absolute 값으로 환산 (RN letterSpacing은 px 단위). */
-export function letterSpacingFor(fontSize: number) {
-  return Math.round(fontSize * -0.025 * 100) / 100;
-}
-
-// ============================================================
-// Spacing — 8pt grid (design.md §6)
-// ============================================================
-
 // ── 6. 스페이싱 (8pt grid) ────────────────────────────────
 // 디자인 토큰. 기존 코드 호환을 위해 half/one/two/three/four/five/six 별칭 유지.
 export const Spacing = {
@@ -122,56 +112,6 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
-
-  // Semantic (design.md §6)
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
-} as const;
-
-/** 좌우 여백 — 전 화면 공통 (design.md §6) */
-export const ScreenPaddingX = 20;
-
-// ============================================================
-// Border Radius (design.md §7, §9)
-// ============================================================
-
-export const Radius = {
-  small: 8,
-  button: 12,
-  card: 20,   // §9 카드 spec 우선 (메인 카드)
-  modal: 20,
-  full: 100,
-} as const;
-
-// ============================================================
-// Elevation (design.md §8)
-// ============================================================
-
-export const Elevation = {
-  level1: Platform.select({
-    web: { boxShadow: '0 2px 8px rgba(15,23,42,0.06)' } as object,
-    default: {
-      shadowColor: '#0F172A',
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
-    },
-  }),
-  level2: Platform.select({
-    web: { boxShadow: '0 8px 24px rgba(15,23,42,0.08)' } as object,
-    default: {
-      shadowColor: '#0F172A',
-      shadowOpacity: 0.08,
-      shadowRadius: 24,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 8,
-    },
-  }),
 } as const;
 
 /** 전 화면 공통 좌우 여백 */
