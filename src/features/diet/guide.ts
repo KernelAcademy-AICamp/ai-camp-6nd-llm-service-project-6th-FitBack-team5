@@ -66,7 +66,7 @@ const GOAL_LABEL: Record<Goal, string> = {
   cut: '감량',
   maintain: '유지',
 };
-const PART_LABEL: Record<WorkoutPart, string> = {
+export const PART_LABEL: Record<WorkoutPart, string> = {
   lower: '하체',
   upper: '상체',
   full: '전신',

@@ -19,8 +19,10 @@ import { useProfile } from '@/features/auth/useProfile';
 import { useAnalyzeImage, useAnalyzeMeal } from '@/features/diet/analyzeMeal';
 import { useFoodSearch, type FoodSearchResult } from '@/features/diet/foodSearch';
 import { pickFoodImage } from '@/features/diet/pickFoodImage';
+import { useRecommend } from '@/features/diet/recommend';
 import {
   MOCK_CONTEXT,
+  PART_LABEL,
   calorieTargetFromProfile,
   generateGuide,
   proteinTargetFromProfile,
@@ -118,6 +120,7 @@ function Card({ children, style }: { children: React.ReactNode; style?: object }
 // Meal · MealType · InputMethod · MEAL_TYPES 는 @/features/diet/useMeals 에서 가져온다.
 
 const BURNED_KCAL = 420; // 운동 소모 칼로리 (운동 데이터 연계, 가데이터)
+const WORKOUT_MIN = 45; // 운동 시간(분) — 가데이터
 
 // 탄단지 표시 정의 (순서: 단 → 탄 → 지). 목표 값은 가이드(guide.target)에서 가져온다.
 const MACRO_META = [
@@ -136,25 +139,6 @@ const MACRO_ICON: Record<'protein' | 'carb' | 'fat', { icon: React.ComponentProp
 function currentMealType(): MealType {
   return '저녁'; // 가데이터: 시간대 기본 끼니 (라이브 시각 미사용)
 }
-
-// 부족 매크로별 추천 식품 + 보충량(g) — 기록 후 AI 식단 추천에 사용 (가데이터)
-const FOOD_REC: Record<'protein' | 'carb' | 'fat', { name: string; amount: number }[]> = {
-  protein: [
-    { name: '닭가슴살', amount: 35 },
-    { name: '그릭요거트', amount: 10 },
-    { name: '계란', amount: 6 },
-  ],
-  carb: [
-    { name: '현미밥', amount: 45 },
-    { name: '바나나', amount: 27 },
-    { name: '고구마', amount: 28 },
-  ],
-  fat: [
-    { name: '아보카도', amount: 15 },
-    { name: '견과류', amount: 14 },
-    { name: '땅콩버터', amount: 8 },
-  ],
-};
 
 // 운동 대비 섭취 상태 (순섭취/목표 비율 → 부족/적정/과다)
 function balanceStatus(ratio: number): { label: string; color: string; desc: string } {
@@ -970,9 +954,13 @@ export default function DietScreen() {
       .map((d) => d.key),
   );
   const deficitLines = deficits.filter((d) => topKeys.has(d.key)); // 매크로 순서(단·탄·지) 유지
-  const recFoods = deficitLines.flatMap((d) => FOOD_REC[d.key].slice(0, 2)); // 각 영양소당 2개씩 균형
   // 하루 3끼 기준 한 끼 분량(1/3)으로 추천
   const nextMealG = (g: number) => Math.max(1, Math.round(g / 3));
+
+  // 부족 영양소(한 끼 분량) 기반 Claude 음식 조합 추천 — 운동 회복 맥락 포함
+  const recContext = MOCK_CONTEXT.part ? `${PART_LABEL[MOCK_CONTEXT.part]} 운동 회복` : undefined;
+  const recDeficits = deficitLines.map((d) => ({ label: d.label, g: nextMealG(d.g) }));
+  const recommend = useRecommend(recDeficits, recContext);
 
   function handleSave(meal: Omit<Meal, 'id' | 'time'>) {
     addMeal.mutate(meal);
@@ -988,6 +976,33 @@ export default function DietScreen() {
         />
         <View style={styles.scrollWrap}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {/* 오늘 운동 요약 (스크롤됨) */}
+          <View style={styles.workoutBar}>
+            <View style={styles.workoutLead}>
+              <MaterialIcons name="fitness-center" size={13} color={D.gray500} />
+              <Txt variant="label" weight="600" color={D.gray500}>
+                오늘 운동
+              </Txt>
+            </View>
+            <View style={styles.workoutDivider} />
+            <View style={styles.workoutCell}>
+              <Txt variant="label" color={D.gray500}>
+                {MOCK_CONTEXT.part ? PART_LABEL[MOCK_CONTEXT.part] : '운동'}
+              </Txt>
+            </View>
+            <View style={styles.workoutDivider} />
+            <View style={styles.workoutCell}>
+              <Txt variant="label" color={D.gray500}>
+                {WORKOUT_MIN}분
+              </Txt>
+            </View>
+            <View style={styles.workoutDivider} />
+            <View style={styles.workoutCell}>
+              <Txt variant="label" color={D.gray500}>
+                {BURNED_KCAL}kcal
+              </Txt>
+            </View>
+          </View>
           {/* ① 운동 맞춤 식단 가이드 — 회복 달성률 + 목표 매크로 + 운동 대비 섭취 상태 */}
           <Card style={styles.guideCard}>
             <View style={styles.guideHeadRow}>
@@ -1076,18 +1091,36 @@ export default function DietScreen() {
                     </View>
                   ))}
                 </View>
-                <View style={styles.foodChipWrap}>
-                  {recFoods.map((f) => (
-                    <View key={f.name} style={styles.foodChip}>
-                      <Txt variant="label" weight="600" color={D.gray700}>
-                        {f.name}
-                      </Txt>
-                      <Txt variant="label" weight="400" color={D.gray500}>
-                        +{f.amount}g
-                      </Txt>
-                    </View>
-                  ))}
-                </View>
+                <View style={styles.sectionDivider} />
+                <Txt variant="label" weight="600" color={D.gray500}>
+                  추천 조합
+                </Txt>
+                {recommend.isPending ? (
+                  <View style={styles.recLoading}>
+                    <ActivityIndicator color={D.primary} size="small" />
+                    <Txt variant="caption" color={D.gray500}>
+                      추천을 만드는 중…
+                    </Txt>
+                  </View>
+                ) : recommend.isError ? (
+                  <Txt variant="caption" color={D.gray500}>
+                    추천을 불러오지 못했어요.
+                  </Txt>
+                ) : (recommend.data ?? []).length === 0 ? (
+                  <Txt variant="caption" color={D.gray500}>
+                    추천할 조합이 없어요.
+                  </Txt>
+                ) : (
+                  <View style={styles.comboList}>
+                    {(recommend.data ?? []).map((combo, i) => (
+                      <View key={i} style={styles.comboChip}>
+                        <Txt variant="caption" weight="600" color={D.gray700}>
+                          {combo.foods.map((f) => `${f.name} ${f.amount}${f.unit}`).join('  +  ')}
+                        </Txt>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </>
             ) : (
               // 모든 목표 달성
@@ -1200,6 +1233,18 @@ const styles = StyleSheet.create({
   dateStrip: { flexGrow: 0, backgroundColor: D.bgBase },
   dateStripContent: { paddingHorizontal: S.sm, alignItems: 'center' },
 
+  // 오늘 운동 요약 (날짜 바로 아래, 아주 작게)
+  workoutBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: D.muted,
+    borderRadius: R.button,
+    paddingVertical: 6,
+  },
+  workoutLead: { flexDirection: 'row', alignItems: 'center', gap: S.xs, paddingHorizontal: S.md },
+  workoutCell: { flex: 1, alignItems: 'center' },
+  workoutDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: D.lineStrong, marginVertical: 4 },
+
   // 스크롤 영역 + 상단 페이드
   scrollWrap: { flex: 1, position: 'relative' },
   fadeTop: { position: 'absolute', top: 0, left: 0, right: 0, height: S.md, zIndex: 2 },
@@ -1229,7 +1274,7 @@ const styles = StyleSheet.create({
   calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   calCell: { width: `${100 / 7}%`, alignItems: 'center', justifyContent: 'center', paddingVertical: S.xs },
   calDay: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  scroll: { paddingHorizontal: SIDE, paddingTop: S.md, paddingBottom: NAV_HEIGHT + S.xxl + S.md, gap: S.md },
+  scroll: { paddingHorizontal: SIDE, paddingTop: 0, paddingBottom: NAV_HEIGHT + S.xxl + S.md, gap: S.md },
   flex1: { flex: 1 },
 
   card: {
@@ -1244,7 +1289,7 @@ const styles = StyleSheet.create({
 
   // 가이드 헤더
   aiHead: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
-  guideCard: { padding: S.lg, gap: 12 },
+  guideCard: { padding: S.lg, gap: S.md },
   // 운동 대비 섭취 상태 카드 ↔ 이 카드 사이 여백 8px (스크롤 gap 16 - 8)
   aiRecCard: { marginTop: -S.sm },
   guideHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
@@ -1254,10 +1299,10 @@ const styles = StyleSheet.create({
   gaugeLabel: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' },
 
   // 목표 매크로
-  macroRow: { flexDirection: 'row', gap: S.sm, marginTop: S.sm },
-  macroCol: { flex: 1, gap: 2 },
+  macroRow: { flexDirection: 'row', gap: S.md, marginTop: S.md },
+  macroCol: { flex: 1, gap: S.xs },
   macroValueRow: { flexDirection: 'row', alignItems: 'baseline' },
-  macroBar: { marginTop: S.xs },
+  macroBar: { marginTop: S.sm },
 
   // progress
   track: { height: 6, borderRadius: R.full, backgroundColor: D.gray100, overflow: 'hidden' },
@@ -1279,6 +1324,14 @@ const styles = StyleSheet.create({
   // 코칭 — 부족 영양소 + 추천 식품 칩
   deficitList: { flexDirection: 'row', flexWrap: 'wrap', gap: S.md },
   deficitRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
+  recLoading: { flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: S.xs },
+  comboList: { gap: S.sm },
+  comboChip: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.button,
+    backgroundColor: D.muted,
+  },
   foodChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs },
   foodChip: {
     flexDirection: 'row',
