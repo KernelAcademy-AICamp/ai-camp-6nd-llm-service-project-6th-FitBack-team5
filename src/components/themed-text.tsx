@@ -1,40 +1,37 @@
-import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
+import { StyleSheet, Text, type TextProps } from 'react-native';
 
-import { Fonts, ThemeColor, letterSpacingFor } from '@/constants/theme';
+import { ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+export type ThemedTextType =
+  // 디자인 시스템 타입 스케일
+  | 'display'
+  | 'h1'
+  | 'h2'
+  | 'body'
+  | 'caption'
+  | 'captionBold'
+  | 'label'
+  // 레거시 별칭 (점진 마이그레이션)
+  | 'default'
+  | 'title'
+  | 'subtitle'
+  | 'small'
+  | 'smallBold'
+  | 'link'
+  | 'linkPrimary'
+  | 'code';
+
 export type ThemedTextProps = TextProps & {
-  type?:
-    | 'default'
-    | 'display'
-    | 'title'
-    | 'subtitle'
-    | 'small'
-    | 'smallBold'
-    | 'link'
-    | 'linkPrimary'
-    | 'code';
+  type?: ThemedTextType;
   themeColor?: ThemeColor;
 };
 
-export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
+export function ThemedText({ style, type = 'body', themeColor, ...rest }: ThemedTextProps) {
   const theme = useTheme();
-
   return (
     <Text
-      style={[
-        { color: theme[themeColor ?? 'text'], fontFamily: Fonts.sans },
-        type === 'default' && styles.default,
-        type === 'display' && styles.display,
-        type === 'title' && styles.title,
-        type === 'subtitle' && styles.subtitle,
-        type === 'small' && styles.small,
-        type === 'smallBold' && styles.smallBold,
-        type === 'link' && styles.link,
-        type === 'linkPrimary' && styles.linkPrimary,
-        type === 'code' && styles.code,
-        style,
-      ]}
+      style={[{ color: theme[themeColor ?? 'text'] }, styles[type], style]}
       {...rest}
     />
   );
@@ -42,57 +39,43 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
 
 // design.md §5 타입 스케일
 const styles = StyleSheet.create({
-  default: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '400',
-    letterSpacing: letterSpacingFor(16),
-  },
-  display: {
-    fontSize: 32,
-    lineHeight: 40,
-    fontWeight: '700',
-    letterSpacing: letterSpacingFor(32),
-  },
-  title: {
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: '700',
-    letterSpacing: letterSpacingFor(24),
-  },
-  subtitle: {
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: '600',
-    letterSpacing: letterSpacingFor(20),
-  },
   small: {
     fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '400',
-    letterSpacing: letterSpacingFor(14),
+    lineHeight: 20,
+    fontWeight: 500,
   },
   smallBold: {
     fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '600',
-    letterSpacing: letterSpacingFor(14),
+    lineHeight: 20,
+    fontWeight: 700,
+  },
+  default: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: 500,
+  },
+  title: {
+    fontSize: 48,
+    fontWeight: 600,
+    lineHeight: 52,
+  },
+  subtitle: {
+    fontSize: 32,
+    lineHeight: 44,
+    fontWeight: 600,
   },
   link: {
+    lineHeight: 30,
     fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '500',
   },
   linkPrimary: {
+    lineHeight: 30,
     fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '600',
-    color: '#6675FF',
+    color: '#3c87f7',
   },
   code: {
     fontFamily: Fonts.mono,
-    fontWeight: Platform.select({ android: '700', default: '500' }),
+    fontWeight: Platform.select({ android: 700 }) ?? 500,
     fontSize: 12,
-    lineHeight: 18,
   },
 });

@@ -10,50 +10,67 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Elevation, Radius, ScreenPaddingX, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Radius, ScreenPaddingX, Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 const TEST_EMAIL = process.env.EXPO_PUBLIC_DEV_TEST_EMAIL ?? '';
 const TEST_PASSWORD = process.env.EXPO_PUBLIC_DEV_TEST_PASSWORD ?? '';
 
+type Mode = 'login' | 'signup';
+
 export function LoginScreen() {
-  const theme = useTheme();
+  const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
-  const canSubmit = !submitting && email.length > 0 && password.length > 0;
+  const isSignup = mode === 'signup';
+  const passwordOk = password.length >= 6;
+  const canSubmit =
+    !submitting && email.length > 0 && password.length > 0 && (!isSignup || passwordOk);
 
-  async function handleLogin() {
+  async function handleSubmit() {
     setErrorMessage(null);
+    setInfoMessage(null);
     setSubmitting(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (isSignup) {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        setErrorMessage(error.message);
+      } else if (!data.session) {
+        // 이메일 확인이 켜져 있는 경우: 세션이 없고 확인 메일이 발송된다.
+        setInfoMessage('확인 메일을 보냈어요. 메일의 링크를 누른 뒤 로그인해 주세요.');
+      }
+      // 확인 OFF면 data.session 이 바로 생기고 onAuthStateChange 가 자동 진입시킨다.
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setErrorMessage(error.message);
+    }
     setSubmitting(false);
-    if (error) setErrorMessage(error.message);
+  }
+
+  function toggleMode() {
+    setMode((m) => (m === 'login' ? 'signup' : 'login'));
+    setErrorMessage(null);
+    setInfoMessage(null);
   }
 
   function fillTestCredentials() {
     setEmail(TEST_EMAIL);
     setPassword(TEST_PASSWORD);
     setErrorMessage(null);
+    setInfoMessage(null);
   }
 
   return (
     <KeyboardAvoidingView
       style={[styles.root, { backgroundColor: theme.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: theme.backgroundElement, borderColor: theme.lineDefault },
-          Elevation.level1,
-        ]}>
-        <ThemedText type="title">FitBack 로그인</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
-          개발용 화면이에요. 아래 테스트 계정으로 들어와주세요.
-        </ThemedText>
+      <View style={styles.card}>
+        <Text style={styles.title}>FitBack 로그인</Text>
+        <Text style={styles.subtitle}>개발용 화면 — 테스트 계정으로만 로그인됩니다.</Text>
 
         <ThemedText type="smallBold" style={styles.label}>
           이메일
@@ -65,15 +82,8 @@ export function LoginScreen() {
           autoComplete="email"
           keyboardType="email-address"
           placeholder="dev@fitback.local"
-          placeholderTextColor={theme.textDisabled}
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.backgroundMuted,
-              color: theme.text,
-              borderColor: theme.lineDefault,
-            },
-          ]}
+          placeholderTextColor="#aab"
+          style={styles.input}
         />
 
         <ThemedText type="smallBold" style={styles.label}>
@@ -85,26 +95,18 @@ export function LoginScreen() {
           secureTextEntry
           autoComplete="current-password"
           placeholder="••••••••"
-          placeholderTextColor={theme.textDisabled}
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.backgroundMuted,
-              color: theme.text,
-              borderColor: theme.lineDefault,
-            },
-          ]}
+          placeholderTextColor="#aab"
+          style={styles.input}
           onSubmitEditing={canSubmit ? handleLogin : undefined}
         />
-
-        {errorMessage && (
-          <ThemedText type="small" themeColor="error" style={styles.error}>
-            {errorMessage}
-          </ThemedText>
+        {isSignup && password.length > 0 && !passwordOk && (
+          <Text style={styles.hint}>비밀번호는 6자 이상이어야 해요.</Text>
         )}
 
+        {errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
         <Pressable
-          onPress={handleLogin}
+          onPress={handleSubmit}
           disabled={!canSubmit}
           style={({ pressed }) => [
             styles.button,
@@ -119,22 +121,22 @@ export function LoginScreen() {
           {submitting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <ThemedText type="smallBold" style={styles.buttonLabel}>
-              로그인
-            </ThemedText>
+            <Text style={styles.buttonLabel}>로그인</Text>
           )}
         </Pressable>
 
-        <View style={[styles.devBox, { backgroundColor: theme.backgroundSelected }]}>
-          <ThemedText type="smallBold" themeColor="textBody">
-            테스트 계정 (개발용)
-          </ThemedText>
-          <ThemedText type="small" themeColor="textBody" style={styles.devText}>
-            이메일: {TEST_EMAIL || '(.env 미설정)'}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textBody" style={styles.devText}>
+        <Pressable onPress={toggleMode} style={styles.switchRow} hitSlop={6}>
+          <Text style={styles.switchText}>
+            {isSignup ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입'}
+          </Text>
+        </Pressable>
+
+        <View style={styles.devBox}>
+          <Text style={styles.devTitle}>테스트 계정 (개발용)</Text>
+          <Text style={styles.devText}>이메일: {TEST_EMAIL || '(.env 미설정)'}</Text>
+          <Text style={styles.devText}>
             비밀번호: {TEST_PASSWORD || '(.env 미설정)'}
-          </ThemedText>
+          </Text>
           {TEST_EMAIL && TEST_PASSWORD ? (
             <Pressable
               onPress={fillTestCredentials}
@@ -167,16 +169,30 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 400,
-    borderRadius: Radius.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.lg,
-    gap: Spacing.xs,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111',
   },
   subtitle: {
-    marginBottom: Spacing.md,
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 12,
   },
   label: {
-    marginTop: Spacing.sm,
+    fontSize: 13,
+    color: '#555',
+    marginTop: 10,
   },
   input: {
     height: 52,
@@ -188,25 +204,46 @@ const styles = StyleSheet.create({
   error: {
     marginTop: Spacing.xs,
   },
+  hint: { fontSize: 12, color: '#a70', marginTop: 4 },
   button: {
     marginTop: Spacing.md,
     height: 52,
     borderRadius: Radius.button,
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  buttonDisabled: {
+    backgroundColor: '#bbb',
+  },
+  buttonPressed: {
+    opacity: 0.85,
   },
   buttonLabel: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
+  error: {
+    color: '#d33',
+    fontSize: 13,
+    marginTop: 8,
+  },
   devBox: {
-    marginTop: Spacing.lg,
-    padding: Spacing.md,
-    borderRadius: Radius.small,
-    gap: Spacing.xs,
+    marginTop: 24,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f4ff',
+    borderWidth: 1,
+    borderColor: '#dbe4ff',
+    gap: 4,
+  },
+  devTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334',
   },
   devText: {
+    fontSize: 12,
+    color: '#445',
     fontFamily: Platform.select({
       ios: 'Menlo',
       android: 'monospace',
@@ -218,9 +255,17 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: Radius.button,
     alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 6,
+    backgroundColor: '#dbe4ff',
+  },
+  devButtonLabel: {
+    fontSize: 12,
+    color: '#334',
+    fontWeight: '600',
   },
   devHint: {
-    marginTop: Spacing.xs,
+    marginTop: 4,
+    fontSize: 11,
+    color: '#88a',
   },
 });

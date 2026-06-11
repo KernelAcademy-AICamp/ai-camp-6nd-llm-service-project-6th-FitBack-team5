@@ -1,18 +1,25 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import {
-  Tabs,
   TabList,
-  TabTrigger,
-  TabSlot,
-  TabTriggerSlotProps,
   TabListProps,
+  Tabs,
+  TabSlot,
+  TabTrigger,
+  TabTriggerSlotProps,
 } from 'expo-router/ui';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+import { MaxContentWidth } from '@/constants/theme';
 
-import { MaxContentWidth, Radius, ScreenPaddingX, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+// design.md §9 바텀 네비게이션 — 활성 #6675FF / 비활성 #D1D5DB, 배경 #FFFFFF, 상단 구분선 0.5px
+const NAV = {
+  active: '#6675FF',
+  inactive: '#9CA3AF',
+  surface: '#FFFFFF',
+  line: 'rgba(0,0,0,0.07)',
+} as const;
+
+type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
 export default function AppTabs() {
   return (
@@ -21,13 +28,13 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="index" href="/" asChild>
-            <TabButton>회원권</TabButton>
+            <TabButton icon="card-membership">회원권</TabButton>
           </TabTrigger>
           <TabTrigger name="diet" href="/diet" asChild>
-            <TabButton>식단</TabButton>
+            <TabButton icon="restaurant">식단</TabButton>
           </TabTrigger>
           <TabTrigger name="workout" href="/workout" asChild>
-            <TabButton>홈트</TabButton>
+            <TabButton icon="fitness-center">홈트</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -35,18 +42,14 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+type TabButtonProps = TabTriggerSlotProps & { icon: IconName };
+
+export function TabButton({ children, isFocused, icon, ...props }: TabButtonProps) {
+  const color = isFocused ? NAV.active : NAV.inactive;
   return (
-    <Pressable
-      {...props}
-      style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
-      <View style={styles.tabButtonInner}>
-        <ThemedText
-          type="smallBold"
-          themeColor={isFocused ? 'primary' : 'textDisabled'}>
-          {children}
-        </ThemedText>
-      </View>
+    <Pressable {...props} style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
+      <MaterialIcons name={icon} size={24} color={color} />
+      <Text style={[styles.label, { color }]}>{children}</Text>
     </Pressable>
   );
 }
@@ -55,11 +58,7 @@ export function CustomTabList(props: TabListProps) {
   const theme = useTheme();
   return (
     <View {...props} style={styles.tabListContainer}>
-      <ThemedView
-        type="backgroundElement"
-        style={[styles.innerContainer, { borderTopColor: theme.lineDefault }]}>
-        {props.children}
-      </ThemedView>
+      <View style={styles.innerContainer}>{props.children}</View>
     </View>
   );
 }
@@ -67,11 +66,16 @@ export function CustomTabList(props: TabListProps) {
 const styles = StyleSheet.create({
   slot: { height: '100%' },
   tabListContainer: {
-    position: 'absolute',
+    // 웹: 뷰포트 하단 고정 (absolute는 상위 높이에 따라 콘텐츠 끝에 붙는 문제가 있음)
+    position: 'fixed',
     bottom: 0,
+    left: 0,
+    right: 0,
     width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
+    backgroundColor: NAV.surface,
+    borderTopWidth: 0.5,
+    borderTopColor: NAV.line,
+    alignItems: 'center',
   },
   innerContainer: {
     width: '100%',
@@ -79,20 +83,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingHorizontal: ScreenPaddingX,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   tabButton: {
     flex: 1,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  tabButtonInner: {
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 4,
+  },
+  pressed: { opacity: 0.6 },
+  label: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
+    letterSpacing: -0.3,
   },
 });
