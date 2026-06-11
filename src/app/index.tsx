@@ -12,7 +12,7 @@ import { computeRisk, sortByRisk, summarize, type RiskInfo } from '@/features/me
 import { MembershipDetail } from '@/features/membership/MembershipDetail';
 import { MembershipForm } from '@/features/membership/MembershipForm';
 import { MembershipStatsCard, SummaryHeader } from '@/features/membership/MembershipStatsCard';
-import { type Membership, useMemberships } from '@/features/membership/useMemberships';
+import { useMemberships, type Membership } from '@/features/membership/useMemberships';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';

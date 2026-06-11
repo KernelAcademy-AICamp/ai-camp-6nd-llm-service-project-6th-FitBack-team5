@@ -19,8 +19,6 @@ import { useProfile } from '@/features/auth/useProfile';
 import { useAnalyzeImage, useAnalyzeMeal } from '@/features/diet/analyzeMeal';
 import { useMealFeedback } from '@/features/diet/mealFeedback';
 import { useFoodSearch, type FoodSearchResult } from '@/features/diet/foodSearch';
-import { pickFoodImage } from '@/features/diet/pickFoodImage';
-import { useRecommend } from '@/features/diet/recommend';
 import {
   MOCK_CONTEXT,
   PART_LABEL,
@@ -28,6 +26,8 @@ import {
   generateGuide,
   proteinTargetFromProfile,
 } from '@/features/diet/guide';
+import { pickFoodImage } from '@/features/diet/pickFoodImage';
+import { useRecommend } from '@/features/diet/recommend';
 import {
   MEAL_TYPES,
   useAddMeal,
