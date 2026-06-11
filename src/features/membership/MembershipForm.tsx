@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Check, MapPin, X } from 'lucide-react-native';
+import { Camera, Check, MapPin, Search, X } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +18,7 @@ import { Button, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { formatNumber } from '@/features/membership/dashboard';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
+import { searchPlaces, type GeoResult } from '@/features/membership/useGeocode';
 import { getPosition } from '@/features/membership/location';
 import { recognizeText } from '@/features/membership/ocr';
 import { parseReceipt } from '@/features/membership/parseReceipt';
@@ -85,6 +86,10 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   const [centerName, setCenterName] = useState('');
   const [centerCoord, setCenterCoord] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [results, setResults] = useState<GeoResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [focused, setFocused] = useState<string | null>(null);
@@ -128,6 +133,30 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('영수증 스캔', msg);
     }
+  }
+
+  async function runSearch() {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const res = await searchPlaces(q);
+      setResults(res);
+      if (res.length === 0) setSearchError('검색 결과가 없어요. 다른 키워드로 시도해 보세요.');
+    } catch (e) {
+      setSearchError((e as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function pickPlace(r: GeoResult) {
+    setCenterCoord({ lat: r.lat, lng: r.lng });
+    setCenterName(r.name);
+    setResults([]);
+    setSearchQuery('');
+    setSearchError(null);
   }
 
   async function setCenterFromGPS() {
@@ -291,10 +320,60 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
             onChangeText={setCenterName}
             onFocus={() => setFocused('centerName')}
             onBlur={() => setFocused(null)}
-            placeholder="예: 강남 피트니스"
+            placeholder="센터 이름"
             placeholderTextColor={Palette.gray300}
             style={inputStyle('centerName')}
           />
+
+          {/* 주소·장소 검색 → 좌표 (카카오) */}
+          <View style={styles.searchRow}>
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => setFocused('search')}
+              onBlur={() => setFocused(null)}
+              onSubmitEditing={runSearch}
+              returnKeyType="search"
+              placeholder="주소·장소 검색 (예: 강남 피트니스)"
+              placeholderTextColor={Palette.gray300}
+              style={[inputStyle('search'), styles.searchInput]}
+            />
+            <Pressable
+              onPress={runSearch}
+              disabled={searching}
+              style={({ pressed }) => [styles.searchBtn, pressed && styles.pressed]}
+              accessibilityLabel="검색">
+              {searching ? (
+                <ActivityIndicator color={Palette.white} />
+              ) : (
+                <Icon icon={Search} size={20} color={Palette.white} />
+              )}
+            </Pressable>
+          </View>
+
+          {searchError ? (
+            <ThemedText type="caption" themeColor="textSecondary">
+              {searchError}
+            </ThemedText>
+          ) : null}
+
+          {results.map((r, i) => (
+            <Pressable
+              key={`${r.lat}-${r.lng}-${i}`}
+              onPress={() => pickPlace(r)}
+              style={({ pressed }) => [styles.resultRow, pressed && styles.pressed]}>
+              <Icon icon={MapPin} size={16} color={Palette.gray500} />
+              <View style={styles.resultText}>
+                <ThemedText type="captionBold">{r.name}</ThemedText>
+                {r.address ? (
+                  <ThemedText type="label" themeColor="textSecondary">
+                    {r.address}
+                  </ThemedText>
+                ) : null}
+              </View>
+            </Pressable>
+          ))}
+
           <Pressable
             onPress={setCenterFromGPS}
             style={({ pressed }) => [styles.gpsBtn, pressed && styles.pressed]}>
@@ -383,6 +462,26 @@ const styles = StyleSheet.create({
     borderColor: Palette.lineDefault,
     backgroundColor: Palette.bgSurface,
   },
+  searchRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'stretch' },
+  searchInput: { flex: 1 },
+  searchBtn: {
+    width: 52,
+    borderRadius: Radius.small,
+    backgroundColor: Palette.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: Radius.small,
+    borderWidth: 0.5,
+    borderColor: Palette.lineDefault,
+    backgroundColor: Palette.bgSurface,
+  },
+  resultText: { flex: 1, gap: 2 },
   field: { gap: Spacing.sm },
   labelRow: { flexDirection: 'row', alignItems: 'center' },
   required: { color: Palette.loss },

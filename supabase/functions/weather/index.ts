@@ -34,9 +34,14 @@ function toGrid(lat: number, lon: number): { nx: number; ny: number } {
 }
 
 function baseDateTime(): { baseDate: string; baseTime: string } {
-  const d = new Date(Date.now() - 40 * 60 * 1000);
+  // 기상청 API는 KST 기준. Edge Function은 UTC로 돌기 때문에 +9h 보정해 KST 벽시계로 만든다.
+  // 초단기실황은 매시 ~40분 이후 제공되므로 40분 여유를 빼 직전 정시를 고른다.
+  const kst = new Date(Date.now() + (9 * 60 - 40) * 60 * 1000);
   const p = (n: number) => String(n).padStart(2, '0');
-  return { baseDate: `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`, baseTime: `${p(d.getHours())}00` };
+  return {
+    baseDate: `${kst.getUTCFullYear()}${p(kst.getUTCMonth() + 1)}${p(kst.getUTCDate())}`,
+    baseTime: `${p(kst.getUTCHours())}00`,
+  };
 }
 
 const PTY: Record<string, string> = {
