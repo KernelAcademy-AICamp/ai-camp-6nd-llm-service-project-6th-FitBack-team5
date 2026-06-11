@@ -8,12 +8,14 @@ import { ThemedView } from '@/components/themed-view';
 import { Card, Icon } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
+import { CoachCard } from '@/features/membership/CoachCard';
 import { computeRisk, sortByRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
 import { MembershipDetail } from '@/features/membership/MembershipDetail';
 import { MembershipForm } from '@/features/membership/MembershipForm';
 import { MembershipStatsCard, SummaryHeader } from '@/features/membership/MembershipStatsCard';
 import { type Membership, useMemberships } from '@/features/membership/useMemberships';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
+import { useVisitPattern } from '@/features/membership/useVisitPattern';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
@@ -43,6 +45,7 @@ function AuthFooter() {
 export default function MembershipScreen() {
   const { data: memberships, isLoading, isError, error } = useMemberships();
   const { data: stats } = useMonthlyStats();
+  const { data: visitPattern } = useVisitPattern();
   const [showForm, setShowForm] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [detail, setDetail] = useState<{
@@ -94,6 +97,11 @@ export default function MembershipScreen() {
           {/* spec 4-A 요약 헤더: 집계 + 비율막대 + 히어로 금액 + 보조 줄 + 센터 가기 CTA */}
           {!isLoading && !isError && list.length > 0 ? (
             <SummaryHeader summary={summary} count={list.length} onGoCenter={handleGoCenter} />
+          ) : null}
+
+          {/* AI 코치 "이번 주 추천" — 데이터 해석 + 다음 행동 제안 (Claude) */}
+          {!isLoading && !isError && list.length > 0 ? (
+            <CoachCard withRisk={withRisk} summary={summary} monthly={stats} pattern={visitPattern} />
           ) : null}
 
           {isLoading && (
