@@ -39,6 +39,9 @@ export default function AppTabs() {
           <TabTrigger name="workout" href="/workout" asChild>
             <TabButton icon="fitness-center">운동</TabButton>
           </TabTrigger>
+          <TabTrigger name="my" href="/my" asChild>
+            <TabButton icon="person">마이</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>

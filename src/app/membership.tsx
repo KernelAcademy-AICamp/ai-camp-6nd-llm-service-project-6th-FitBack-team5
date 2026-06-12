@@ -1,13 +1,12 @@
 import { LogOut, Plus } from 'lucide-react-native';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card, Icon } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
-import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { computeRisk, sortByRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
 import { MembershipDetail } from '@/features/membership/MembershipDetail';
 import { MembershipForm } from '@/features/membership/MembershipForm';
@@ -44,7 +43,6 @@ export default function MembershipScreen() {
   const { data: memberships, isLoading, isError, error } = useMemberships();
   const { data: stats } = useMonthlyStats();
   const [showForm, setShowForm] = useState(false);
-  const [showCheckIn, setShowCheckIn] = useState(false);
   const [detail, setDetail] = useState<{
     m: Membership;
     risk: RiskInfo;
@@ -63,16 +61,6 @@ export default function MembershipScreen() {
     withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })),
   );
   const isEmpty = !isLoading && !isError && list.length === 0;
-
-  function handleGoCenter() {
-    if (list.length === 0) {
-      const msg = '먼저 회원권을 등록해 주세요.';
-      if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('센터 가기', msg);
-      return;
-    }
-    setShowCheckIn(true);
-  }
 
   return (
     <ThemedView style={styles.container}>
@@ -93,7 +81,7 @@ export default function MembershipScreen() {
         <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
           {/* spec 4-A 요약 헤더: 집계 + 비율막대 + 히어로 금액 + 보조 줄 + 센터 가기 CTA */}
           {!isLoading && !isError && list.length > 0 ? (
-            <SummaryHeader summary={summary} count={list.length} onGoCenter={handleGoCenter} />
+            <SummaryHeader summary={summary} count={list.length} />
           ) : null}
 
           {isLoading && (
@@ -141,18 +129,6 @@ export default function MembershipScreen() {
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <MembershipForm onClose={() => setShowForm(false)} />
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
-
-      <Modal
-        visible={showCheckIn}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowCheckIn(false)}>
-        <ThemedView style={styles.modalRoot}>
-          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
           </SafeAreaView>
         </ThemedView>
       </Modal>

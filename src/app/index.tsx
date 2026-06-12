@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
-import { TrendingDown, TrendingUp } from 'lucide-react-native';
-import { Pressable, StyleSheet, ScrollView, View } from 'react-native';
+import { MapPin, TrendingDown, TrendingUp } from 'lucide-react-native';
+import { useState } from 'react';
+import { Alert, Modal, Platform, Pressable, StyleSheet, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -9,6 +10,9 @@ import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Icon } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Palette, ScreenPadding, Spacing } from '@/constants/theme';
 import { useProfile } from '@/features/auth/useProfile';
+import { ActivityCalendar } from '@/features/home/ActivityCalendar';
+import { HomeStrip } from '@/features/home/HomeStrip';
+import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { CoachCard } from '@/features/membership/CoachCard';
 import { computeRisk, formatNumber, summarize, won } from '@/features/membership/dashboard';
 import { HelpButton } from '@/features/membership/HelpButton';
@@ -85,6 +89,7 @@ export default function HomeScreen() {
   const { data: stats } = useMonthlyStats();
   const { data: visitPattern } = useVisitPattern();
   const { data: monthCompare } = useMonthCompare();
+  const [showCheckIn, setShowCheckIn] = useState(false);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -112,6 +117,16 @@ export default function HomeScreen() {
 
   const name = profile?.display_name || '회원';
   const mom = monthCompare?.changePct ?? null;
+
+  function handleCheckIn() {
+    if (list.length === 0) {
+      const msg = '먼저 회원권을 등록해 주세요.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('오늘 체크인', msg);
+      return;
+    }
+    setShowCheckIn(true);
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -176,10 +191,33 @@ export default function HomeScreen() {
             </Card>
           ) : null}
 
+          {/* 오늘 체크인 — 센터 가기 플로우 진입 (디폴트 페이지 핵심 액션) */}
+          {list.length > 0 ? (
+            <Button label="오늘 체크인" icon={MapPin} onPress={handleCheckIn} />
+          ) : null}
+
           {/* 블록 ② AI 코치 — 오늘의 액션 */}
           <CoachCard withRisk={withRisk} summary={summary} monthly={stats} pattern={visitPattern} />
+
+          {/* 블록 ③ 3대 기능 스트립 */}
+          <HomeStrip withRisk={withRisk} />
+
+          {/* 블록 ④ 누적 기록 캘린더 */}
+          <ActivityCalendar />
         </ScrollView>
       </SafeAreaView>
+
+      <Modal
+        visible={showCheckIn}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCheckIn(false)}>
+        <ThemedView style={styles.modalRoot}>
+          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+            <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -234,4 +272,7 @@ const styles = StyleSheet.create({
   heroStat: { gap: 2, flex: 1 },
 
   emptyBtn: { marginTop: Spacing.sm },
+
+  modalRoot: { flex: 1, backgroundColor: Palette.bgBase },
+  modalSafe: { flex: 1 },
 });
