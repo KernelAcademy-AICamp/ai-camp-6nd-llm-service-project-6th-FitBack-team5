@@ -189,7 +189,7 @@ async function buildAnalysis(foodKey: string | undefined, rawItems: Record<strin
 async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, text: string, grams?: number) {
   if (!text) return json({ error: 'text 가 필요합니다' }, 400);
   const userMsg = grams && grams > 0
-    ? `먹은 음식: ${text}\n사용자가 알려준 총 섭취량은 ${grams}g 이다. items의 grams 합이 이 값이 되도록 분배하고, 영양값도 그에 맞춰라.`
+    ? `먹은 음식: ${text}\n사용자가 알려준 총 섭취량은 ${grams}이다. 음식 종류에 맞는 단위(g, ml, 개 등)로 해석해서 items의 grams 합이 이 값에 맞도록 분배하고, 영양값도 그에 맞춰라.`
     : `먹은 음식: ${text}`;
   try {
     const raw = await claudeExtract(anthropicKey, userMsg);
@@ -287,6 +287,7 @@ const FEEDBACK_SYSTEM =
   '4) 오늘 운동 맥락이 있으면 반드시 회복 관점과 연결하라.\n' +
   '5) 친근한 존댓말("~예요/~해요/~보세요"), 3~5문장. 이모지·마크다운 없이 순수 문장만.\n' +
   '6) 죄책감·공포 유발 대신 동기부여로 마무리하라.\n' +
+  '7) 반드시 입력된 끼니(아침/점심/저녁/간식) 기준으로만 피드백하라. 입력되지 않은 다른 끼니(예: 저녁 식사, 아침 식사)를 임의로 언급하거나 혼동하지 마라.\n' +
   '출력 형식: 첫 줄에 16자 이내의 한 줄 요약을 쓰고, 줄바꿈(\\n) 후 상세 코칭 3~5문장을 이어 써라.';
 
 async function handleFeedback(
