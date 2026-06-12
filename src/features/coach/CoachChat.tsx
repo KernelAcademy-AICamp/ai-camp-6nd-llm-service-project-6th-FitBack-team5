@@ -1,7 +1,6 @@
 import { ArrowUp, Flame, Sparkles, X } from 'lucide-react-native';
 import { useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,10 +13,12 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
-import { useCoachChat, type CoachChatContext } from '@/features/coach/useCoachChat';
 import { useDietSummary } from '@/features/coach/useDietSummary';
 import { useHomeActivity } from '@/features/home/useHomeActivity';
 
+// [보류] MY 코치는 기능 우선순위에서 후순위로 내려가, 현재는 UI 셸만 제공한다.
+// 실제 AI 응답(coach-chat Edge Function 호출 = useCoachChat)은 연결하지 않았다.
+// 재개 시 send()에서 useCoachChat().mutate로 교체하면 된다(코드/함수는 보존).
 interface ChatMsg {
   role: 'coach' | 'user';
   text: string;
@@ -27,6 +28,8 @@ const GREETING: ChatMsg = {
   role: 'coach',
   text: '안녕하세요, T 코치예요. 식단·운동·방문 기록을 바탕으로 도와드릴게요. 무엇이 궁금하세요?',
 };
+const NOT_READY_REPLY =
+  'MY 코치 대화 기능은 아직 준비 중이에요. 곧 데이터를 바탕으로 더 똑똑하게 답해드릴게요.';
 // 추천 질문(프리셋). TODO[검토]: 데이터 기반 동적 추천으로 확장.
 const SUGGESTED = [
   '오늘 식단 어땠어?',
@@ -48,50 +51,17 @@ function MacroBar({ c, p, f }: { c: number; p: number; f: number }) {
 export function CoachChat({ onClose }: { onClose: () => void }) {
   const { summary } = useDietSummary();
   const { data: home } = useHomeActivity();
-  const chat = useCoachChat();
   const [messages, setMessages] = useState<ChatMsg[]>([GREETING]);
   const [input, setInput] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
-  function buildContext(): CoachChatContext {
-    return {
-      diet: summary
-        ? {
-            date: summary.date,
-            totalKcal: summary.totalKcal,
-            carb_g: summary.carb_g,
-            protein_g: summary.protein_g,
-            fat_g: summary.fat_g,
-            tags: summary.tags,
-          }
-        : null,
-      streakWeeks: home?.streakWeeks,
-      weekVisits: home?.weekVisits,
-      weekWorkouts: home?.weekWorkouts,
-    };
-  }
-
+  // [보류] 실제 AI 호출 대신 준비 중 안내만 회신한다.
   function send(text: string) {
     const q = text.trim();
-    if (!q || chat.isPending) return;
+    if (!q) return;
     setInput('');
-    setMessages((prev) => [...prev, { role: 'user', text: q }]);
+    setMessages((prev) => [...prev, { role: 'user', text: q }, { role: 'coach', text: NOT_READY_REPLY }]);
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
-    chat.mutate(
-      { question: q, context: buildContext() },
-      {
-        onSuccess: (reply) => {
-          setMessages((prev) => [...prev, { role: 'coach', text: reply }]);
-          requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
-        },
-        onError: (e) => {
-          setMessages((prev) => [
-            ...prev,
-            { role: 'coach', text: `지금은 답하기 어려워요. (${e.message})` },
-          ]);
-        },
-      },
-    );
   }
 
   return (
@@ -170,13 +140,6 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
             </View>
           </View>
         ))}
-        {chat.isPending ? (
-          <View style={styles.coachLine}>
-            <View style={[styles.bubble, styles.coachBubble]}>
-              <ActivityIndicator size="small" color={Palette.gray500} />
-            </View>
-          </View>
-        ) : null}
       </ScrollView>
 
       {/* 추천 질문 */}
@@ -189,7 +152,6 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
           <Pressable
             key={q}
             onPress={() => send(q)}
-            disabled={chat.isPending}
             style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
             accessibilityRole="button">
             <ThemedText type="label" style={{ color: Palette.primary }}>
@@ -209,14 +171,13 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
           style={styles.textInput}
           onSubmitEditing={() => send(input)}
           returnKeyType="send"
-          editable={!chat.isPending}
         />
         <Pressable
           onPress={() => send(input)}
-          disabled={chat.isPending || !input.trim()}
+          disabled={!input.trim()}
           style={({ pressed }) => [
             styles.sendBtn,
-            (!input.trim() || chat.isPending) && styles.sendBtnDisabled,
+            !input.trim() && styles.sendBtnDisabled,
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
