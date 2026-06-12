@@ -150,7 +150,7 @@ const D = {
 } as const;
 
 const S = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 } as const;
-const R = { small: 8, button: 12, card: 16, modal: 20, full: 100 } as const;
+const R = { small: 8, button: 12, card: 20, modal: 20, full: 100 } as const;
 const SIDE = 20; // 좌우 여백 (전 화면 공통)
 const NAV_HEIGHT = 64; // 하단 네비바 높이 (app-tabs.web)
 const LEVEL1 = {
@@ -205,6 +205,20 @@ function Card({ children, style }: { children: React.ReactNode; style?: object }
 
 // 운동 완료 여부 — source='recent'(완료) 일 때만 운동 데이터 표시. 연동 전 가데이터.
 const HAS_WORKOUT = MOCK_CONTEXT.source === 'recent';
+// 운동 부위 → 강조 매크로 (design-system §10)
+// lower/upper/full=근력 → 단백질, cardio=유산소 → 탄수화물, part 없음 → null
+// source가 'planned'(예정)이어도 그날 운동 부위가 있으면 강조 적용
+const FOCUS_MACRO: 'protein' | 'carb' | null =
+  !MOCK_CONTEXT.part
+    ? null
+    : MOCK_CONTEXT.part === 'cardio'
+    ? 'carb'
+    : 'protein';
+// 강조 매크로별 기능 캡션 (색+텍스트 병행 — §10 접근성)
+const FOCUS_CAPTION: Record<'protein' | 'carb', string> = {
+  protein: '근육 회복',
+  carb: '에너지',
+};
 const WORKOUT_MIN = 45; // 운동 시간(분) — 가데이터
 const STEP_COUNT = 6234; // 오늘 걸음수 — 가데이터 (운동 전/계획 없을 때 표시)
 // 걸음 소모 칼로리: 약 0.04 kcal/step (성인 평균 추정치)
@@ -248,14 +262,29 @@ function ProgressBar({ ratio, color = D.primary }: { ratio: number; color?: stri
 }
 
 // 목표 매크로 진행 — 라벨 + 섭취/목표(g) + 진행 바
-function MacroProgress({ label, value, goal }: { label: string; value: number; goal: number }) {
+// focused=true 시 라벨·수치·바를 Primary로, 아래에 기능 캡션 표시 (§10 색+텍스트 병행)
+function MacroProgress({
+  label,
+  value,
+  goal,
+  focused,
+  caption,
+}: {
+  label: string;
+  value: number;
+  goal: number;
+  focused?: boolean;
+  caption?: string;
+}) {
+  const labelColor = focused ? D.primary : D.gray500;
+  const barColor = focused ? D.primary : D.gray300;
   return (
     <View style={styles.macroCol}>
-      <Txt variant="caption" color={D.gray500}>
+      <Txt variant="caption" weight={focused ? '600' : '400'} color={labelColor}>
         {label}
       </Txt>
       <View style={styles.macroValueRow}>
-        <Txt variant="body" weight="700">
+        <Txt variant="body" weight="700" color={focused ? D.primary : D.gray900}>
           {value}
         </Txt>
         <Txt variant="caption" color={D.gray500}>
@@ -264,8 +293,13 @@ function MacroProgress({ label, value, goal }: { label: string; value: number; g
         </Txt>
       </View>
       <View style={styles.macroBar}>
-        <ProgressBar ratio={goal > 0 ? value / goal : 0} />
+        <ProgressBar ratio={goal > 0 ? value / goal : 0} color={barColor} />
       </View>
+      {focused && caption && (
+        <Txt variant="label" color={D.primary}>
+          {caption}
+        </Txt>
+      )}
     </View>
   );
 }
@@ -455,12 +489,15 @@ function MealSlot({ type, meals, onPress }: { type: MealType; meals: Meal[]; onP
 type RecTab = 'image' | 'text' | 'search' | 'favorites';
 type RecStep = 'input' | 'analyzing' | 'review' | 'result';
 type MacroTotals = { kcal: number; carb: number; protein: number; fat: number };
-// 결과 화면 매크로 점(컬러)
-const MACRO_DOT: Record<'protein' | 'carb' | 'fat', string> = {
-  protein: '#6675FF',
-  carb: '#3B82F6',
-  fat: '#14B8A6',
-};
+// 결과 화면 매크로 점(컬러) — FOCUS_MACRO만 Primary, 나머지는 gray300 (§10 동적 강조)
+function macroDotColor(key: 'protein' | 'carb' | 'fat'): string {
+  return FOCUS_MACRO === key ? D.primary : D.gray300;
+}
+const MACRO_DOT = {
+  protein: macroDotColor('protein'),
+  carb: macroDotColor('carb'),
+  fat: macroDotColor('fat'),
+} as const;
 
 // 코치 피드백 = 한 줄 요약(title) + 상세(body).
 type CoachText = { title: string; body: string };
@@ -761,7 +798,7 @@ function RecordModal({
                       value={draft.name}
                       onChangeText={(t) => setDraft({ ...draft, name: t })}
                       placeholder="음식 이름"
-                      placeholderTextColor={D.gray300}
+                      placeholderTextColor={D.gray400}
                       style={styles.reviewNameInput}
                     />
                   ) : (
@@ -1022,7 +1059,7 @@ function RecordModal({
                   value={textInput}
                   onChangeText={setTextInput}
                   placeholder={'먹은 음식을 입력하세요.\n(예: 치킨 2조각, 현미밥 한공기, 사과 1개)'}
-                  placeholderTextColor={D.gray300}
+                  placeholderTextColor={D.gray400}
                   style={styles.textArea}
                   multiline
                   autoFocus
@@ -1035,7 +1072,7 @@ function RecordModal({
                     value={gramsInput}
                     onChangeText={(t) => setGramsInput(t.replace(/[^0-9]/g, ''))}
                     placeholder="예: 250"
-                    placeholderTextColor={D.gray300}
+                    placeholderTextColor={D.gray400}
                     keyboardType="number-pad"
                     style={styles.gramsInput}
                   />
@@ -1074,7 +1111,7 @@ function RecordModal({
                     value={searchInput}
                     onChangeText={setSearchInput}
                     placeholder="음식 이름 검색"
-                    placeholderTextColor={D.gray300}
+                    placeholderTextColor={D.gray400}
                     style={styles.searchInput}
                     autoFocus
                   />
@@ -1139,15 +1176,21 @@ function MacroBox({
   label: string;
   children: React.ReactNode;
 }) {
+  const focused = FOCUS_MACRO === mkey;
   return (
     <View style={styles.macroCol}>
       <View style={styles.resultMacroHead}>
         <View style={[styles.resultDot, { backgroundColor: MACRO_DOT[mkey] }]} />
-        <Txt variant="label" color={D.gray500}>
+        <Txt variant="label" weight={focused ? '600' : '400'} color={focused ? D.primary : D.gray500}>
           {label}
         </Txt>
       </View>
       {children}
+      {focused && (
+        <Txt variant="label" color={D.primary}>
+          {FOCUS_CAPTION[FOCUS_MACRO]}
+        </Txt>
+      )}
     </View>
   );
 }
@@ -1430,7 +1473,7 @@ function ResultView({
               value={memo}
               onChangeText={(t) => setMemo(t.slice(0, 1000))}
               placeholder="식사 시간, 식사 순서 등을 메모해보세요."
-              placeholderTextColor={D.gray300}
+              placeholderTextColor={D.gray400}
               style={styles.memoInput}
               multiline
               maxLength={1000}
@@ -1556,7 +1599,7 @@ function SlotDetailModal({
                 value={form.name}
                 onChangeText={(t) => setForm((f) => ({ ...f, name: t }))}
                 placeholder="음식 이름"
-                placeholderTextColor={D.gray300}
+                placeholderTextColor={D.gray400}
                 style={styles.editInput}
               />
             </View>
@@ -1569,7 +1612,7 @@ function SlotDetailModal({
                 onChangeText={(t) => setForm((f) => ({ ...f, kcal: onlyDigits(t) }))}
                 keyboardType="number-pad"
                 placeholder="0"
-                placeholderTextColor={D.gray300}
+                placeholderTextColor={D.gray400}
                 style={styles.editInput}
               />
             </View>
@@ -1584,7 +1627,7 @@ function SlotDetailModal({
                     onChangeText={(t) => setForm((f) => ({ ...f, [k]: onlyDigits(t) }))}
                     keyboardType="number-pad"
                     placeholder="0"
-                    placeholderTextColor={D.gray300}
+                    placeholderTextColor={D.gray400}
                     style={styles.editInput}
                   />
                 </View>
@@ -1981,7 +2024,14 @@ export default function DietScreen() {
             {/* 목표 매크로 (단 → 탄 → 지) */}
             <View style={styles.macroRow}>
               {MACRO_META.map((m) => (
-                <MacroProgress key={m.key} label={m.label} value={totals[m.key]} goal={target[m.key]} />
+                <MacroProgress
+                  key={m.key}
+                  label={m.label}
+                  value={totals[m.key]}
+                  goal={target[m.key]}
+                  focused={FOCUS_MACRO === m.key}
+                  caption={FOCUS_MACRO === m.key ? FOCUS_CAPTION[FOCUS_MACRO] : undefined}
+                />
               ))}
             </View>
           </Card>
