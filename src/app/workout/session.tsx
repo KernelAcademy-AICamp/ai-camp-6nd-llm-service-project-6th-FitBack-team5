@@ -1,3 +1,4 @@
+import { X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -5,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Icon } from '@/components/ui';
 import {
   Elevation,
   MaxContentWidth,
@@ -510,7 +512,7 @@ export default function SessionScreen() {
       <ThemedView style={styles.finishContainer}>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.finishContent}>
-            <ThemedText type="display">운동 완료! 🎉</ThemedText>
+            <ThemedText type="display">운동 완료!</ThemedText>
             <ThemedText style={styles.finishSub}>오늘도 한 칸 채웠어요.</ThemedText>
           </View>
           <Pressable
@@ -538,9 +540,7 @@ export default function SessionScreen() {
           <Pressable
             onPress={handleClose}
             style={({ pressed }) => [styles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}>
-            <ThemedText type="subtitle">
-              ✕
-            </ThemedText>
+            <Icon icon={X} size={24} color={Palette.gray500} />
           </Pressable>
           <ThemedText type="smallBold">
             오늘의 운동 진행 중
@@ -889,11 +889,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.button,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6675FF',
+    backgroundColor: Palette.primary,
     marginBottom: Spacing.sm,
   },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: Palette.white,
   },
   textButton: {
     height: 44,
@@ -901,6 +901,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   textButtonText: {
-    color: '#9CA3AF',
+    color: Palette.gray400,
   },
 });

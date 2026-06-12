@@ -5,11 +5,12 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
 
+import { ThemedText } from '@/components/themed-text';
+import { Elevation, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 const TEST_EMAIL = process.env.EXPO_PUBLIC_DEV_TEST_EMAIL ?? '';
@@ -39,10 +40,8 @@ export function LoginScreen() {
       if (error) {
         setErrorMessage(error.message);
       } else if (!data.session) {
-        // 이메일 확인이 켜져 있는 경우: 세션이 없고 확인 메일이 발송된다.
         setInfoMessage('확인 메일을 보냈어요. 메일의 링크를 누른 뒤 로그인해 주세요.');
       }
-      // 확인 OFF면 data.session 이 바로 생기고 onAuthStateChange 가 자동 진입시킨다.
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setErrorMessage(error.message);
@@ -68,14 +67,16 @@ export function LoginScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.card}>
-        <Text style={styles.title}>{isSignup ? 'FitBack 회원가입' : 'FitBack 로그인'}</Text>
-        <Text style={styles.subtitle}>
+        <ThemedText type="h1">{isSignup ? 'FitBack 회원가입' : 'FitBack 로그인'}</ThemedText>
+        <ThemedText type="caption" themeColor="textSecondary" style={styles.subtitle}>
           {isSignup
             ? '이메일과 비밀번호로 새 계정을 만드세요.'
             : '이메일과 비밀번호로 로그인하세요.'}
-        </Text>
+        </ThemedText>
 
-        <Text style={styles.label}>이메일</Text>
+        <ThemedText type="label" themeColor="textSecondary" style={styles.fieldLabel}>
+          이메일
+        </ThemedText>
         <TextInput
           value={email}
           onChangeText={setEmail}
@@ -83,27 +84,39 @@ export function LoginScreen() {
           autoComplete="email"
           keyboardType="email-address"
           placeholder="you@example.com"
-          placeholderTextColor="#aab"
+          placeholderTextColor={Palette.gray300}
           style={styles.input}
         />
 
-        <Text style={styles.label}>비밀번호</Text>
+        <ThemedText type="label" themeColor="textSecondary" style={styles.fieldLabel}>
+          비밀번호
+        </ThemedText>
         <TextInput
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           autoComplete={isSignup ? 'new-password' : 'current-password'}
           placeholder="6자 이상"
-          placeholderTextColor="#aab"
+          placeholderTextColor={Palette.gray300}
           style={styles.input}
           onSubmitEditing={canSubmit ? handleSubmit : undefined}
         />
         {isSignup && password.length > 0 && !passwordOk && (
-          <Text style={styles.hint}>비밀번호는 6자 이상이어야 해요.</Text>
+          <ThemedText type="label" style={styles.hint}>
+            비밀번호는 6자 이상이어야 해요.
+          </ThemedText>
         )}
 
-        {errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-        {infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
+        {errorMessage && (
+          <ThemedText type="caption" style={styles.error}>
+            {errorMessage}
+          </ThemedText>
+        )}
+        {infoMessage && (
+          <ThemedText type="caption" style={styles.info}>
+            {infoMessage}
+          </ThemedText>
+        )}
 
         <Pressable
           onPress={handleSubmit}
@@ -114,30 +127,40 @@ export function LoginScreen() {
             pressed && canSubmit && styles.buttonPressed,
           ]}>
           {submitting ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={Palette.white} />
           ) : (
-            <Text style={styles.buttonLabel}>{isSignup ? '회원가입' : '로그인'}</Text>
+            <ThemedText type="subtitle" style={styles.buttonLabel}>
+              {isSignup ? '회원가입' : '로그인'}
+            </ThemedText>
           )}
         </Pressable>
 
         <Pressable onPress={toggleMode} style={styles.switchRow} hitSlop={6}>
-          <Text style={styles.switchText}>
+          <ThemedText type="captionBold" style={styles.switchText}>
             {isSignup ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입'}
-          </Text>
+          </ThemedText>
         </Pressable>
 
         <View style={styles.devBox}>
-          <Text style={styles.devTitle}>테스트 계정 (개발용)</Text>
-          <Text style={styles.devText}>이메일: {TEST_EMAIL || '(.env 미설정)'}</Text>
-          <Text style={styles.devText}>비밀번호: {TEST_PASSWORD || '(.env 미설정)'}</Text>
+          <ThemedText type="label" style={styles.devTitle}>
+            테스트 계정 (개발용)
+          </ThemedText>
+          <ThemedText type="label" themeColor="textSecondary">
+            이메일: {TEST_EMAIL || '(.env 미설정)'}
+          </ThemedText>
+          <ThemedText type="label" themeColor="textSecondary">
+            비밀번호: {TEST_PASSWORD || '(.env 미설정)'}
+          </ThemedText>
           {TEST_EMAIL && TEST_PASSWORD ? (
             <Pressable onPress={fillTestCredentials} style={styles.devButton}>
-              <Text style={styles.devButtonLabel}>입력란에 자동으로 채우기</Text>
+              <ThemedText type="label" style={styles.devButtonLabel}>
+                입력란에 자동으로 채우기
+              </ThemedText>
             </Pressable>
           ) : (
-            <Text style={styles.devHint}>
+            <ThemedText type="label" themeColor="textSecondary" style={styles.devHint}>
               .env에 EXPO_PUBLIC_DEV_TEST_EMAIL / EXPO_PUBLIC_DEV_TEST_PASSWORD를 채우세요.
-            </Text>
+            </ThemedText>
           )}
         </View>
       </View>
@@ -150,71 +173,65 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    backgroundColor: '#f5f5f7',
+    padding: ScreenPadding,
+    backgroundColor: Palette.bgBase,
   },
   card: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    backgroundColor: Palette.bgSurface,
+    borderRadius: Radius.card,
+    padding: Spacing.lg,
+    gap: Spacing.xs,
+    ...Elevation.level1,
   },
-  title: { fontSize: 24, fontWeight: '700', color: '#111' },
-  subtitle: { fontSize: 13, color: '#888', marginBottom: 12 },
-  label: { fontSize: 13, color: '#555', marginTop: 10 },
+  subtitle: { marginBottom: Spacing.sm },
+  fieldLabel: { marginTop: Spacing.sm },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: Palette.lineDefault,
+    borderRadius: Radius.small,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     fontSize: 16,
-    color: '#111',
-    backgroundColor: '#fafafa',
+    color: Palette.gray900,
+    backgroundColor: Palette.gray50,
+    minHeight: 44,
   },
-  hint: { fontSize: 12, color: '#a70', marginTop: 4 },
+  hint: { color: Palette.warning, marginTop: Spacing.xs },
   button: {
-    marginTop: 18,
-    backgroundColor: '#111',
-    borderRadius: 8,
-    paddingVertical: 14,
+    marginTop: Spacing.md,
+    backgroundColor: Palette.primary,
+    borderRadius: Radius.button,
+    paddingVertical: Spacing.md,
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
-  buttonDisabled: { backgroundColor: '#bbb' },
-  buttonPressed: { opacity: 0.85 },
-  buttonLabel: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  error: { color: '#d33', fontSize: 13, marginTop: 8 },
-  info: { color: '#176', fontSize: 13, marginTop: 8 },
-  switchRow: { marginTop: 14, alignItems: 'center' },
-  switchText: { fontSize: 13, color: '#3457d5', fontWeight: '600' },
+  buttonDisabled: { backgroundColor: Palette.gray300 },
+  buttonPressed: { backgroundColor: Palette.primaryPressed },
+  buttonLabel: { color: Palette.white },
+  error: { color: Palette.error, marginTop: Spacing.xs },
+  info: { color: Palette.success, marginTop: Spacing.xs },
+  switchRow: { marginTop: Spacing.sm, alignItems: 'center' },
+  switchText: { color: Palette.primary },
   devBox: {
-    marginTop: 24,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#f0f4ff',
+    marginTop: Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: Radius.small,
+    backgroundColor: Palette.primaryLight,
     borderWidth: 1,
-    borderColor: '#dbe4ff',
-    gap: 4,
+    borderColor: Palette.lineDefault,
+    gap: Spacing.xs,
   },
-  devTitle: { fontSize: 13, fontWeight: '600', color: '#334' },
-  devText: {
-    fontSize: 12,
-    color: '#445',
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
+  devTitle: { color: Palette.gray700 },
   devButton: {
-    marginTop: 8,
-    paddingVertical: 8,
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.sm,
     alignItems: 'center',
-    borderRadius: 6,
-    backgroundColor: '#dbe4ff',
+    borderRadius: Radius.small,
+    backgroundColor: Palette.bgSurface,
   },
-  devButtonLabel: { fontSize: 12, color: '#334', fontWeight: '600' },
-  devHint: { marginTop: 4, fontSize: 11, color: '#88a' },
+  devButtonLabel: { color: Palette.primary },
+  devHint: { marginTop: Spacing.xs },
 });
