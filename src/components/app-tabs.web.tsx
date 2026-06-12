@@ -28,13 +28,16 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="index" href="/" asChild>
+            <TabButton icon="home">홈</TabButton>
+          </TabTrigger>
+          <TabTrigger name="membership" href="/membership" asChild>
             <TabButton icon="card-membership">회원권</TabButton>
           </TabTrigger>
           <TabTrigger name="diet" href="/diet" asChild>
             <TabButton icon="restaurant">식단</TabButton>
           </TabTrigger>
           <TabTrigger name="workout" href="/workout" asChild>
-            <TabButton icon="fitness-center">홈트</TabButton>
+            <TabButton icon="fitness-center">운동</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>

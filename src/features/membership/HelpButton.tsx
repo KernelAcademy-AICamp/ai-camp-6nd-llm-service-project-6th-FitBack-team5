@@ -11,16 +11,18 @@ export function HelpButton({
   title,
   paragraphs,
   size = 14,
+  color = Palette.gray300,
 }: {
   title: string;
   paragraphs: string[];
   size?: number;
+  color?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityLabel={`${title} 도움말`}>
-        <Icon icon={HelpCircle} size={size} color={Palette.gray300} />
+        <Icon icon={HelpCircle} size={size} color={color} />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <View style={styles.backdrop}>

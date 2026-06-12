@@ -1,58 +1,90 @@
-import { LogOut, Plus } from 'lucide-react-native';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { TrendingDown, TrendingUp } from 'lucide-react-native';
+import { Pressable, StyleSheet, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Card, Icon } from '@/components/ui';
-import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
-import { CheckInFlow } from '@/features/membership/CheckInFlow';
+import { Button, Card, Icon } from '@/components/ui';
+import { BottomTabInset, MaxContentWidth, Palette, ScreenPadding, Spacing } from '@/constants/theme';
+import { useProfile } from '@/features/auth/useProfile';
 import { CoachCard } from '@/features/membership/CoachCard';
-import { computeRisk, sortByRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
-import { MembershipDetail } from '@/features/membership/MembershipDetail';
-import { MembershipForm } from '@/features/membership/MembershipForm';
-import { MembershipStatsCard, SummaryHeader } from '@/features/membership/MembershipStatsCard';
-import { useMemberships, type Membership } from '@/features/membership/useMemberships';
+import { computeRisk, formatNumber, summarize, won } from '@/features/membership/dashboard';
+import { HelpButton } from '@/features/membership/HelpButton';
+import { useMemberships } from '@/features/membership/useMemberships';
+import { useMonthCompare } from '@/features/membership/useMonthCompare';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { useVisitPattern } from '@/features/membership/useVisitPattern';
-import { supabase } from '@/lib/supabase';
-import { useCurrentUser } from '@/stores/auth';
 
-function AuthFooter() {
-  const user = useCurrentUser();
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-  }
+const UTIL_HELP = [
+  '활용도 = 사용한 횟수 ÷ 전체 횟수예요. (횟수제 회원권 합산)',
+  '가치 회수 = 지금까지 다닌 만큼 되찾은 회원권 가치(사용 횟수 × 회당 비용)예요.',
+  '많이 갈수록 활용도와 회수 가치가 올라가요.',
+];
+
+/** 활용도 도넛 링 (흰색, Primary 배경 위). 중앙엔 회수 가치 금액. */
+function UtilRing({ pct, centerValue }: { pct: number | null; centerValue: string }) {
+  const size = 96;
+  const r = 40;
+  const sw = 9;
+  const c = 2 * Math.PI * r;
+  const ratio = pct != null ? Math.min(1, Math.max(0, pct / 100)) : 0;
   return (
-    <View style={styles.authFooter}>
-      <ThemedText type="caption" themeColor="textSecondary" style={styles.authEmail}>
-        {user?.email ?? '(no session)'}
-      </ThemedText>
-      <Pressable
-        onPress={handleSignOut}
-        style={({ pressed }) => [styles.authButton, pressed && styles.authButtonPressed]}
-        accessibilityRole="button">
-        <Icon icon={LogOut} size={16} color={Palette.gray500} />
-        <ThemedText type="caption" themeColor="textSecondary">
-          로그아웃
+    <View style={{ width: size, height: size }}>
+      <Svg width={size} height={size}>
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.25)" strokeWidth={sw} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={Palette.white}
+          strokeWidth={sw}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${c * ratio} ${c}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <View style={styles.ringCenter}>
+        <ThemedText type="captionBold" style={styles.ringValue}>
+          {centerValue}
         </ThemedText>
-      </Pressable>
+        <ThemedText type="label" style={styles.dimWhite}>
+          가치 회수
+        </ThemedText>
+      </View>
     </View>
   );
 }
 
-export default function MembershipScreen() {
-  const { data: memberships, isLoading, isError, error } = useMemberships();
+function HeroStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <View style={styles.heroStat}>
+      <ThemedText type="label" style={styles.dimWhite}>
+        {label}
+      </ThemedText>
+      <ThemedText type="captionBold" style={styles.white}>
+        {value}
+      </ThemedText>
+      {sub ? (
+        <ThemedText type="label" style={styles.dimWhite}>
+          {sub}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * 홈 대시보드 (앱 디폴트). P0: 블록① 히어로(회원권 활용도) + 블록② AI 코치.
+ */
+export default function HomeScreen() {
+  const { data: profile } = useProfile();
+  const { data: memberships, isLoading } = useMemberships();
   const { data: stats } = useMonthlyStats();
   const { data: visitPattern } = useVisitPattern();
-  const [showForm, setShowForm] = useState(false);
-  const [showCheckIn, setShowCheckIn] = useState(false);
-  const [detail, setDetail] = useState<{
-    m: Membership;
-    risk: RiskInfo;
-    monthlyVisits: number;
-  } | null>(null);
+  const { data: monthCompare } = useMonthCompare();
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -61,128 +93,93 @@ export default function MembershipScreen() {
     risk: computeRisk(m, visitsOf(m.id)),
     visits: visitsOf(m.id),
   }));
-  const sorted = sortByRisk(withRisk, (x) => x.risk); // spec: 위험순 정렬
   const summary = summarize(
     withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })),
   );
-  const isEmpty = !isLoading && !isError && list.length === 0;
 
-  function handleGoCenter() {
-    if (list.length === 0) {
-      const msg = '먼저 회원권을 등록해 주세요.';
-      if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('센터 가기', msg);
-      return;
-    }
-    setShowCheckIn(true);
-  }
+  // 횟수제 합산 지표
+  const sessioned = withRisk.filter((x) => x.risk.hasSessions);
+  const totalUsed = sessioned.reduce((s, x) => s + x.risk.usedSessions, 0);
+  const totalTotal = sessioned.reduce((s, x) => s + (x.risk.totalSessions ?? 0), 0);
+  const sessionedCost = sessioned.reduce((s, x) => s + x.m.cost, 0);
+  const utilization = totalTotal > 0 ? Math.round((totalUsed / totalTotal) * 100) : null;
+
+  const recovered = withRisk.reduce((s, x) => s + x.risk.valueUsed, 0); // 가치 회수(누적)
+  const totalPaid = list.reduce((s, x) => s + x.cost, 0); // 총 결제 금액
+  const remainingValue = withRisk.reduce((s, x) => s + x.risk.valueAtRisk, 0); // 남은 가치
+  const listPrice = totalTotal > 0 ? Math.round(sessionedCost / totalTotal) : null; // 정가 회당
+  const effPrice = totalUsed > 0 ? Math.round(sessionedCost / totalUsed) : listPrice; // 실제 회당
+
+  const name = profile?.display_name || '회원';
+  const mom = monthCompare?.changePct ?? null;
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.titleRow}>
-          <ThemedText type="h1">내 회원권</ThemedText>
-          <Pressable
-            onPress={() => setShowForm(true)}
-            style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
-            accessibilityRole="button">
-            <Icon icon={Plus} size={18} color={Palette.white} />
-            <ThemedText type="captionBold" style={styles.addButtonLabel}>
-              회원권 추가
+        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+          <View>
+            <ThemedText type="h1">FitBack</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary">
+              {name}님, 오늘도 파이팅
             </ThemedText>
-          </Pressable>
-        </View>
+          </View>
 
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-          {/* spec 4-A 요약 헤더: 집계 + 비율막대 + 히어로 금액 + 보조 줄 + 센터 가기 CTA */}
-          {!isLoading && !isError && list.length > 0 ? (
-            <SummaryHeader summary={summary} count={list.length} onGoCenter={handleGoCenter} />
-          ) : null}
+          {/* 블록 ① 히어로 — 회원권 활용도 (솔리드 Primary) */}
+          {list.length > 0 ? (
+            <Pressable onPress={() => router.navigate('/membership')}>
+              <View style={styles.hero}>
+                <View style={styles.heroTop}>
+                  <View style={styles.heroLeft}>
+                    <View style={styles.labelRow}>
+                      <ThemedText type="caption" style={styles.dimWhite}>
+                        이번 달 회원권 활용도
+                      </ThemedText>
+                      <HelpButton title="활용도가 뭔가요?" paragraphs={UTIL_HELP} color="rgba(255,255,255,0.7)" />
+                    </View>
+                    <ThemedText type="display" style={styles.white}>
+                      {utilization != null ? `${utilization}%` : '기간제'}
+                    </ThemedText>
+                    {mom != null ? (
+                      <View style={styles.momChip}>
+                        <Icon icon={mom >= 0 ? TrendingUp : TrendingDown} size={12} color={Palette.white} />
+                        <ThemedText type="label" style={styles.white}>
+                          지난 달보다 {mom >= 0 ? '+' : ''}
+                          {mom}%
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                  </View>
+                  <UtilRing pct={utilization} centerValue={won(recovered)} />
+                </View>
 
-          {/* AI 코치 "이번 주 추천" — 데이터 해석 + 다음 행동 제안 (Claude) */}
-          {!isLoading && !isError && list.length > 0 ? (
-            <CoachCard withRisk={withRisk} summary={summary} monthly={stats} pattern={visitPattern} />
-          ) : null}
+                <View style={styles.heroDivider} />
 
-          {isLoading && (
-            <View style={styles.stateBox}>
-              <ActivityIndicator />
-            </View>
-          )}
-          {isError && (
-            <Card style={styles.stateCard}>
-              <ThemedText type="body">회원권을 불러오지 못했어요.</ThemedText>
-              <ThemedText type="caption" themeColor="textSecondary">
-                {(error as Error)?.message ?? '알 수 없는 오류'}
-              </ThemedText>
-            </Card>
-          )}
-          {isEmpty && (
-            <Card style={styles.stateCard}>
-              <ThemedText type="body">아직 등록된 회원권이 없어요.</ThemedText>
-              <ThemedText type="caption" themeColor="textSecondary">
-                오른쪽 위 “회원권 추가”로 첫 회원권을 등록해 보세요.
-              </ThemedText>
-            </Card>
-          )}
-
-          {/* 위험순 회원권 카드 */}
-          {sorted.map((x) => (
-            <MembershipStatsCard
-              key={x.m.id}
-              m={x.m}
-              risk={x.risk}
-              monthlyVisits={x.visits}
-              onPress={() => setDetail({ m: x.m, risk: x.risk, monthlyVisits: x.visits })}
-            />
-          ))}
-        </ScrollView>
-
-        <AuthFooter />
-      </SafeAreaView>
-
-      <Modal
-        visible={showForm}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowForm(false)}>
-        <ThemedView style={styles.modalRoot}>
-          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <MembershipForm onClose={() => setShowForm(false)} />
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
-
-      <Modal
-        visible={showCheckIn}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowCheckIn(false)}>
-        <ThemedView style={styles.modalRoot}>
-          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
-
-      <Modal
-        visible={!!detail}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setDetail(null)}>
-        <ThemedView style={styles.modalRoot}>
-          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            {detail ? (
-              <MembershipDetail
-                m={detail.m}
-                risk={detail.risk}
-                monthlyVisits={detail.monthlyVisits}
-                onClose={() => setDetail(null)}
+                <View style={styles.heroStats}>
+                  <HeroStat label="총 결제 금액" value={won(totalPaid)} />
+                  <HeroStat label="남은 가치" value={won(remainingValue)} />
+                  <HeroStat
+                    label="1회당 비용"
+                    value={effPrice != null ? `${formatNumber(effPrice)}원` : '-'}
+                    sub={listPrice != null && effPrice !== listPrice ? `정가 ${formatNumber(listPrice)}원` : undefined}
+                  />
+                </View>
+              </View>
+            </Pressable>
+          ) : !isLoading ? (
+            <Card>
+              <ThemedText type="body">회원권을 등록하면 활용도를 분석해드려요.</ThemedText>
+              <Button
+                label="회원권 등록하러 가기"
+                onPress={() => router.navigate('/membership')}
+                style={styles.emptyBtn}
               />
-            ) : null}
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
+            </Card>
+          ) : null}
+
+          {/* 블록 ② AI 코치 — 오늘의 액션 */}
+          <CoachCard withRisk={withRisk} summary={summary} monthly={stats} pattern={visitPattern} />
+        </ScrollView>
+      </SafeAreaView>
     </ThemedView>
   );
 }
@@ -197,53 +194,44 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    gap: Spacing.lg,
   },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
+  body: { gap: Spacing.lg, paddingBottom: Spacing.lg },
+
+  hero: {
     backgroundColor: Palette.primary,
-  },
-  addButtonPressed: { backgroundColor: Palette.primaryPressed },
-  addButtonLabel: { color: Palette.white },
-  list: {
-    gap: Spacing.md,
-    paddingBottom: Spacing.md,
-  },
-  stateBox: {
-    paddingVertical: Spacing.xl,
-    alignItems: 'center',
-  },
-  stateCard: { gap: Spacing.xs },
-  authFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xs,
-    paddingTop: Spacing.sm,
+    borderRadius: 20,
+    padding: Spacing.lg,
     gap: Spacing.md,
   },
-  authEmail: { flex: 1 },
-  authButton: {
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
+  heroLeft: { flex: 1, gap: Spacing.xs },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  white: { color: Palette.white },
+  dimWhite: { color: 'rgba(255,255,255,0.7)' },
+  momChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Palette.lineStrong,
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 999,
   },
-  authButtonPressed: { opacity: 0.6 },
-  modalRoot: { flex: 1, backgroundColor: Palette.bgBase },
-  modalSafe: { flex: 1 },
+  ringCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  ringValue: { color: Palette.white },
+  heroDivider: { height: 0.5, backgroundColor: 'rgba(255,255,255,0.25)' },
+  heroStats: { flexDirection: 'row', justifyContent: 'space-between' },
+  heroStat: { gap: 2, flex: 1 },
+
+  emptyBtn: { marginTop: Spacing.sm },
 });
