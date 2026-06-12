@@ -189,7 +189,7 @@ async function buildAnalysis(foodKey: string | undefined, rawItems: Record<strin
 async function handleAnalyze(anthropicKey: string, foodKey: string | undefined, text: string, grams?: number) {
   if (!text) return json({ error: 'text 가 필요합니다' }, 400);
   const userMsg = grams && grams > 0
-    ? `먹은 음식: ${text}\n사용자가 알려준 총 섭취량은 ${grams}g 이다. items의 grams 합이 이 값이 되도록 분배하고, 영양값도 그에 맞춰라.`
+    ? `먹은 음식: ${text}\n사용자가 알려준 총 섭취량은 ${grams}이다. 음식 종류에 맞는 단위(g, ml, 개 등)로 해석해서 items의 grams 합이 이 값에 맞도록 분배하고, 영양값도 그에 맞춰라.`
     : `먹은 음식: ${text}`;
   try {
     const raw = await claudeExtract(anthropicKey, userMsg);

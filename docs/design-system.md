@@ -125,6 +125,7 @@ Reliable(데이터 기반·신뢰) · Encouraging(압박 대신 응원) · Insig
 | 이름 | 크기 | 굵기 | 행간 | 용도 |
 |------|------|------|------|------|
 | Display | 32px | Bold | 125% | 메인 수치 — 회당 실비용, 달성률 |
+| Display 2 | 28px | Bold | 125% | 서브 수치, 강조 숫자 |
 | Heading 1 | 24px | Bold | 125% | 페이지 타이틀 |
 | Heading 2 | 20px | Semibold | 125% | 섹션 타이틀, 카드 타이틀 |
 | Subtitle | 18px | Semibold | 125% | 서브타이틀, 버튼 |

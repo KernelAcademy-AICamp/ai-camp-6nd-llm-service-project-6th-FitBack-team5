@@ -170,9 +170,10 @@ const LEVEL1 = {
 };
 
 // ── 타이포그래피 (자간 -2.5%) ───────────────────────────────
-type Variant = 'display' | 'h1' | 'h2' | 'body' | 'caption' | 'label';
+type Variant = 'display' | 'display2' | 'h1' | 'h2' | 'body' | 'caption' | 'label';
 const TYPE: Record<Variant, TextStyle> = {
   display: { fontSize: 32, fontWeight: '700', lineHeight: 40, letterSpacing: -0.8 },
+  display2: { fontSize: 28, fontWeight: '700', lineHeight: 36, letterSpacing: -0.7 },
   h1: { fontSize: 24, fontWeight: '700', lineHeight: 30, letterSpacing: -0.6 },
   h2: { fontSize: 20, fontWeight: '600', lineHeight: 25, letterSpacing: -0.5 },
   body: { fontSize: 16, fontWeight: '400', lineHeight: 24, letterSpacing: -0.4 },
@@ -246,6 +247,13 @@ function balanceStatus(ratio: number): { label: string; color: string; desc: str
   return { label: '과다', color: D.error, desc: '현재 운동량 기준 권장 섭취를 넘었어요.' };
 }
 
+// 운동 효과 점수 → 게이지 상태 (0-100점)
+function scoreStatus(score: number): { label: string; color: string } {
+  if (score >= 70) return { label: '훌륭해요', color: D.success };
+  if (score >= 40) return { label: '양호해요', color: D.warning };
+  return { label: '더 채워봐요', color: D.warning };
+}
+
 // ── 공통 컴포넌트 ───────────────────────────────────────────
 function ProgressBar({ ratio, color = D.primary }: { ratio: number; color?: string }) {
   return (
@@ -304,10 +312,12 @@ function SemiGauge({
   ratio,
   status,
   active,
+  centerLabel,
 }: {
   ratio: number;
   status: { label: string; color: string };
   active: boolean;
+  centerLabel?: string;
 }) {
   const W = 148;
   const SW = 13; // 아크 두께
@@ -332,8 +342,8 @@ function SemiGauge({
         )}
       </Svg>
       <View style={styles.gaugeLabel}>
-        <Txt variant="h1" weight="700" color={active ? D.gray900 : D.gray500}>
-          {score}%
+        <Txt variant="display2" weight="700" color={active ? D.gray900 : D.gray500}>
+          {centerLabel ?? `${score}%`}
         </Txt>
         <Txt variant="caption" weight="700" color={active ? status.color : D.gray500}>
           {active ? status.label : '등록 전'}
@@ -565,7 +575,7 @@ function RecordModal({
   const [tab, setTab] = useState<RecTab>('image');
   const [step, setStep] = useState<RecStep>('input');
   const [textInput, setTextInput] = useState('');
-  const [gramsInput, setGramsInput] = useState(''); // 선택: 총 섭취량(g)
+  const [gramsInput, setGramsInput] = useState(''); // 선택: 총 섭취량 (단위는 Claude가 음식에 따라 판단)
   const [searchInput, setSearchInput] = useState('');
   const [draft, setDraft] = useState<Omit<Meal, 'id' | 'time'> | null>(null);
   const [resultBase, setResultBase] = useState<MacroTotals | null>(null); // 저장 시점 누적 스냅샷
@@ -579,17 +589,21 @@ function RecordModal({
   // 식사 시간 — 모달 열릴 때 시각으로 초기화
   const [mealTime, setMealTime] = useState(() => new Date());
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [unit, setUnit] = useState<'인분' | 'g'>('인분');
+  const [showUnitPicker, setShowUnitPicker] = useState(false);
   const feedback = useMealFeedback();
   const feedbackRequested = useRef(false); // 리뷰 진입당 1회만 요청(편집 중 재호출 방지)
 
   // 오늘 운동 맥락 — 트레이너 피드백에 회복 관점 반영
   const feedbackContext = focusMacro === 'protein' ? '근력 운동 회복' : focusMacro === 'carb' ? '유산소 운동 회복' : undefined;
 
-  // 수량 반영 스케일값 — 편집 중엔 draft 그대로, 아닐 때는 baseNutrition × quantity
-  const scaledKcal    = baseNutrition && !editingReview ? Math.round(baseNutrition.kcal     * quantity) : (draft?.kcal     ?? 0);
-  const scaledCarb    = baseNutrition && !editingReview ? Math.round(baseNutrition.carb     * quantity) : (draft?.carb     ?? 0);
-  const scaledProtein = baseNutrition && !editingReview ? Math.round(baseNutrition.protein  * quantity) : (draft?.protein  ?? 0);
-  const scaledFat     = baseNutrition && !editingReview ? Math.round(baseNutrition.fat      * quantity) : (draft?.fat      ?? 0);
+  // 수량 반영 스케일값 — 편집 중엔 draft 그대로, 아닐 때는 baseNutrition × multiplier
+  // unit='인분': multiplier=quantity / unit='g': multiplier=quantity/100 (1인분≈100g 기준)
+  const unitMultiplier = unit === 'g' ? quantity / 100 : quantity;
+  const scaledKcal    = baseNutrition && !editingReview ? Math.round(baseNutrition.kcal     * unitMultiplier) : (draft?.kcal     ?? 0);
+  const scaledCarb    = baseNutrition && !editingReview ? Math.round(baseNutrition.carb     * unitMultiplier) : (draft?.carb     ?? 0);
+  const scaledProtein = baseNutrition && !editingReview ? Math.round(baseNutrition.protein  * unitMultiplier) : (draft?.protein  ?? 0);
+  const scaledFat     = baseNutrition && !editingReview ? Math.round(baseNutrition.fat      * unitMultiplier) : (draft?.fat      ?? 0);
   const goalPct       = target.kcal > 0 ? Math.round((scaledKcal / target.kcal) * 100) : 0;
   const remainingKcal = Math.max(0, target.kcal - totals.kcal - scaledKcal);
 
@@ -605,7 +619,9 @@ function RecordModal({
       setDraft({ ...draft, kcal: scaledKcal, carb: scaledCarb, protein: scaledProtein, fat: scaledFat });
       setBaseNutrition(null);
       setQuantity(1);
+      setUnit('인분');
     }
+    setShowUnitPicker(false);
     setEditingReview((v) => !v);
   }
 
@@ -631,6 +647,8 @@ function RecordModal({
     setEditingReview(false);
     setQuantity(1);
     setBaseNutrition(null);
+    setUnit('인분');
+    setShowUnitPicker(false);
     feedbackRequested.current = false;
     feedback.reset();
   }
@@ -648,6 +666,8 @@ function RecordModal({
     setQuantity(1);
     setBaseNutrition(null);
     setMealTime(new Date());
+    setUnit('인분');
+    setShowUnitPicker(false);
     feedbackRequested.current = false;
     feedback.reset();
     onClose();
@@ -676,6 +696,8 @@ function RecordModal({
     setQuantity(1);
     setBaseNutrition(null);
     setMealTime(new Date());
+    setUnit('인분');
+    setShowUnitPicker(false);
     feedbackRequested.current = false;
     feedback.reset();
   }
@@ -684,11 +706,12 @@ function RecordModal({
   async function analyzeText() {
     const text = textInput.trim();
     if (!text) return;
-    const grams = parseInt(gramsInput, 10);
+    const amount = parseInt(gramsInput, 10);
+    const grams = Number.isFinite(amount) && amount > 0 ? amount : undefined;
     setAnalyzeError(null);
     setStep('analyzing');
     try {
-      const r = await analyzeMeal.mutateAsync({ text, grams: Number.isFinite(grams) && grams > 0 ? grams : undefined });
+      const r = await analyzeMeal.mutateAsync({ text, grams });
       setBaseNutrition({ kcal: r.kcal, carb: r.carb, protein: r.protein, fat: r.fat });
       setQuantity(1);
       setDraft({
@@ -784,132 +807,7 @@ function RecordModal({
 
         {step === 'review' && draft ? (
           <ScrollView contentContainerStyle={styles.reviewBody} showsVerticalScrollIndicator={false}>
-            {/* ① 음식 카드 — 이미지 + 이름 + 수량 스테퍼 */}
-            <View style={styles.reviewFoodCard}>
-              <View style={styles.reviewFoodTop}>
-                <View style={styles.reviewFoodImg}>
-                  <Icon name="photo-library" size={28} color={D.primary} />
-                </View>
-                <View style={styles.reviewFoodInfo}>
-                  {editingReview ? (
-                    <TextInput
-                      value={draft.name}
-                      onChangeText={(t) => setDraft({ ...draft, name: t })}
-                      placeholder="음식 이름"
-                      placeholderTextColor={D.gray400}
-                      style={styles.reviewNameInput}
-                    />
-                  ) : (
-                    <>
-                      <View style={styles.reviewFoodNameRow}>
-                        <Txt variant="body" weight="700">{draft.name}</Txt>
-                        <View style={styles.reviewAiBadge}>
-                          <Txt variant="label" weight="600" color={D.primary}>AI 추정값</Txt>
-                        </View>
-                      </View>
-                      <Txt variant="caption" color={D.gray500}>인식 결과가 다르면 수정해 주세요</Txt>
-                    </>
-                  )}
-                </View>
-                <Pressable onPress={toggleEdit} hitSlop={8} style={styles.reviewEditBtnTop}>
-                  <Icon name={editingReview ? 'check' : 'edit'} size={14} color={D.primary} />
-                  <Txt variant="label" weight="700" color={D.primary}>{editingReview ? '완료' : '수정'}</Txt>
-                </Pressable>
-              </View>
-              {!editingReview && (
-                <View style={styles.reviewStepperRow}>
-                  <View style={styles.reviewStepper}>
-                    <Pressable onPress={() => setQuantity((q) => Math.max(1, q - 1))} style={styles.stepperBtn} hitSlop={8}>
-                      <Txt variant="h2" color={D.gray700}>-</Txt>
-                    </Pressable>
-                    <Txt variant="body" weight="700" style={styles.stepperNum}>{quantity}</Txt>
-                    <Pressable onPress={() => setQuantity((q) => q + 1)} style={styles.stepperBtn} hitSlop={8}>
-                      <Txt variant="h2" color={D.gray700}>+</Txt>
-                    </Pressable>
-                  </View>
-                  <View style={styles.stepperUnit}>
-                    <Txt variant="body" color={D.gray700}>인분</Txt>
-                    <Icon name="keyboard-arrow-down" size={18} color={D.gray500} />
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* ② 영양 카드 — kcal + 목표% + 탄단지 */}
-            <View style={styles.reviewNutrCard}>
-              <View style={styles.reviewNutrKcalRow}>
-                {editingReview ? (
-                  <TextInput
-                    value={String(draft.kcal)}
-                    onChangeText={(t) => setDraft({ ...draft, kcal: toInt(onlyDigits(t)) })}
-                    keyboardType="number-pad"
-                    style={styles.reviewKcalInput}
-                  />
-                ) : (
-                  <Txt variant="display" weight="700" color={D.gray900}>{scaledKcal}</Txt>
-                )}
-                <Txt variant="body" color={D.gray500}> kcal</Txt>
-                {!editingReview && (
-                  <View style={styles.dailyPctBadge}>
-                    <Txt variant="label" weight="600" color={D.primary}>일일 목표 {goalPct}%</Txt>
-                  </View>
-                )}
-              </View>
-              {!editingReview && (
-                <Txt variant="caption" color={D.gray500}>
-                  오늘 목표까지 {remainingKcal.toLocaleString()}kcal 남았어요
-                </Txt>
-              )}
-              <View style={styles.macroRow}>
-                {(['carb', 'protein', 'fat'] as const).map((k) => {
-                  const label = k === 'carb' ? '탄수화물' : k === 'protein' ? '단백질' : '지방';
-                  const val = k === 'carb' ? scaledCarb : k === 'protein' ? scaledProtein : scaledFat;
-                  return (
-                    <MacroBox key={k} mkey={k} label={label} focusMacro={focusMacro}>
-                      {editingReview ? (
-                        <TextInput
-                          value={String(draft[k])}
-                          onChangeText={(t) => setDraft({ ...draft, [k]: toInt(onlyDigits(t)) })}
-                          keyboardType="number-pad"
-                          style={styles.reviewMacroInput}
-                        />
-                      ) : (
-                        <>
-                          <Txt variant="h2" weight="700" color={D.gray900}>{val}g</Txt>
-                          <View style={styles.macroBar}>
-                            <ProgressBar ratio={target[k] > 0 ? (totals[k] + val) / target[k] : 0} color={macroDot(k, focusMacro)} />
-                          </View>
-                        </>
-                      )}
-                    </MacroBox>
-                  );
-                })}
-              </View>
-              <Pressable style={styles.nutriDetailRow}>
-                <Txt variant="label" color={D.gray500}>영양소 상세</Txt>
-                <Icon name="chevron-right" size={14} color={D.gray500} />
-              </Pressable>
-            </View>
-
-            {/* ③ AI 피드백 버블 */}
-            {(feedback.isPending || !!feedback.data) && (
-              <View style={styles.reviewFeedbackBubble}>
-                <Icon name="auto-awesome" size={16} color={D.primary} style={{ marginTop: 2 }} />
-                {feedback.isPending ? (
-                  <>
-                    <ActivityIndicator size="small" color={D.primary} />
-                    <Txt variant="caption" color={D.gray500}>코멘트 준비 중…</Txt>
-                  </>
-                ) : (
-                  <Txt variant="body" color={D.gray900} style={styles.flex1}>
-                    {(() => { const c = splitCoach(feedback.data ?? ''); return [c.title, c.body].filter(Boolean).join(' '); })()}
-                  </Txt>
-                )}
-              </View>
-            )}
-
-            {/* ④ 끼니 */}
-            <Txt variant="caption" weight="600" color={D.gray500}>끼니</Txt>
+            {/* ① 끼니 */}
             <View style={styles.chipRow}>
               {MEAL_TYPES.map((t) => {
                 const selected = draft.mealType === t;
@@ -929,7 +827,7 @@ function RecordModal({
               })}
             </View>
 
-            {/* ⑤ 식사 시간 */}
+            {/* ② 식사 시간 */}
             <Pressable style={styles.mealTimeRow} onPress={() => setShowTimePicker((v) => !v)}>
               <Icon name="clock" size={16} color={D.gray500} />
               <Txt variant="body" color={D.gray700} style={styles.flex1}>식사 시간</Txt>
@@ -990,6 +888,161 @@ function RecordModal({
                 </Pressable>
               </View>
             )}
+
+            {/* ③ 통합 카드 — 음식 + 영양 */}
+            <View style={styles.reviewFoodCard}>
+              <View style={styles.reviewFoodTop}>
+                <View style={styles.reviewFoodImg}>
+                  <Icon name="photo-library" size={28} color={D.primary} />
+                </View>
+                <View style={styles.reviewFoodInfo}>
+                  {editingReview ? (
+                    <TextInput
+                      value={draft.name}
+                      onChangeText={(t) => setDraft({ ...draft, name: t })}
+                      placeholder="음식 이름"
+                      placeholderTextColor={D.gray400}
+                      style={styles.reviewNameInput}
+                    />
+                  ) : (
+                    <>
+                      <Txt variant="body" weight="700">{draft.name}</Txt>
+                      <Txt variant="caption" color={D.gray500}>인식 결과가 다르면 수정해 주세요</Txt>
+                    </>
+                  )}
+                </View>
+                <Pressable onPress={toggleEdit} hitSlop={8} style={styles.reviewEditBtnTop}>
+                  <Icon name={editingReview ? 'check' : 'edit'} size={14} color={D.primary} />
+                  <Txt variant="label" weight="700" color={D.primary}>{editingReview ? '완료' : '수정'}</Txt>
+                </Pressable>
+              </View>
+              {!editingReview && (
+                <>
+                  <View style={[styles.reviewStepperRow, { justifyContent: 'flex-end' }]}>
+                    <View style={styles.reviewStepper}>
+                      <Pressable
+                        onPress={() => setQuantity((q) => Math.max(unit === 'g' ? 10 : 1, q - (unit === 'g' ? 10 : 1)))}
+                        style={styles.stepperBtn}
+                        hitSlop={8}>
+                        <Txt variant="h2" color={D.gray700}>-</Txt>
+                      </Pressable>
+                      <Txt variant="body" weight="700" style={styles.stepperNum}>{quantity}</Txt>
+                      <Pressable
+                        onPress={() => setQuantity((q) => q + (unit === 'g' ? 10 : 1))}
+                        style={styles.stepperBtn}
+                        hitSlop={8}>
+                        <Txt variant="h2" color={D.gray700}>+</Txt>
+                      </Pressable>
+                    </View>
+                    <Pressable onPress={() => setShowUnitPicker((v) => !v)} style={styles.stepperUnit}>
+                      <Txt variant="body" color={D.gray700}>{unit}</Txt>
+                      <Icon name={showUnitPicker ? 'arrow-upward' : 'keyboard-arrow-down'} size={18} color={D.gray500} />
+                    </Pressable>
+                  </View>
+                  {showUnitPicker && (
+                    <View style={styles.unitDropdown}>
+                      {(['인분', 'g'] as const).map((u) => (
+                        <Pressable
+                          key={u}
+                          onPress={() => {
+                            if (u !== unit) {
+                              setQuantity(u === 'g' ? Math.max(10, Math.round(quantity * 100 / 10) * 10) : Math.max(1, Math.round(quantity / 100)));
+                              setUnit(u);
+                            }
+                            setShowUnitPicker(false);
+                          }}
+                          style={[styles.unitOption, u === unit && { backgroundColor: D.primaryLight }]}>
+                          <Txt variant="body" color={u === unit ? D.primary : D.gray700}>{u}</Txt>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+              <View style={styles.sectionDivider} />
+              <View style={styles.reviewNutrKcalRow}>
+                {editingReview ? (
+                  <TextInput
+                    value={String(draft.kcal)}
+                    onChangeText={(t) => setDraft({ ...draft, kcal: toInt(onlyDigits(t)) })}
+                    keyboardType="number-pad"
+                    style={styles.reviewKcalInput}
+                  />
+                ) : (
+                  <Txt variant="display" weight="700" color={D.gray900}>{scaledKcal}</Txt>
+                )}
+                <Txt variant="body" color={D.gray500}> kcal</Txt>
+                {!editingReview && (
+                  <View style={styles.dailyPctBadge}>
+                    <Txt variant="label" weight="600" color={D.primary}>일일 목표 {goalPct}%</Txt>
+                  </View>
+                )}
+              </View>
+              {!editingReview && (
+                <Txt variant="caption" color={D.gray500}>
+                  오늘 목표까지 {remainingKcal.toLocaleString()}kcal 남았어요
+                </Txt>
+              )}
+              <View style={styles.macroRow}>
+                {(['carb', 'protein', 'fat'] as const).map((k) => {
+                  const label = k === 'carb' ? '탄수화물' : k === 'protein' ? '단백질' : '지방';
+                  const val = k === 'carb' ? scaledCarb : k === 'protein' ? scaledProtein : scaledFat;
+                  return (
+                    <MacroBox key={k} mkey={k} label={label} focusMacro={focusMacro}>
+                      {editingReview ? (
+                        <TextInput
+                          value={String(draft[k])}
+                          onChangeText={(t) => setDraft({ ...draft, [k]: toInt(onlyDigits(t)) })}
+                          keyboardType="number-pad"
+                          style={styles.reviewMacroInput}
+                        />
+                      ) : (
+                        <>
+                          <Txt variant="h2" weight="700" color={D.gray900}>{val}g</Txt>
+                          <View style={styles.macroBar}>
+                            <ProgressBar ratio={target[k] > 0 ? (totals[k] + val) / target[k] : 0} color={macroDot(k, focusMacro)} />
+                          </View>
+                        </>
+                      )}
+                    </MacroBox>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* ④ AI 피드백 버블 */}
+            {(feedback.isPending || !!feedback.data) && (
+              <View style={styles.reviewFeedbackBubble}>
+                <Icon name="auto-awesome" size={16} color={D.primary} style={{ marginTop: 2 }} />
+                {feedback.isPending ? (
+                  <>
+                    <ActivityIndicator size="small" color={D.primary} />
+                    <Txt variant="caption" color={D.gray500}>코멘트 준비 중…</Txt>
+                  </>
+                ) : (
+                  <Txt variant="body" color={D.gray900} style={styles.flex1}>
+                    {(() => { const c = splitCoach(feedback.data ?? ''); return [c.title, c.body].filter(Boolean).join(' '); })()}
+                  </Txt>
+                )}
+              </View>
+            )}
+
+            {/* ⑤ 영양소 상세 */}
+            <View style={styles.nutriDetailSection}>
+              <Txt variant="caption" weight="600" color={D.gray500}>영양소 상세</Txt>
+              <View style={styles.nutriDetailItem}>
+                <Txt variant="body" color={D.gray700}>탄수화물</Txt>
+                <Txt variant="body" weight="600">{scaledCarb}g</Txt>
+              </View>
+              <View style={styles.nutriDetailItem}>
+                <Txt variant="body" color={D.gray700}>단백질</Txt>
+                <Txt variant="body" weight="600">{scaledProtein}g</Txt>
+              </View>
+              <View style={[styles.nutriDetailItem, { borderBottomWidth: 0 }]}>
+                <Txt variant="body" color={D.gray700}>지방</Txt>
+                <Txt variant="body" weight="600">{scaledFat}g</Txt>
+              </View>
+            </View>
 
             <PrimaryButton label="저장하기" onPress={saveAndShowResult} />
           </ScrollView>
@@ -1089,9 +1142,6 @@ function RecordModal({
                     keyboardType="number-pad"
                     style={styles.gramsInput}
                   />
-                  <Txt variant="body" color={D.gray500}>
-                    g
-                  </Txt>
                 </View>
                 {analyzeError && (
                   <Txt variant="caption" color={D.error}>
@@ -1397,33 +1447,24 @@ function ResultView({
         {/* 운동 효과 점수 + 이번 식사 기여 (통합 카드) */}
         <View style={styles.scoreCard}>
           <View style={styles.scoreHero}>
-            <View style={styles.scoreHeadRow}>
-              <Txt variant="label" color={D.gray500}>
-                운동 효과 점수
-              </Txt>
-              <Icon name="info-outline" size={14} color={D.gray300} />
-            </View>
-            <View style={styles.scoreRow}>
-              <Txt variant="display" color={D.gray900}>
-                {after}
-              </Txt>
-              <Txt variant="h2" color={D.gray500}>
-                점
-              </Txt>
-              {delta !== 0 && (
-                <View style={styles.scoreDelta}>
-                  <Icon
-                    name={delta > 0 ? 'arrow-upward' : 'arrow-downward'}
-                    size={13}
-                    color={delta > 0 ? D.success : D.gray500}
-                  />
-                  <Txt variant="caption" weight="700" color={delta > 0 ? D.success : D.gray500}>
-                    {delta > 0 ? '+' : ''}
-                    {delta}점
-                  </Txt>
-                </View>
-              )}
-            </View>
+            <SemiGauge
+              ratio={after / 100}
+              status={scoreStatus(after)}
+              active
+              centerLabel={`${after}점`}
+            />
+            {delta !== 0 && (
+              <View style={styles.scoreDelta}>
+                <Icon
+                  name={delta > 0 ? 'arrow-upward' : 'arrow-downward'}
+                  size={13}
+                  color={delta > 0 ? D.success : D.gray500}
+                />
+                <Txt variant="caption" weight="700" color={delta > 0 ? D.success : D.gray500}>
+                  {delta > 0 ? '+' : ''}{delta}점
+                </Txt>
+              </View>
+            )}
             <Txt variant="caption" color={D.gray500}>
               {delta > 0
                 ? `${draft.name} 기록으로 운동 효과 점수가 올랐어요.`
@@ -2446,10 +2487,10 @@ const styles = StyleSheet.create({
     gap: S.sm,
     ...LEVEL1,
   },
-  scoreHero: { gap: 2 },
+  scoreHero: { alignItems: 'center', gap: S.xs },
   scoreHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   scoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: S.xs },
-  scoreDelta: { flexDirection: 'row', alignItems: 'center', gap: 1, marginLeft: S.xs },
+  scoreDelta: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   graphWrap: { gap: S.xs },
   graphLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   resultSection: { gap: 2 },
@@ -2750,7 +2791,7 @@ const styles = StyleSheet.create({
   analyzing: { alignItems: 'center', gap: S.sm, paddingVertical: S.xxl },
 
   // 리뷰 화면 — 여백 넉넉히
-  reviewBody: { paddingHorizontal: SIDE, paddingTop: S.lg, paddingBottom: S.xxl, gap: S.lg },
+  reviewBody: { paddingHorizontal: SIDE, paddingTop: S.md, paddingBottom: S.xxl, gap: S.sm },
   reviewCard: {
     backgroundColor: D.muted,
     borderRadius: R.card,
@@ -2922,5 +2963,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: S.sm,
     borderRadius: R.full,
     backgroundColor: D.primaryLight,
+  },
+  nutriDetailSection: {
+    backgroundColor: D.surface,
+    borderRadius: R.card,
+    borderWidth: 0.5,
+    borderColor: D.line,
+    padding: S.lg,
+    gap: 0,
+    ...LEVEL1,
+  },
+  nutriDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: S.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: D.line,
+  },
+  unitDropdown: {
+    alignSelf: 'flex-end',
+    backgroundColor: D.surface,
+    borderRadius: R.button,
+    borderWidth: 1,
+    borderColor: D.line,
+    overflow: 'hidden',
+    ...LEVEL1,
+  },
+  unitOption: {
+    paddingHorizontal: S.xl,
+    paddingVertical: S.sm,
+    alignItems: 'center',
   },
 });

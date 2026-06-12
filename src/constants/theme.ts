@@ -81,6 +81,7 @@ type TypeToken = Pick<
 
 export const Typography = {
   display: { fontSize: 32, lineHeight: 40, fontFamily: FontFamily.bold, letterSpacing: -0.8, fontWeight: '700' },
+  display2: { fontSize: 28, lineHeight: 36, fontFamily: FontFamily.bold, letterSpacing: -0.7, fontWeight: '700' },
   h1: { fontSize: 24, lineHeight: 30, fontFamily: FontFamily.bold, letterSpacing: -0.6, fontWeight: '700' },
   h2: { fontSize: 20, lineHeight: 25, fontFamily: FontFamily.semibold, letterSpacing: -0.5, fontWeight: '600' },
   subtitle: { fontSize: 18, lineHeight: 23, fontFamily: FontFamily.semibold, letterSpacing: -0.45, fontWeight: '600' },
