@@ -22,19 +22,22 @@ export const Palette = {
 
   // Semantic — UI 상태
   success: '#22C55E',
+  successLight: '#DCFCE7',
   warning: '#F59E0B',
   error: '#EF4444',
+  errorLight: '#FEE2E2',
 
-  // Semantic — 손익 상태 (게이지·회당 실비용 전용)
-  profit: '#00C47A',
-  profitLight: '#E6FBF3',
-  loss: '#E11D48',
-  lossLight: '#FCEEF4',
+  // Semantic — 손익 상태 (흑자=Primary, 적자=Error — design-system §5)
+  profit: '#6675FF',
+  profitLight: '#EEF1FF',
+  loss: '#EF4444',
+  lossLight: '#FEE2E2',
 
   // Neutral
   gray900: '#111827',
   gray700: '#374151',
   gray500: '#6B7280',
+  gray400: '#999999',
   gray300: '#D1D5DB',
   gray100: '#F3F4F6',
   gray50: '#F9FAFB',
@@ -44,8 +47,6 @@ export const Palette = {
   lineDefault: 'rgba(0, 0, 0, 0.07)',
   lineStrong: 'rgba(0, 0, 0, 0.15)',
   linePrimary: '#6675FF',
-  lineDanger: '#E11D48',
-  lineSuccess: '#00C47A',
 } as const;
 
 // 기존 ThemedText/ThemedView 호환용 시맨틱 키 (라이트 전용).
@@ -82,6 +83,7 @@ export const Typography = {
   display: { fontSize: 32, lineHeight: 40, fontFamily: FontFamily.bold, letterSpacing: -0.8, fontWeight: '700' },
   h1: { fontSize: 24, lineHeight: 30, fontFamily: FontFamily.bold, letterSpacing: -0.6, fontWeight: '700' },
   h2: { fontSize: 20, lineHeight: 25, fontFamily: FontFamily.semibold, letterSpacing: -0.5, fontWeight: '600' },
+  subtitle: { fontSize: 18, lineHeight: 23, fontFamily: FontFamily.semibold, letterSpacing: -0.45, fontWeight: '600' },
   body: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.regular, letterSpacing: -0.4, fontWeight: '400' },
   bodyMedium: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.medium, letterSpacing: -0.4, fontWeight: '500' },
   caption: { fontSize: 14, lineHeight: 21, fontFamily: FontFamily.regular, letterSpacing: -0.35, fontWeight: '400' },
@@ -121,7 +123,7 @@ export const ScreenPadding = 20;
 export const Radius = {
   small: 8,
   button: 12,
-  card: 16,
+  card: 20,
   modal: 20,
   full: 100,
 } as const;

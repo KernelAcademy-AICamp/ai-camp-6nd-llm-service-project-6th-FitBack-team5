@@ -45,6 +45,7 @@ export interface NewMeal {
   protein: number;
   fat: number;
   inputMethod: InputMethod;
+  eatenAt?: Date;
 }
 
 // 로컬 기준 오늘 (YYYY-MM-DD)
@@ -117,6 +118,7 @@ export function useAddMeal(date: string = todayISO()) {
           protein: meal.protein,
           fat: meal.fat,
           input_method: meal.inputMethod,
+          ...(meal.eatenAt ? { eaten_at: meal.eatenAt.toISOString() } : {}),
         })
         .select('*')
         .single();

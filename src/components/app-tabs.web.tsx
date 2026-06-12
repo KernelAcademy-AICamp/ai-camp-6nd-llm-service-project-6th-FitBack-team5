@@ -1,4 +1,3 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import {
   TabList,
   TabListProps,
@@ -7,6 +6,7 @@ import {
   TabTrigger,
   TabTriggerSlotProps,
 } from 'expo-router/ui';
+import { CreditCard, Dumbbell, Utensils, type LucideIcon } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MaxContentWidth } from '@/constants/theme';
@@ -19,8 +19,6 @@ const NAV = {
   line: 'rgba(0,0,0,0.07)',
 } as const;
 
-type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
-
 export default function AppTabs() {
   return (
     <Tabs>
@@ -28,13 +26,13 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="index" href="/" asChild>
-            <TabButton icon="card-membership">회원권</TabButton>
+            <TabButton icon={CreditCard}>회원권</TabButton>
           </TabTrigger>
           <TabTrigger name="diet" href="/diet" asChild>
-            <TabButton icon="restaurant">식단</TabButton>
+            <TabButton icon={Utensils}>식단</TabButton>
           </TabTrigger>
           <TabTrigger name="workout" href="/workout" asChild>
-            <TabButton icon="fitness-center">홈트</TabButton>
+            <TabButton icon={Dumbbell}>홈트</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -42,13 +40,13 @@ export default function AppTabs() {
   );
 }
 
-type TabButtonProps = TabTriggerSlotProps & { icon: IconName };
+type TabButtonProps = TabTriggerSlotProps & { icon: LucideIcon };
 
-export function TabButton({ children, isFocused, icon, ...props }: TabButtonProps) {
+export function TabButton({ children, isFocused, icon: IconCmp, ...props }: TabButtonProps) {
   const color = isFocused ? NAV.active : NAV.inactive;
   return (
     <Pressable {...props} style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
-      <MaterialIcons name={icon} size={24} color={color} />
+      <IconCmp size={24} color={color} strokeWidth={1.5} />
       <Text style={[styles.label, { color }]}>{children}</Text>
     </Pressable>
   );
