@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { MapPin, TrendingDown, TrendingUp } from 'lucide-react-native';
+import { MapPin, MessageCircle, TrendingDown, TrendingUp } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Modal, Platform, Pressable, StyleSheet, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,10 +8,12 @@ import Svg, { Circle } from 'react-native-svg';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Icon } from '@/components/ui';
-import { BottomTabInset, MaxContentWidth, Palette, ScreenPadding, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { useProfile } from '@/features/auth/useProfile';
-import { ActivityCalendar } from '@/features/home/ActivityCalendar';
+import { CoachChat } from '@/features/coach/CoachChat';
 import { HomeStrip } from '@/features/home/HomeStrip';
+import { MonthCalendar } from '@/features/home/MonthCalendar';
+import { WeeklyRecord } from '@/features/home/WeeklyRecord';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { CoachCard } from '@/features/membership/CoachCard';
 import { computeRisk, formatNumber, summarize, won } from '@/features/membership/dashboard';
@@ -90,6 +92,8 @@ export default function HomeScreen() {
   const { data: visitPattern } = useVisitPattern();
   const { data: monthCompare } = useMonthCompare();
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showCoach, setShowCoach] = useState(false);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -132,11 +136,22 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-          <View>
-            <ThemedText type="h1">FitBack</ThemedText>
-            <ThemedText type="caption" themeColor="textSecondary">
-              {name}님, 오늘도 파이팅
-            </ThemedText>
+          <View style={styles.header}>
+            <View>
+              <ThemedText type="h1">FitBack</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">
+                {name}님, 오늘도 파이팅
+              </ThemedText>
+            </View>
+            <Pressable
+              onPress={() => setShowCoach(true)}
+              style={({ pressed }) => [styles.coachBtn, pressed && styles.coachBtnPressed]}
+              accessibilityRole="button">
+              <Icon icon={MessageCircle} size={16} color={Palette.primary} />
+              <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                MY 코치
+              </ThemedText>
+            </Pressable>
           </View>
 
           {/* 블록 ① 히어로 — 회원권 활용도 (솔리드 Primary) */}
@@ -196,14 +211,14 @@ export default function HomeScreen() {
             <Button label="오늘 체크인" icon={MapPin} onPress={handleCheckIn} />
           ) : null}
 
+          {/* 화면 A — 이번주 기록(주간 인라인) + 달력보기 → 화면 B */}
+          <WeeklyRecord onOpenCalendar={() => setShowCalendar(true)} />
+
           {/* 블록 ② AI 코치 — 오늘의 액션 */}
           <CoachCard withRisk={withRisk} summary={summary} monthly={stats} pattern={visitPattern} />
 
           {/* 블록 ③ 3대 기능 스트립 */}
           <HomeStrip withRisk={withRisk} />
-
-          {/* 블록 ④ 누적 기록 캘린더 */}
-          <ActivityCalendar />
         </ScrollView>
       </SafeAreaView>
 
@@ -215,6 +230,32 @@ export default function HomeScreen() {
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
+
+      {/* 화면 B — 월 캘린더 상세 */}
+      <Modal
+        visible={showCalendar}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCalendar(false)}>
+        <ThemedView style={styles.modalRoot}>
+          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+            <MonthCalendar onClose={() => setShowCalendar(false)} />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
+
+      {/* MY 코치 */}
+      <Modal
+        visible={showCoach}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCoach(false)}>
+        <ThemedView style={styles.modalRoot}>
+          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+            <CoachChat onClose={() => setShowCoach(false)} />
           </SafeAreaView>
         </ThemedView>
       </Modal>
@@ -272,6 +313,18 @@ const styles = StyleSheet.create({
   heroStat: { gap: 2, flex: 1 },
 
   emptyBtn: { marginTop: Spacing.sm },
+
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  coachBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.primaryLight,
+  },
+  coachBtnPressed: { opacity: 0.7 },
 
   modalRoot: { flex: 1, backgroundColor: Palette.bgBase },
   modalSafe: { flex: 1 },

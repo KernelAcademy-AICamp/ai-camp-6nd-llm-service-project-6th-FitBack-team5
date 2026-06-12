@@ -11,14 +11,26 @@ export interface ActivityDay {
   diet: boolean;
 }
 
+export interface WeekDay extends ActivityDay {
+  weekday: number; // 0=월 ~ 6=일
+  isToday: boolean;
+}
+
 export interface HomeActivity {
   year: number;
   month: number; // 1~12
   days: ActivityDay[];
+  weekDays: WeekDay[]; // 이번 주 월~일 7일
+  weekVisits: number; // 이번 주 방문 일수
   weekWorkouts: number; // 이번 주(월~) 완료/부분 운동 수
   lastRoutine: string | null;
   streakWeeks: number; // 현재 주부터 연속 활동 주
 }
+
+// 권장 페이스(가이드 상수) — 실제 데이터가 아니라 제품 권장값.
+// TODO[검토]: 회원권 페이스(remaining/주수) 기반으로 개인화할지.
+export const RECOMMENDED_WEEKLY_VISITS = 2;
+export const RECOMMEND_PACE_TEXT = '일주일에 2~3회 방문이 가장 좋아요';
 
 function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -89,6 +101,24 @@ export function useHomeActivity() {
       ).length;
       const lastRoutine = workoutRows[0]?.routine_title ?? null;
 
+      // 이번 주 월~일 7일
+      const todayYmd = ymdLocal(now);
+      const weekDays: WeekDay[] = [];
+      for (let i = 0; i < 7; i++) {
+        const dd = new Date(wkStart + i * 86_400_000);
+        const date = ymdLocal(dd);
+        weekDays.push({
+          day: dd.getDate(),
+          date,
+          weekday: i,
+          isToday: date === todayYmd,
+          visited: visited.has(date),
+          workout: workout.has(date),
+          diet: diet.has(date),
+        });
+      }
+      const weekVisits = weekDays.filter((d) => d.visited).length;
+
       // 연속 주 (현재 주부터, 활동 있는 주만)
       const allDates = new Set<string>([...visited, ...workout, ...diet]);
       const allMs = [...allDates].map((ds) => new Date(`${ds}T00:00:00`).getTime());
@@ -101,7 +131,7 @@ export function useHomeActivity() {
         else break;
       }
 
-      return { year, month, days, weekWorkouts, lastRoutine, streakWeeks };
+      return { year, month, days, weekDays, weekVisits, weekWorkouts, lastRoutine, streakWeeks };
     },
   });
 }
