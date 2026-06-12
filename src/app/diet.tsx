@@ -1010,22 +1010,6 @@ function RecordModal({
               </View>
             </View>
 
-            {/* ④ AI 피드백 버블 */}
-            {(feedback.isPending || !!feedback.data) && (
-              <View style={styles.reviewFeedbackBubble}>
-                <Icon name="auto-awesome" size={16} color={D.primary} style={{ marginTop: 2 }} />
-                {feedback.isPending ? (
-                  <>
-                    <ActivityIndicator size="small" color={D.primary} />
-                    <Txt variant="caption" color={D.gray500}>코멘트 준비 중…</Txt>
-                  </>
-                ) : (
-                  <Txt variant="body" color={D.gray900} style={styles.flex1}>
-                    {(() => { const c = splitCoach(feedback.data ?? ''); return [c.title, c.body].filter(Boolean).join(' '); })()}
-                  </Txt>
-                )}
-              </View>
-            )}
 
             {/* ⑤ 영양소 상세 */}
             <View style={styles.nutriDetailSection}>
