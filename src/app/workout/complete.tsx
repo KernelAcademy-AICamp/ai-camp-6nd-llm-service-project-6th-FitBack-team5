@@ -38,6 +38,16 @@ interface AiFeedback {
   encouragement: string;
 }
 
+type WorkoutBodyPart = 'lower' | 'upper' | 'full' | 'cardio';
+
+function parseBodyPart(title: string): WorkoutBodyPart | null {
+  if (title.includes('하체')) return 'lower';
+  if (title.includes('상체')) return 'upper';
+  if (title.includes('전신')) return 'full';
+  if (title.includes('유산소') || title.includes('cardio')) return 'cardio';
+  return null;
+}
+
 type WorkoutLogInsert = {
   user_id: string;
   routine_title: string;
@@ -48,6 +58,7 @@ type WorkoutLogInsert = {
   pain_areas: string[];
   completion_status: CompletionStatus;
   memo: string | null;
+  body_part?: WorkoutBodyPart | null;
   ai_feedback?: object | null;
 };
 
@@ -196,6 +207,7 @@ export default function CompleteScreen() {
       pain_areas: painAreas,
       completion_status: completionStatus!,
       memo: memo.trim() || null,
+      body_part: parseBodyPart(routine.title),
     } satisfies WorkoutLogInsert;
 
     const { data: log, error } = await supabase
