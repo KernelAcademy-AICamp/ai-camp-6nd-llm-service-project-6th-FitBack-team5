@@ -32,6 +32,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -43,6 +44,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
@@ -80,6 +82,7 @@ const ICONS = {
 } satisfies Record<string, LucideIcon>;
 type IconName = keyof typeof ICONS;
 
+type IconProps = { size?: number; color?: string; strokeWidth?: number; style?: StyleProp<ViewStyle> };
 function Icon({
   name,
   size = 24,
@@ -91,7 +94,7 @@ function Icon({
   color?: string;
   style?: StyleProp<ViewStyle>;
 }) {
-  const C = ICONS[name];
+  const C = ICONS[name] as React.ComponentType<IconProps>;
   return <C size={size} color={color} strokeWidth={1.5} style={style} />;
 }
 
@@ -100,12 +103,12 @@ import { useAnalyzeImage, useAnalyzeMeal } from '@/features/diet/analyzeMeal';
 import { useMealFeedback } from '@/features/diet/mealFeedback';
 import { useFoodSearch, type FoodSearchResult } from '@/features/diet/foodSearch';
 import {
-  MOCK_CONTEXT,
   PART_LABEL,
   calorieTargetFromProfile,
   generateGuide,
   proteinTargetFromProfile,
 } from '@/features/diet/guide';
+import { useTodayWorkoutLog } from '@/features/workout/useTodayWorkoutLog';
 import { pickFoodImage } from '@/features/diet/pickFoodImage';
 import { useRecommend } from '@/features/diet/recommend';
 import {
@@ -117,6 +120,11 @@ import {
   type Meal,
   type MealType,
 } from '@/features/diet/useMeals';
+import {
+  useFoodFavorites,
+  useToggleFavorite,
+  type FoodFavorite,
+} from '@/features/diet/useFoodFavorites';
 
 /**
  * 식단 탭 — design.md 디자인 시스템 적용. UI 가안 구현본.
@@ -203,27 +211,13 @@ function Card({ children, style }: { children: React.ReactNode; style?: object }
 // ── 데이터 ──────────────────────────────────────────────────
 // Meal · MealType · InputMethod · MEAL_TYPES 는 @/features/diet/useMeals 에서 가져온다.
 
-// 운동 완료 여부 — source='recent'(완료) 일 때만 운동 데이터 표시. 연동 전 가데이터.
-const HAS_WORKOUT = MOCK_CONTEXT.source === 'recent';
-// 운동 부위 → 강조 매크로 (design-system §10)
-// lower/upper/full=근력 → 단백질, cardio=유산소 → 탄수화물, part 없음 → null
-// source가 'planned'(예정)이어도 그날 운동 부위가 있으면 강조 적용
-const FOCUS_MACRO: 'protein' | 'carb' | null =
-  !MOCK_CONTEXT.part
-    ? null
-    : MOCK_CONTEXT.part === 'cardio'
-    ? 'carb'
-    : 'protein';
 // 강조 매크로별 기능 캡션 (색+텍스트 병행 — §10 접근성)
 const FOCUS_CAPTION: Record<'protein' | 'carb', string> = {
   protein: '근육 회복',
   carb: '에너지',
 };
-const WORKOUT_MIN = 45; // 운동 시간(분) — 가데이터
 const STEP_COUNT = 6234; // 오늘 걸음수 — 가데이터 (운동 전/계획 없을 때 표시)
-// 걸음 소모 칼로리: 약 0.04 kcal/step (성인 평균 추정치)
-const STEP_KCAL = Math.round(STEP_COUNT * 0.04);
-const BURNED_KCAL = HAS_WORKOUT ? 420 : STEP_KCAL; // 운동 완료면 운동 소모, 아니면 걸음 소모
+const STEP_KCAL = Math.round(STEP_COUNT * 0.04); // 걸음 소모 칼로리: 약 0.04 kcal/step
 
 // 탄단지 표시 정의 (순서: 단 → 탄 → 지). 목표 값은 가이드(guide.target)에서 가져온다.
 const MACRO_META = [
@@ -489,15 +483,10 @@ function MealSlot({ type, meals, onPress }: { type: MealType; meals: Meal[]; onP
 type RecTab = 'image' | 'text' | 'search' | 'favorites';
 type RecStep = 'input' | 'analyzing' | 'review' | 'result';
 type MacroTotals = { kcal: number; carb: number; protein: number; fat: number };
-// 결과 화면 매크로 점(컬러) — FOCUS_MACRO만 Primary, 나머지는 gray300 (§10 동적 강조)
-function macroDotColor(key: 'protein' | 'carb' | 'fat'): string {
-  return FOCUS_MACRO === key ? D.primary : D.gray300;
+// 매크로 강조 컬러 — focusMacro(런타임 값) 기준. MACRO_DOT 대체.
+function macroDot(key: 'protein' | 'carb' | 'fat', fm: 'protein' | 'carb' | null): string {
+  return fm === key ? D.primary : D.gray300;
 }
-const MACRO_DOT = {
-  protein: macroDotColor('protein'),
-  carb: macroDotColor('carb'),
-  fat: macroDotColor('fat'),
-} as const;
 
 // 코치 피드백 = 한 줄 요약(title) + 상세(body).
 type CoachText = { title: string; body: string };
@@ -556,6 +545,8 @@ function RecordModal({
   target,
   totals,
   dayMeals,
+  focusMacro = null,
+  burnedKcal = 0,
   onClose,
   onSave,
 }: {
@@ -564,6 +555,8 @@ function RecordModal({
   target: MacroTotals; // 일일 목표 매크로
   totals: MacroTotals; // 저장 직전까지의 오늘 누적
   dayMeals: Meal[]; // 결과 화면 점수 추이 그래프용 (그날 기록)
+  focusMacro?: 'protein' | 'carb' | null;
+  burnedKcal?: number;
   onClose: () => void;
   onSave: (meal: Omit<Meal, 'id' | 'time'>, eatenAt: Date) => void;
 }) {
@@ -589,8 +582,8 @@ function RecordModal({
   const feedback = useMealFeedback();
   const feedbackRequested = useRef(false); // 리뷰 진입당 1회만 요청(편집 중 재호출 방지)
 
-  // 오늘 운동 맥락 (가데이터) — 트레이너 피드백에 회복 관점 반영
-  const feedbackContext = MOCK_CONTEXT.part ? `${PART_LABEL[MOCK_CONTEXT.part]} 운동 회복` : undefined;
+  // 오늘 운동 맥락 — 트레이너 피드백에 회복 관점 반영
+  const feedbackContext = focusMacro === 'protein' ? '근력 운동 회복' : focusMacro === 'carb' ? '유산소 운동 회복' : undefined;
 
   // 수량 반영 스케일값 — 편집 중엔 draft 그대로, 아닐 때는 baseNutrition × quantity
   const scaledKcal    = baseNutrition && !editingReview ? Math.round(baseNutrition.kcal     * quantity) : (draft?.kcal     ?? 0);
@@ -770,6 +763,11 @@ function RecordModal({
   const search = useFoodSearch(debouncedQuery);
   const searchResults = search.data ?? [];
 
+  const favorites = useFoodFavorites();
+  const favData: FoodFavorite[] = favorites.data ?? [];
+  const isFavorited = (name: string) => favData.some((f) => f.name === name);
+  const toggleFavorite = useToggleFavorite();
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={close}>
       <SafeAreaView style={styles.recScreen} edges={['top', 'bottom', 'left', 'right']}>
@@ -867,7 +865,7 @@ function RecordModal({
                   const label = k === 'carb' ? '탄수화물' : k === 'protein' ? '단백질' : '지방';
                   const val = k === 'carb' ? scaledCarb : k === 'protein' ? scaledProtein : scaledFat;
                   return (
-                    <MacroBox key={k} mkey={k} label={label}>
+                    <MacroBox key={k} mkey={k} label={label} focusMacro={focusMacro}>
                       {editingReview ? (
                         <TextInput
                           value={String(draft[k])}
@@ -879,7 +877,7 @@ function RecordModal({
                         <>
                           <Txt variant="h2" weight="700" color={D.gray900}>{val}g</Txt>
                           <View style={styles.macroBar}>
-                            <ProgressBar ratio={target[k] > 0 ? (totals[k] + val) / target[k] : 0} color={MACRO_DOT[k]} />
+                            <ProgressBar ratio={target[k] > 0 ? (totals[k] + val) / target[k] : 0} color={macroDot(k, focusMacro)} />
                           </View>
                         </>
                       )}
@@ -939,7 +937,20 @@ function RecordModal({
               <Icon name={showTimePicker ? 'arrow-upward' : 'keyboard-arrow-down'} size={18} color={D.gray500} />
             </Pressable>
 
-            {showTimePicker && (
+            {showTimePicker && Platform.OS !== 'web' && (
+              <DateTimePicker
+                value={mealTime}
+                mode="time"
+                is24Hour={true}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, selected) => {
+                  if (Platform.OS === 'android') setShowTimePicker(false);
+                  if (selected) setMealTime(selected);
+                }}
+              />
+            )}
+
+            {showTimePicker && Platform.OS === 'web' && (
               <View style={styles.timePicker}>
                 {/* 시 */}
                 <View style={styles.timePickerGroup}>
@@ -990,6 +1001,8 @@ function RecordModal({
             dayMeals={dayMeals}
             context={feedbackContext}
             feedback={feedback}
+            focusMacro={focusMacro}
+            burnedKcal={burnedKcal}
             onContinue={continueRecording}
             onDone={close}
           />
@@ -1090,17 +1103,46 @@ function RecordModal({
             )}
 
             {tab === 'favorites' && (
-              <View style={styles.photoArea}>
-                <View style={[styles.photoBtn, { backgroundColor: D.muted }]}>
-                  <Icon name="star" size={36} color={D.gray300} />
+              favData.length > 0 ? (
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  style={styles.tabForm}>
+                  {favData.map((f) => (
+                    <Pressable
+                      key={f.id}
+                      onPress={() => pickFood({ ...f, servingSize: f.servingSize ?? null })}
+                      style={styles.searchItem}>
+                      <View style={styles.flex1}>
+                        <Txt variant="body" weight="600">{f.name}</Txt>
+                        <Txt variant="caption" color={D.gray500}>
+                          탄 {f.carb}g · 단 {f.protein}g · 지 {f.fat}g
+                          {f.servingSize ? ` · 1회 ${f.servingSize}` : ''}
+                        </Txt>
+                      </View>
+                      <Pressable
+                        hitSlop={8}
+                        onPress={() => toggleFavorite.mutate({ food: { ...f, servingSize: f.servingSize ?? null }, favorites: favData })}
+                        style={styles.starBtn}>
+                        <Icon name="star" size={18} color={D.primary} />
+                      </Pressable>
+                      <Txt variant="body" weight="600" color={D.primary}>{f.kcal} kcal</Txt>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View style={styles.photoArea}>
+                  <View style={[styles.photoBtn, { backgroundColor: D.muted }]}>
+                    <Icon name="star" size={36} color={D.gray300} />
+                  </View>
+                  <Txt variant="body" weight="600" color={D.gray700}>
+                    즐겨찾기한 음식이 없어요
+                  </Txt>
+                  <Txt variant="caption" color={D.gray500} style={{ textAlign: 'center' }}>
+                    검색에서 음식을 찾은 후{'\n'}별표를 눌러 저장해보세요.
+                  </Txt>
                 </View>
-                <Txt variant="body" weight="600" color={D.gray700}>
-                  즐겨찾기한 음식이 없어요
-                </Txt>
-                <Txt variant="caption" color={D.gray500} style={{ textAlign: 'center' }}>
-                  검색에서 음식을 찾은 후{'\n'}별표를 눌러 저장해보세요.
-                </Txt>
-              </View>
+              )
             )}
 
             {tab === 'search' && (
@@ -1128,6 +1170,16 @@ function RecordModal({
                           {f.servingSize ? ` · 1회 ${f.servingSize}` : ''}
                         </Txt>
                       </View>
+                      <Pressable
+                        hitSlop={8}
+                        onPress={() => toggleFavorite.mutate({ food: f, favorites: favData })}
+                        style={styles.starBtn}>
+                        <Icon
+                          name="star"
+                          size={18}
+                          color={isFavorited(f.name) ? D.primary : D.gray300}
+                        />
+                      </Pressable>
                       <Txt variant="body" weight="600" color={D.primary}>
                         {f.kcal} kcal
                       </Txt>
@@ -1170,25 +1222,27 @@ function RecordModal({
 function MacroBox({
   mkey,
   label,
+  focusMacro = null,
   children,
 }: {
   mkey: 'protein' | 'carb' | 'fat';
   label: string;
+  focusMacro?: 'protein' | 'carb' | null;
   children: React.ReactNode;
 }) {
-  const focused = FOCUS_MACRO === mkey;
+  const focused = focusMacro === mkey;
   return (
     <View style={styles.macroCol}>
       <View style={styles.resultMacroHead}>
-        <View style={[styles.resultDot, { backgroundColor: MACRO_DOT[mkey] }]} />
+        <View style={[styles.resultDot, { backgroundColor: macroDot(mkey, focusMacro) }]} />
         <Txt variant="label" weight={focused ? '600' : '400'} color={focused ? D.primary : D.gray500}>
           {label}
         </Txt>
       </View>
       {children}
-      {focused && (
+      {focused && focusMacro && (
         <Txt variant="label" color={D.primary}>
-          {FOCUS_CAPTION[FOCUS_MACRO]}
+          {FOCUS_CAPTION[focusMacro]}
         </Txt>
       )}
     </View>
@@ -1247,15 +1301,17 @@ function ResultMacro({
   contrib,
   total,
   goal,
+  focusMacro = null,
 }: {
   mkey: 'protein' | 'carb' | 'fat';
   label: string;
   contrib: number;
   total: number;
   goal: number;
+  focusMacro?: 'protein' | 'carb' | null;
 }) {
   return (
-    <MacroBox mkey={mkey} label={label}>
+    <MacroBox mkey={mkey} label={label} focusMacro={focusMacro}>
       <Txt variant="h2" weight="700" color={D.gray900}>
         +{contrib}g
       </Txt>
@@ -1263,7 +1319,7 @@ function ResultMacro({
         {total} / {goal}g
       </Txt>
       <View style={styles.macroBar}>
-        <ProgressBar ratio={goal > 0 ? total / goal : 0} color={MACRO_DOT[mkey]} />
+        <ProgressBar ratio={goal > 0 ? total / goal : 0} color={macroDot(mkey, focusMacro)} />
       </View>
     </MacroBox>
   );
@@ -1276,6 +1332,8 @@ function ResultView({
   dayMeals,
   context,
   feedback,
+  focusMacro = null,
+  burnedKcal = 0,
   onContinue,
   onDone,
 }: {
@@ -1285,12 +1343,14 @@ function ResultView({
   dayMeals: Meal[];
   context?: string;
   feedback: ReturnType<typeof useMealFeedback>;
+  focusMacro?: 'protein' | 'carb' | null;
+  burnedKcal?: number;
   onContinue: () => void;
   onDone: () => void;
 }) {
   const b = base ?? { kcal: 0, carb: 0, protein: 0, fat: 0 };
   // 운동 효과 점수 = 메인 게이지와 동일(섭취÷(목표+운동소모)×100). 저장 전/후 비교.
-  const energyTarget = target.kcal + BURNED_KCAL;
+  const energyTarget = target.kcal + burnedKcal;
   const scoreOf = (kcal: number) => Math.max(0, Math.round((energyTarget > 0 ? kcal / energyTarget : 0) * 100));
   const after = scoreOf(b.kcal + draft.kcal);
   const delta = after - scoreOf(b.kcal);
@@ -1398,6 +1458,7 @@ function ResultView({
                 contrib={draft[m.key]}
                 total={b[m.key] + draft[m.key]}
                 goal={target[m.key]}
+                focusMacro={focusMacro}
               />
             ))}
           </View>
@@ -1865,6 +1926,19 @@ export default function DietScreen() {
   }
 
 
+  // 오늘 운동 로그 실연동 — 없으면 STEP_KCAL 폴백
+  const workoutLog = useTodayWorkoutLog();
+  const wl = workoutLog.data;
+  const workoutCtx = wl?.context ?? { source: 'none' as const, goal: 'maintain' as const };
+  const hasWorkout = wl?.hasWorkout ?? false;
+  const burnedKcal = wl?.burnedKcal ?? STEP_KCAL;
+  const workoutMin = wl?.durationMin ?? 0;
+  const focusMacro: 'protein' | 'carb' | null = !workoutCtx.part
+    ? null
+    : workoutCtx.part === 'cardio'
+    ? 'carb'
+    : 'protein';
+
   // 가이드 목표 — 회원 신체정보(profiles) 기반. 단백질=체중×1.5g, 칼로리=TDEE×목표보정.
   const { data: profile } = useProfile();
   const guide = useMemo(() => {
@@ -1877,12 +1951,13 @@ export default function DietScreen() {
             weight: profile.weight,
             exerciseLevel: profile.exercise_level,
           },
-          MOCK_CONTEXT.goal,
+          workoutCtx.goal,
         )
       : null;
     const protein = profile ? proteinTargetFromProfile(profile.weight) : null;
-    return generateGuide(MOCK_CONTEXT, { kcal, protein });
-  }, [profile]);
+    return generateGuide(workoutCtx, { kcal, protein });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, workoutCtx.goal, workoutCtx.part]);
 
   const totals = useMemo(
     () =>
@@ -1900,12 +1975,12 @@ export default function DietScreen() {
   const remaining = calorieGoal - totals.kcal;
   const over = remaining < 0;
   // 운동 대비 섭취 게이지 — 섭취 ÷ (목표 + 운동소모). 활동 후(목표+소모)가 100%.
-  const energyTarget = calorieGoal + BURNED_KCAL;
+  const energyTarget = calorieGoal + burnedKcal;
   const intakeRatio = energyTarget > 0 ? totals.kcal / energyTarget : 0;
   const energyStatus = balanceStatus(intakeRatio);
 
   // 헤더 한 줄 코멘트 — 운동 상태(운동 대비 섭취) + 식단 상태(매크로 균형)에 따라 변동
-  const partLabel = MOCK_CONTEXT.part ? PART_LABEL[MOCK_CONTEXT.part] : null;
+  const partLabel = workoutCtx.part ? PART_LABEL[workoutCtx.part] : null;
   const stateHint = ((): string => {
     if (!hasLog) return partLabel ? `${partLabel} 후 식단을 기록해보세요.` : '식단을 기록해보세요.';
     // 1순위: 운동량 대비 섭취 상태
@@ -1939,7 +2014,7 @@ export default function DietScreen() {
   const nextMealG = (g: number) => Math.max(1, Math.round(g / 3));
 
   // 부족 영양소(한 끼 분량) 기반 Claude 음식 조합 추천 — 운동 회복 맥락 포함
-  const recContext = MOCK_CONTEXT.part ? `${PART_LABEL[MOCK_CONTEXT.part]} 운동 회복` : undefined;
+  const recContext = workoutCtx.part ? `${PART_LABEL[workoutCtx.part]} 운동 회복` : undefined;
   const recDeficits = deficitLines.map((d) => ({ label: d.label, g: nextMealG(d.g) }));
   const recommend = useRecommend(recDeficits, recContext);
 
@@ -1959,7 +2034,7 @@ export default function DietScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* 오늘 운동 요약 — 운동 완료 시: 유형/시간/소모칼로리 / 운동 전·계획 없음: 걸음수 */}
           <View style={styles.workoutBar}>
-            {HAS_WORKOUT ? (
+            {hasWorkout ? (
               <>
                 <View style={styles.workoutLead}>
                   <Icon name="fitness-center" size={13} color={D.gray500} />
@@ -1970,19 +2045,19 @@ export default function DietScreen() {
                 <View style={styles.workoutDivider} />
                 <View style={styles.workoutCell}>
                   <Txt variant="label" color={D.gray500}>
-                    {MOCK_CONTEXT.part ? PART_LABEL[MOCK_CONTEXT.part] : '운동'}
+                    {workoutCtx.part ? PART_LABEL[workoutCtx.part] : '운동'}
                   </Txt>
                 </View>
                 <View style={styles.workoutDivider} />
                 <View style={styles.workoutCell}>
                   <Txt variant="label" color={D.gray500}>
-                    {WORKOUT_MIN}분
+                    {workoutMin}분
                   </Txt>
                 </View>
                 <View style={styles.workoutDivider} />
                 <View style={styles.workoutCell}>
                   <Txt variant="label" color={D.gray500}>
-                    {BURNED_KCAL}kcal
+                    {burnedKcal}kcal
                   </Txt>
                 </View>
               </>
@@ -2029,8 +2104,8 @@ export default function DietScreen() {
                   label={m.label}
                   value={totals[m.key]}
                   goal={target[m.key]}
-                  focused={FOCUS_MACRO === m.key}
-                  caption={FOCUS_MACRO === m.key ? FOCUS_CAPTION[FOCUS_MACRO] : undefined}
+                  focused={focusMacro === m.key}
+                  caption={focusMacro === m.key && focusMacro ? FOCUS_CAPTION[focusMacro] : undefined}
                 />
               ))}
             </View>
@@ -2168,7 +2243,7 @@ export default function DietScreen() {
                 <Icon name="add" size={24} color="#FFFFFF" />
               </Pressable>
             </View>
-            <CalorieBar consumed={totals.kcal} goal={calorieGoal} burned={BURNED_KCAL} />
+            <CalorieBar consumed={totals.kcal} goal={calorieGoal} burned={burnedKcal} />
 
             {/* 구분선 */}
             <View style={styles.sectionDivider} />
@@ -2212,6 +2287,8 @@ export default function DietScreen() {
         target={target}
         totals={totals}
         dayMeals={meals}
+        focusMacro={focusMacro}
+        burnedKcal={burnedKcal}
         onClose={() => setModalOpen(false)}
         onSave={handleSave}
       />
@@ -2668,6 +2745,7 @@ const styles = StyleSheet.create({
     borderBottomColor: D.line,
   },
   searchEmpty: { textAlign: 'center', paddingVertical: S.xl, alignItems: 'center' },
+  starBtn: { padding: S.xs },
 
   analyzing: { alignItems: 'center', gap: S.sm, paddingVertical: S.xxl },
 
