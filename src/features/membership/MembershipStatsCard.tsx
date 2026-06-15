@@ -4,6 +4,18 @@ import { StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Chip, Icon, ProgressBar } from '@/components/ui';
 import { Palette, Spacing } from '@/constants/theme';
+import { HelpButton } from '@/features/membership/HelpButton';
+
+// 도움말 카피 (현재 지표 기준 · Voice&Tone).
+const COST_HELP = [
+  '회당 비용 = 결제액 ÷ 전체 횟수예요. (예: 30회 360,000원 → 회당 12,000원)',
+  '한 번 더 갈수록 실제 회당 비용(결제액 ÷ 다닌 횟수)이 내려가요. 갈수록 이득이에요.',
+];
+const RECOVERABLE_HELP = [
+  '남은 횟수를 못 쓰고 만료되면 사라지는 금액이에요. (남은 횟수 × 회당 비용)',
+  '지금 방문 페이스로 만료 전에 다 못 쓸 것 같으면 위험으로 표시해요.',
+  '한 번만 더 가도 그만큼 금액을 지킬 수 있어요.',
+];
 import {
   formatNumber,
   RISK_COLORS,
@@ -62,12 +74,15 @@ export function MembershipStatsCard({
         <View style={styles.headerLeft}>
           <ThemedText type="h2">{m.name}</ThemedText>
           {risk.hasSessions ? (
-            <ThemedText type="captionBold" themeColor="textSecondary">
-              회당 {won(risk.costPerSession)}
-            </ThemedText>
+            <View style={styles.helpRow}>
+              <ThemedText type="captionBold" themeColor="textSecondary">
+                회당 {won(risk.costPerSession)}
+              </ThemedText>
+              <HelpButton title="회당 비용이 뭔가요?" paragraphs={COST_HELP} />
+            </View>
           ) : (
             <ThemedText type="caption" themeColor="textSecondary">
-              자유이용권
+              자유이용
             </ThemedText>
           )}
         </View>
@@ -194,9 +209,12 @@ export function SummaryHeader({
         </View>
       ) : (
         <View style={styles.heroBlock}>
-          <ThemedText type="caption" themeColor="textSecondary">
-            지금 가면 살릴 수 있는 금액
-          </ThemedText>
+          <View style={styles.helpRow}>
+            <ThemedText type="caption" themeColor="textSecondary">
+              지금 가면 살릴 수 있는 금액
+            </ThemedText>
+            <HelpButton title="'살릴 수 있는 금액'이 뭔가요?" paragraphs={RECOVERABLE_HELP} />
+          </View>
           <ThemedText type="display" style={{ color: Palette.loss }}>
             {won(summary.recoverable)}
           </ThemedText>
@@ -238,6 +256,7 @@ export function SummaryHeader({
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: Spacing.sm },
   headerLeft: { flex: 1, gap: 2 },
+  helpRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   bars: { gap: Spacing.sm, marginTop: Spacing.sm },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   barFlex: { flex: 1 },
