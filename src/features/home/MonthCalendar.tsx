@@ -1,4 +1,14 @@
-import { ChevronLeft, ChevronRight, Flame, Target, X } from 'lucide-react-native';
+import { router } from 'expo-router';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Dumbbell,
+  Flame,
+  MapPin,
+  Target,
+  Utensils,
+  X,
+} from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -6,6 +16,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { useCalendarMonth } from '@/features/home/useCalendarMonth';
+import { useDayRecords } from '@/features/home/useDayRecords';
 import {
   RECOMMEND_PACE_TEXT,
   RECOMMENDED_WEEKLY_VISITS,
@@ -20,11 +31,30 @@ const CAT = [
 ] as const;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-function DayCell({ d }: { d: ActivityDay | null }) {
+function ymdLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function dayHeader(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]}) 기록`;
+}
+
+function DayCell({
+  d,
+  selected,
+  onPress,
+}: {
+  d: ActivityDay | null;
+  selected: boolean;
+  onPress: (date: string) => void;
+}) {
   if (!d) return <View style={styles.cell} />;
   const active = d.visited || d.workout || d.diet;
   return (
-    <View style={[styles.cell, active && styles.cellActive]}>
+    <Pressable
+      onPress={() => onPress(d.date)}
+      style={[styles.cell, active && styles.cellActive, selected && styles.cellSelected]}
+      accessibilityRole="button">
       <ThemedText type="label" themeColor="textSecondary" style={styles.dayNum}>
         {d.day}
       </ThemedText>
@@ -33,7 +63,73 @@ function DayCell({ d }: { d: ActivityDay | null }) {
         {d.workout ? <View style={[styles.dot, { backgroundColor: Palette.profit }]} /> : null}
         {d.diet ? <View style={[styles.dot, { backgroundColor: Palette.warning }]} /> : null}
       </View>
-    </View>
+    </Pressable>
+  );
+}
+
+/** 선택 날짜 기록 리스트. 방문·운동=인라인, 식단=식단 탭(해당 날짜) 딥링크. */
+function DayRecordList({ date, onNavigate }: { date: string; onNavigate: () => void }) {
+  const { data, isLoading } = useDayRecords(date);
+  const empty = data && !data.visits.length && !data.workouts.length && !data.meals.length;
+
+  function openDiet() {
+    onNavigate();
+    router.navigate({ pathname: '/diet', params: { date } });
+  }
+
+  return (
+    <Card>
+      <ThemedText type="captionBold" style={styles.recHead}>
+        {dayHeader(date)}
+      </ThemedText>
+      {isLoading || !data ? (
+        <ThemedText type="label" themeColor="textSecondary">
+          불러오는 중…
+        </ThemedText>
+      ) : empty ? (
+        <ThemedText type="label" themeColor="textSecondary">
+          이 날은 기록이 없어요.
+        </ThemedText>
+      ) : (
+        <View style={styles.recList}>
+          {data.visits.map((v) => (
+            <View key={v.id} style={styles.recRow}>
+              <Icon icon={MapPin} size={15} color={Palette.primary} />
+              <ThemedText type="caption" style={styles.recText}>
+                방문 · {v.centerName ?? '센터'} {v.time}
+              </ThemedText>
+            </View>
+          ))}
+          {data.workouts.map((w) => (
+            <View key={w.id} style={styles.recRow}>
+              <Icon icon={Dumbbell} size={15} color={Palette.profit} />
+              <ThemedText type="caption" style={styles.recText}>
+                운동 · {w.label}
+                {w.durationMin != null ? ` ${w.durationMin}분` : ''}
+              </ThemedText>
+            </View>
+          ))}
+          {data.meals.map((m) => (
+            <Pressable
+              key={m.id}
+              onPress={openDiet}
+              style={({ pressed }) => [styles.recRow, pressed && styles.pressed]}
+              accessibilityRole="button">
+              <Icon icon={Utensils} size={15} color={Palette.warning} />
+              <ThemedText type="caption" style={styles.recText}>
+                식단 · {m.mealType} · 단백질 {m.protein}g
+              </ThemedText>
+              <Icon icon={ChevronRight} size={16} color={Palette.gray300} />
+            </Pressable>
+          ))}
+          {data.meals.length > 0 ? (
+            <ThemedText type="label" themeColor="textSecondary" style={styles.recHint}>
+              식단 항목을 누르면 해당 날짜 기록으로 이동해요.
+            </ThemedText>
+          ) : null}
+        </View>
+      )}
+    </Card>
   );
 }
 
@@ -42,6 +138,8 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1~12
+  // 현재 달이면 오늘을 기본 선택, 아니면 미선택
+  const [selectedDate, setSelectedDate] = useState<string | null>(ymdLocal(now));
   const { data, isLoading } = useCalendarMonth(year, month);
   const { data: home } = useHomeActivity();
 
@@ -49,6 +147,7 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
     const m0 = month - 1 + delta;
     setYear((y) => y + Math.floor(m0 / 12));
     setMonth(((m0 % 12) + 12) % 12 + 1);
+    setSelectedDate(null); // 월 이동 시 선택 해제(다른 달 날짜 혼동 방지)
   }
 
   const leadPad = new Date(year, month - 1, 1).getDay(); // 0=일
@@ -93,10 +192,15 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
           ) : (
             <View style={styles.grid}>
               {Array.from({ length: leadPad }).map((_, i) => (
-                <DayCell key={`pad-${i}`} d={null} />
+                <View key={`pad-${i}`} style={styles.cell} />
               ))}
               {data.days.map((d) => (
-                <DayCell key={d.date} d={d} />
+                <DayCell
+                  key={d.date}
+                  d={d}
+                  selected={selectedDate === d.date}
+                  onPress={setSelectedDate}
+                />
               ))}
             </View>
           )}
@@ -112,6 +216,9 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
             ))}
           </View>
         </Card>
+
+        {/* 선택 날짜 기록 리스트 (방문·운동 인라인 / 식단 딥링크) */}
+        {selectedDate ? <DayRecordList date={selectedDate} onNavigate={onClose} /> : null}
 
         {/* 요약 카드 2종 */}
         <View style={styles.statRow}>
@@ -186,6 +293,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.small,
   },
   cellActive: { backgroundColor: Palette.primaryLight },
+  cellSelected: { borderWidth: 1.5, borderColor: Palette.primary },
   dayNum: { fontSize: 11 },
   dots: { flexDirection: 'row', gap: 2, height: 6, alignItems: 'center' },
   dot: { width: 6, height: 6, borderRadius: 3 },
@@ -197,4 +305,10 @@ const styles = StyleSheet.create({
   paceRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   paceText: { flex: 1, gap: 2 },
   paceRight: { alignItems: 'flex-end', gap: 2 },
+  recHead: { marginBottom: Spacing.sm },
+  recList: { gap: Spacing.sm },
+  recRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  recText: { flex: 1 },
+  pressed: { opacity: 0.6 },
+  recHint: { marginTop: 2 },
 });
