@@ -118,16 +118,57 @@ export default function WorkoutScreen() {
     // OpenAI TTS 사전 합성 — 세션 시작 전 모든 코칭 멘트를 백그라운드로 캐싱.
     // 스트레칭 운동은 'stretch' 톤(명상적), 나머지는 'main' 톤(활기찬 코치).
     // 실패해도 expo-speech 로 자동 fallback 되므로 .catch 는 조용히 무시.
+    // 아래 상수·문자열은 session.tsx 의 playCue 호출과 1:1 로 일치해야 캐시 HIT.
+    // session.tsx 의 REST_SECONDS / SINO_COUNTDOWN_5 / 발화 템플릿이 바뀌면 여기도 같이 갱신.
+    const REST_SECONDS = 10;
+    const SINO_COUNTDOWN_5 = ['오', '사', '삼', '이', '일'];
+    const FINISH_TEXT = '오늘 운동을 모두 마쳤어요. 수고하셨어요.';
+
     recommendation.exercises.forEach((ex) => {
       const mode = ex.isStretch ? 'stretch' : 'main';
-      getOrCreateAudio(ex.description, mode).catch(() => {});
+
+      // intro: "{name}을(를) 시작할게요. {description}" — 결합 문자열로 prime
+      getOrCreateAudio(`${ex.name}을(를) 시작할게요. ${ex.description}`.trim(), mode).catch(() => {});
+
       if (ex.caution) getOrCreateAudio(ex.caution, mode).catch(() => {});
       if (ex.halfwayEncouragement) {
         getOrCreateAudio(ex.halfwayEncouragement, mode).catch(() => {});
       }
       ex.repScripts.forEach((s) => getOrCreateAudio(s, mode).catch(() => {}));
       ex.timeScripts.forEach((s) => getOrCreateAudio(s, mode).catch(() => {}));
+
+      // exercise-finish: "{name}을 모두 완료했어요."
+      getOrCreateAudio(`${ex.name}을 모두 완료했어요.`, mode).catch(() => {});
+
+      // detail 파싱 — 세트 기반이면 set-start/rest, 시간 기반이면 5초 카운트.
+      const repsMatch = ex.detail.match(/(\d+)\s*회\s*[×x*]\s*(\d+)\s*세트/);
+      if (repsMatch) {
+        const reps = parseInt(repsMatch[1], 10);
+        const sets = parseInt(repsMatch[2], 10);
+        for (let s = 1; s <= sets; s++) {
+          getOrCreateAudio(
+            `${s}세트를 시작합니다. 총 ${reps}회예요. 준비, 시작.`,
+            mode,
+          ).catch(() => {});
+        }
+        for (let s = 1; s < sets; s++) {
+          getOrCreateAudio(
+            `좋아요. ${s}세트 완료했어요. ${REST_SECONDS}초 쉬어갈게요.`,
+            mode,
+          ).catch(() => {});
+        }
+      } else {
+        SINO_COUNTDOWN_5.forEach((t) => getOrCreateAudio(t, mode).catch(() => {}));
+      }
     });
+
+    // finish 멘트는 마지막 운동의 mode 로 재생되므로 그 mode 로 prime.
+    const lastEx = recommendation.exercises[recommendation.exercises.length - 1];
+    if (lastEx) {
+      const lastMode = lastEx.isStretch ? 'stretch' : 'main';
+      getOrCreateAudio(FINISH_TEXT, lastMode).catch(() => {});
+    }
+
     router.push('/workout/session');
   }
 

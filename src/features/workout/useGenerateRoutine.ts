@@ -11,9 +11,10 @@
  * LLM 출력은 ID 만 받으므로 출력 토큰이 종전 대비 ~95% 감소 → 20초 → ~2초.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { useMutation } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
+
+import { supabase } from '@/lib/supabase';
 
 import {
   fetchExercisesByIds,
@@ -22,11 +23,6 @@ import {
   type ExerciseRow,
 } from './exercises';
 import { generateRepScripts } from './rep-scripts';
-
-const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-const client = apiKey
-  ? new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
-  : null;
 
 export interface RoutineInput {
   goal: string;
@@ -88,95 +84,8 @@ function clamp(v: number, lo: number, hi: number): number {
 }
 
 // ── LLM 호출 ─────────────────────────────────────────────────
-
-const outputSchema = {
-  type: 'object',
-  properties: {
-    title: {
-      type: 'string',
-      description: '루틴 제목 한 줄. 컨디션·시간이 한눈에 들어오게.',
-    },
-    intro: {
-      type: 'string',
-      description: '왜 이 루틴인지 한 문장. 친근한 톤, 이모지 1개.',
-    },
-    exerciseIds: {
-      type: 'array',
-      description:
-        '후보 목록의 ID 만 사용. 워밍업 1 → 메인 → 마무리 1 순서로 배치.',
-      items: { type: 'string' },
-    },
-  },
-  required: ['title', 'intro', 'exerciseIds'],
-  additionalProperties: false,
-} as const;
-
-const systemPrompt = `당신은 친근하고 전문적인 AI 운동 코치입니다.
-사용자 조건과 후보 운동 목록을 보고 최적의 루틴을 조합합니다.
-
-원칙:
-- 후보 목록에 없는 운동은 절대 추천하지 마세요. id 를 정확히 그대로 반환합니다.
-- 운동 순서: 워밍업 1개 → 메인 → 마무리 1개.
-- **워밍업과 마무리는 반드시 부위(body_region)가 '스트레칭' 인 운동에서만 골라야 합니다.**
-  · 워밍업: 부위='스트레칭' AND phase 에 'warmup' 포함
-  · 마무리: 부위='스트레칭' AND phase 에 'cooldown' 포함
-  · 스트레칭이 아닌 운동(상체/하체/코어/전신)은 워밍업/마무리에 절대 사용 금지.
-- 메인 운동은 신체 부위(상체/하체/코어/전신)가 골고루 자극되도록 다른 부위에서 섞어 고르세요.
-- 같은 부위 운동을 2개 이상 연속 배치하지 마세요.
-- **다양성 원칙**: 사용자 조건이 같아도 호출마다 운동 조합이 달라야 합니다.
-  · 항상 "가장 무난한" 운동만 고르지 말고, 후보 풀의 덜 흔한 옵션도 적극 시도하세요.
-  · 사용자 프롬프트의 "다양성 시드" 값이 다르면, 가능한 한 다른 운동 조합을 만드세요.
-- title 은 짧고 명료하게.
-- intro 는 짧고 친근하게 한 문장, 이모지 1개.`;
-
-/** Fisher-Yates 셔플 — 후보 순서 편향을 제거하기 위한 매 호출 무작위화. */
-function shuffle<T>(arr: T[]): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
-function buildCandidatesList(candidates: CandidateRow[]): string {
-  return candidates
-    .map(
-      (c) =>
-        `${c.id} | ${c.name} | 부위:${c.body_region ?? '-'} | phase:${c.phase_tags.join(',')} | intensity:${c.intensity}`,
-    )
-    .join('\n');
-}
-
-function buildUserPrompt(
-  input: RoutineInput,
-  candidates: CandidateRow[],
-  count: number,
-): string {
-  // 매 호출마다 다른 6자 토큰 → LLM 에게 "이번 호출은 이전과 다르다"는 신호.
-  const seed = Math.random().toString(36).slice(2, 8);
-  // 후보 순서도 매번 다르게 — LLM 이 위쪽 항목을 우선 고르는 편향을 완화.
-  const shuffled = shuffle(candidates);
-
-  const easierNote = input.easier
-    ? `\n\n중요: 사용자가 "더 쉬운 루틴으로 바꾸기"를 눌렀습니다. 후보 중에서도 intensity 가 낮은 운동을 우선 선택해 부담을 한 단계 낮춰주세요.`
-    : '';
-
-  return `다양성 시드: ${seed}
-
-사용자 조건:
-- 목표: ${input.goal}
-- 장소: ${input.place}
-- 장비: ${input.equipment}
-- 컨디션: ${input.condition}
-- 불편한 부위: ${input.bodyPart}
-- 운동 시간: ${input.duration}
-
-총 ${count}개 운동을 골라주세요 (워밍업 1, 메인 ${count - 2}, 마무리 1).
-
-후보 운동 목록 (id | 이름 | 부위 | phase | intensity):
-${buildCandidatesList(shuffled)}${easierNote}`;
-}
+// 프롬프트·schema·shuffle 은 모두 Edge Function (supabase/functions/generate-routine) 에 있음.
+// 키는 서버 secret(ANTHROPIC_API_KEY) 으로만 존재. 클라이언트는 후보·조건만 넘기고 결과 ID 를 받는다.
 
 interface LlmResult {
   title: string;
@@ -189,40 +98,30 @@ async function pickExercisesFromLLM(
   candidates: CandidateRow[],
   count: number,
 ): Promise<LlmResult> {
-  if (!client) {
-    throw new Error(
-      '.env에 EXPO_PUBLIC_ANTHROPIC_API_KEY를 설정한 뒤 dev server를 재시작하세요.',
-    );
-  }
-
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 512,
-    system: systemPrompt,
-    messages: [
-      { role: 'user', content: buildUserPrompt(input, candidates, count) },
-    ],
-    output_config: {
-      format: { type: 'json_schema', schema: outputSchema },
-    },
+  const { data, error } = await supabase.functions.invoke<
+    LlmResult & { error?: string }
+  >('workout-ai', {
+    body: { action: 'generate-routine', input, candidates, count },
   });
 
-  if (response.stop_reason === 'max_tokens') {
+  if (error || !data) {
     throw new Error(
-      'AI 응답이 중간에 끊겼어요. 잠시 후 다시 시도해주세요.',
+      data?.error ??
+        error?.message ??
+        'AI 루틴 생성에 실패했어요. 잠시 후 다시 시도해주세요.',
     );
   }
-
-  const block = response.content.find((b) => b.type === 'text');
-  if (!block || block.type !== 'text') {
-    throw new Error('AI 가 빈 응답을 보냈어요. 잠시 후 다시 시도해주세요.');
+  if (data.error) {
+    throw new Error(data.error);
   }
-
-  try {
-    return JSON.parse(block.text) as LlmResult;
-  } catch {
+  if (
+    typeof data.title !== 'string' ||
+    typeof data.intro !== 'string' ||
+    !Array.isArray(data.exerciseIds)
+  ) {
     throw new Error('AI 응답 형식이 올바르지 않아요. 잠시 후 다시 시도해주세요.');
   }
+  return { title: data.title, intro: data.intro, exerciseIds: data.exerciseIds };
 }
 
 // ── Routine 조립 ─────────────────────────────────────────────
