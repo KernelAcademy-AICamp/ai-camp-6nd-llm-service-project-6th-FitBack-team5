@@ -240,7 +240,8 @@ function MacroProgress({
   caption?: string;
 }) {
   const labelColor = focused ? Palette.primary : Palette.gray500;
-  const barColor = focused ? Palette.primary : Palette.gray300;
+  const fillColor = focused ? Palette.primary : Palette.gray400;
+  const valuePct = goal > 0 ? Math.min((value / goal) * 100, 100) : 0;
   return (
     <View style={styles.macroCol}>
       <Txt variant="caption" weight={focused ? '600' : '400'} color={labelColor}>
@@ -251,12 +252,23 @@ function MacroProgress({
           {value}
         </Txt>
         <Txt variant="caption" color={Palette.gray500}>
-          {' '}
-          / {goal}g
+          g
         </Txt>
       </View>
       <View style={styles.macroBar}>
-        <ProgressBar ratio={goal > 0 ? value / goal : 0} color={barColor} />
+        {/* 범위 바 */}
+        <View style={styles.rangeBarWrap}>
+          <View style={styles.rangeBarTrack} />
+          <View style={[styles.rangeBarFill, { width: `${valuePct}%` as any, backgroundColor: fillColor }]} />
+          {/* 목표 지점 세로 선 */}
+          <View style={styles.rangeBarGoalLine} />
+        </View>
+        {/* 목표 수치 */}
+        <View style={styles.rangeLabels}>
+          <Txt variant="label" color={Palette.gray400} style={{ position: 'absolute', right: 0 }}>
+            {goal}g
+          </Txt>
+        </View>
       </View>
       {focused && caption && (
         <Txt variant="label" color={Palette.primary}>
@@ -2098,25 +2110,9 @@ export default function DietScreen() {
             </View>
           </Card>
 
-          {/* ② 기록 전: 오늘의 식단 가이드 / 기록 후: 부족 영양소 기반 AI 식단 추천 */}
-          <Card style={styles.aiRecCard}>
-            {!hasLog ? (
-              // 상태 1 — 목표 제시 + 기록 유도
-              <>
-                <Txt variant="body" weight="600">
-                  오늘의 식단 가이드
-                </Txt>
-                <Txt variant="caption" color={Palette.gray500}>
-                  오늘 운동 기준 목표예요.
-                </Txt>
-                <Txt variant="caption" color={Palette.gray700}>
-                  단백질 {target.protein}g · 탄수화물 {target.carb}g · 지방 {target.fat}g
-                </Txt>
-                <Txt variant="caption" color={Palette.gray500}>
-                  첫 식사를 기록하면 부족한 영양소를 분석해드려요.
-                </Txt>
-              </>
-            ) : deficitLines.length > 0 ? (
+          {/* ② 기록 후: 부족 영양소 기반 AI 식단 추천 */}
+          {hasLog && <Card style={styles.aiRecCard}>
+            {deficitLines.length > 0 ? (
               // 상태 2 — 부족 영양소(상위 2개) 분석 + 균형 잡힌 추천
               <>
                 <View style={styles.aiHead}>
@@ -2193,7 +2189,7 @@ export default function DietScreen() {
                 </Txt>
               </>
             )}
-          </Card>
+          </Card>}
 
           {/* ③+④ 오늘 기록 — 섭취 칼로리 + 끼니별 슬롯 통합 */}
           <View style={styles.listHeadRow}>
@@ -2391,6 +2387,11 @@ const styles = StyleSheet.create({
   },
   macroValueRow: { flexDirection: 'row', alignItems: 'baseline' },
   macroBar: { marginTop: Spacing.xs },
+  rangeBarWrap: { position: 'relative', height: 6 },
+  rangeBarTrack: { position: 'absolute', left: 0, right: 0, height: 6, borderRadius: Radius.full, backgroundColor: Palette.gray100 },
+  rangeBarFill: { position: 'absolute', left: 0, height: 6, borderRadius: Radius.full },
+  rangeBarGoalLine: { position: 'absolute', right: 0, top: -2, bottom: -2, width: 2, borderRadius: 1, backgroundColor: Palette.gray400 },
+  rangeLabels: { position: 'relative', height: 14, marginTop: 2 },
 
   // progress
   track: { height: 6, borderRadius: Radius.full, backgroundColor: Palette.gray100, overflow: 'hidden' },
