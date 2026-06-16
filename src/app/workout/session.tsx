@@ -15,7 +15,7 @@ import {
 } from '@/constants/theme';
 import { koreanCount } from '@/features/workout/rep-scripts';
 import { useTheme } from '@/hooks/use-theme';
-import { playCue, tts } from '@/lib/tts';
+import { playCue, setTtsMode, tts } from '@/lib/tts';
 import { useWorkoutSession } from '@/stores/workout-session';
 
 // ────────────────────────────────────────────────────────────
@@ -164,6 +164,11 @@ export default function SessionScreen() {
     () => (current ? parseDetail(current.detail) : null),
     [current],
   );
+
+  // 운동이 바뀔 때마다 TTS 톤 모드 갱신 — playCue 가 메모리 캐시 조회 시 사용.
+  useEffect(() => {
+    setTtsMode(current?.isStretch ? 'stretch' : 'main');
+  }, [current?.isStretch]);
 
   // 운동 종료 멘트 phase로 우회 (exercise-finish → 다음 운동의 intro 또는 finish)
   function advanceExercise() {

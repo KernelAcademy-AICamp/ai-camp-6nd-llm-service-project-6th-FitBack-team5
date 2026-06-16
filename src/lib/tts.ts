@@ -1,13 +1,41 @@
 /**
  * TTS 추상화 — 화면 코드는 이 모듈만 사용.
  *
- * 1단계: expo-speech 만 구현 (캐시된 audioUrl이 있어도 무시하고 speak).
- * 추후 클라우드 TTS 도입 시 playCue 내부에서 expo-av로 캐시 재생 분기 추가.
+ * 2단계: OpenAI TTS(synth-tts Edge Function) 캐시 우선, 실패/미스 시 expo-speech.
+ *   - getOrCreateAudio(text): Edge Function 으로 합성된 MP3 URL 받아 메모리 캐시
+ *   - playCue(opts): audioUrl(외부 명시) > 메모리 캐시 > expo-speech fallback 순
+ *   - 웹: <audio> 엘리먼트, iOS/Android: expo-audio AudioPlayer 로 mp3 재생.
+ *     실패 시 expo-speech 시스템 보이스로 fallback (절대 무음 안 됨).
  */
-import { Platform } from 'react-native';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Speech from 'expo-speech';
+import { Platform } from 'react-native';
+
+import { supabase } from '@/lib/supabase';
+
+// iOS 무음모드/잠금화면에서도 운동 코칭 음성이 끊기지 않도록 카테고리 설정.
+// 호출 실패해도 앱은 정상 동작 (그냥 무음모드에서 들리지 않을 뿐).
+if (Platform.OS !== 'web') {
+  setAudioModeAsync({
+    playsInSilentMode: true,
+    shouldPlayInBackground: false, // 백그라운드 재생은 별도 권한 필요 — 일단 false
+  }).catch(() => {});
+}
 
 export const TTS_VERSION = 1;
+
+/** TTS 톤 모드. Edge Function 의 INSTRUCTIONS_BY_MODE 와 1:1 매칭. */
+export type TtsMode = 'main' | 'stretch';
+
+// 현재 재생 중인 운동의 mode. 화면 전환마다 setTtsMode 로 갱신한다.
+// playCue 가 메모리 캐시를 조회할 때 이 값을 사용해 mode 별 URL 을 선택.
+let currentMode: TtsMode = 'main';
+export function setTtsMode(mode: TtsMode): void {
+  currentMode = mode;
+}
+export function getTtsMode(): TtsMode {
+  return currentMode;
+}
 
 /**
  * 웹 SpeechSynthesis 자동재생 게이트 해제용. 유저 제스처(클릭/탭) 콜스택에서
@@ -141,40 +169,113 @@ export const tts: Tts = {
 };
 
 interface PlayCueOptions {
-  /** 캐시된 오디오 URL. 1단계에선 무시되고 TTS로 fallback. */
+  /** 외부에서 미리 받은 캐시 URL. 없으면 모듈 내부 메모리 캐시에서 조회. */
   audioUrl?: string | null;
-  /** TTS로 fallback할 텍스트. */
+  /** TTS로 fallback할 텍스트. 메모리 캐시 키이기도 함. */
   text: string;
   rate?: number;
   onDone?: () => void;
   onError?: () => void;
 }
 
+// ── 메모리 캐시 ──────────────────────────────────────────────
+// getOrCreateAudio 가 받아 온 URL 을 mode 별로 보관. playCue 가 currentMode 로 동기 조회.
+// 페이지 새로고침 시 비워지지만 어차피 Edge Function 이 DB 캐시 HIT 으로
+// 즉시 응답하므로 다음 사전 합성 단계에서 빠르게 복원됨.
+const audioCache = new Map<string, string>();
+
+function cacheKey(text: string, mode: TtsMode): string {
+  return `${mode}:${text.trim()}`;
+}
+
+function getCachedAudioUrl(text: string, mode: TtsMode): string | null {
+  return audioCache.get(cacheKey(text, mode)) ?? null;
+}
+
+// ── 오디오 URL 재생 ──────────────────────────────────────────
+
+function webPlayAudioUrl(
+  url: string,
+  rate: number,
+  onDone?: () => void,
+  onError?: () => void,
+): void {
+  if (typeof window === 'undefined' || typeof window.Audio === 'undefined') {
+    (onError ?? onDone)?.();
+    return;
+  }
+  try {
+    const audio = new window.Audio(url);
+    audio.playbackRate = rate;
+    audio.onended = () => onDone?.();
+    audio.onerror = () => (onError ?? onDone)?.();
+    audio.play().catch(() => (onError ?? onDone)?.());
+  } catch {
+    (onError ?? onDone)?.();
+  }
+}
+
 /**
- * 큐 1회 재생. 캐시된 audioUrl이 있으면 그걸 쓰고, 없으면 TTS.
- * 1단계는 항상 TTS로 fallback.
+ * iOS/Android: expo-audio AudioPlayer 로 mp3 재생.
+ * 재생 완료 시 onDone, 에러 시 onError. 한 인스턴스는 한 번만 쓰고 release.
+ */
+function nativePlayAudioUrl(
+  url: string,
+  rate: number,
+  onDone?: () => void,
+  onError?: () => void,
+): void {
+  let player: AudioPlayer | null = null;
+  let done = false;
+  const finish = (fn?: () => void) => {
+    if (done) return;
+    done = true;
+    try {
+      player?.remove();
+    } catch {
+      // remove 실패는 무시 — 이미 release 된 상태일 수 있음
+    }
+    fn?.();
+  };
+
+  try {
+    player = createAudioPlayer({ uri: url });
+    player.playbackRate = rate;
+    player.addListener('playbackStatusUpdate', (status) => {
+      if (status.didJustFinish) finish(onDone);
+      // status.isLoaded === false 인 채 시간이 흘러도 어차피 외부 fallback timer 가 처리.
+    });
+    player.play();
+  } catch {
+    finish(onError ?? onDone);
+  }
+}
+
+/**
+ * 큐 1회 재생. 우선순위:
+ *   1) opts.audioUrl (외부에서 명시) — 즉시 재생
+ *   2) 메모리 캐시 — getOrCreateAudio 가 미리 받아 둔 URL
+ *   3) expo-speech / SpeechSynthesis fallback
  *
  * onDone fallback: 웹 SpeechSynthesis 가 종종 onend 이벤트를 보내지 않음
  * (utterance GC 등 알려진 Chrome 버그). 예상 발화 시간 + 마진 후에도
  * onDone/onError 가 안 오면 강제로 onDone 발화하여 상태머신이 멈추지 않게 함.
  */
 export function playCue(opts: PlayCueOptions) {
-  // TODO Phase 2: audioUrl이 있으면 expo-av로 재생, onDone 콜백 wiring
   const trimmed = opts.text?.trim() ?? '';
   const rate = opts.rate ?? 1.0;
-  const audioUrl = opts.audioUrl;
+  // 외부 audioUrl 우선, 그 다음 현재 mode 의 메모리 캐시.
+  const audioUrl = opts.audioUrl ?? getCachedAudioUrl(trimmed, currentMode);
 
+  // 캐시된 URL 이 있으면 mp3 직접 재생 (웹은 <audio>, 네이티브는 expo-audio).
+  // URL 이 없거나 재생 실패 시 아래 expo-speech / SpeechSynthesis fallback.
   if (audioUrl) {
-    // Phase 2: expo-av Audio.Sound로 재생
-    // TODO: import { Audio } from 'expo-av'; 설치 후 활성화
-    // const { sound } = await Audio.Sound.createAsync({ uri: audioUrl });
-    // await sound.playAsync();
-    // sound.setOnPlaybackStatusUpdate(status => {
-    //   if (status.isLoaded && status.didJustFinish) onDone?.();
-    // });
-    // return;
-
-    // 지금은 audioUrl 있어도 expo-speech로 fallback (주석 처리된 위 코드가 Phase 2 구현)
+    if (Platform.OS === 'web') {
+      webPlayAudioUrl(audioUrl, rate, opts.onDone, opts.onError);
+    } else {
+      nativePlayAudioUrl(audioUrl, rate, opts.onDone, opts.onError);
+    }
+    return;
   }
 
   // 한국어 발화 속도 추정: 글자당 ~140ms (rate 1.0 기준). rate 비례 조정.
@@ -201,11 +302,40 @@ export function playCue(opts: PlayCueOptions) {
 }
 
 /**
- * Phase 2에서 구현 예정.
- * tts_cache 테이블 조회 → 없으면 Cloud TTS API → Supabase Storage 저장 → URL 반환.
- * Phase 1에서는 항상 null 반환 (expo-speech fallback 사용).
+ * 텍스트에 대응하는 캐시 오디오 URL 을 가져온다. 없으면 합성 후 URL 반환.
+ *
+ * - 메모리 캐시 HIT: 즉시 반환
+ * - 메모리 캐시 MISS: synth-tts Edge Function 호출
+ *   → DB(tts_cache) HIT 면 ~100ms, MISS 면 OpenAI 합성 ~500~1500ms
+ *   → 반환된 URL 을 메모리 캐시에 저장하여 playCue 가 동기 조회 가능하게 함.
+ *
+ * 실패 시 null 반환 (호출자는 무시; playCue 가 expo-speech 로 자동 fallback).
  */
-export async function getOrCreateAudio(text: string): Promise<string | null> {
-  void text;
-  return null;
+export async function getOrCreateAudio(
+  text: string,
+  mode: TtsMode = 'main',
+): Promise<string | null> {
+  const trimmed = text?.trim() ?? '';
+  if (!trimmed) return null;
+  const key = cacheKey(trimmed, mode);
+
+  const memo = audioCache.get(key);
+  if (memo) return memo;
+
+  try {
+    const { data, error } = await supabase.functions.invoke<{
+      audio_url?: string;
+      error?: string;
+    }>('synth-tts', { body: { text: trimmed, mode } });
+
+    if (error || !data?.audio_url) {
+      if (data?.error) console.warn('[synth-tts]', data.error);
+      return null;
+    }
+    audioCache.set(key, data.audio_url);
+    return data.audio_url;
+  } catch (e) {
+    console.warn('[synth-tts] invoke failed:', e);
+    return null;
+  }
 }

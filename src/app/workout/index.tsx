@@ -14,7 +14,6 @@ import {
   ScreenPadding,
   Spacing,
 } from '@/constants/theme';
-import { persistRoutineExercises } from '@/features/workout/exercises';
 import { Routine, useGenerateRoutine } from '@/features/workout/useGenerateRoutine';
 import { useTheme } from '@/hooks/use-theme';
 import { getOrCreateAudio, primeTts } from '@/lib/tts';
@@ -105,17 +104,29 @@ export default function WorkoutScreen() {
     );
   }
 
+  function handleMakeEasier() {
+    generate(
+      { goal, place, equipment, condition, bodyPart, duration, easier: true },
+      { onSuccess: setRecommendation },
+    );
+  }
+
   function handleStartSession() {
     if (!recommendation) return;
     primeTts();
     setSessionRoutine(recommendation);
-    // 운동 마스터를 exercises 테이블에 백그라운드 upsert (실패해도 진행)
-    persistRoutineExercises(recommendation).catch(() => {});
-    // Phase 2 TTS 워밍업 — 현재는 stub이라 실질적 동작 없음
-    // Phase 2 전환 시 getOrCreateAudio가 실제 오디오를 미리 생성·캐싱함
+    // OpenAI TTS 사전 합성 — 세션 시작 전 모든 코칭 멘트를 백그라운드로 캐싱.
+    // 스트레칭 운동은 'stretch' 톤(명상적), 나머지는 'main' 톤(활기찬 코치).
+    // 실패해도 expo-speech 로 자동 fallback 되므로 .catch 는 조용히 무시.
     recommendation.exercises.forEach((ex) => {
-      getOrCreateAudio(ex.description).catch(() => {});
-      if (ex.caution) getOrCreateAudio(ex.caution).catch(() => {});
+      const mode = ex.isStretch ? 'stretch' : 'main';
+      getOrCreateAudio(ex.description, mode).catch(() => {});
+      if (ex.caution) getOrCreateAudio(ex.caution, mode).catch(() => {});
+      if (ex.halfwayEncouragement) {
+        getOrCreateAudio(ex.halfwayEncouragement, mode).catch(() => {});
+      }
+      ex.repScripts.forEach((s) => getOrCreateAudio(s, mode).catch(() => {}));
+      ex.timeScripts.forEach((s) => getOrCreateAudio(s, mode).catch(() => {}));
     });
     router.push('/workout/session');
   }
@@ -266,13 +277,19 @@ export default function WorkoutScreen() {
               </Pressable>
 
               <Pressable
+                onPress={handleMakeEasier}
+                disabled={isPending}
                 style={({ pressed }) => [
                   styles.ghostButton,
-                  { opacity: pressed ? 0.6 : 1 },
+                  { opacity: pressed || isPending ? 0.6 : 1 },
                 ]}>
-                <ThemedText type="smallBold" themeColor="textSecondary">
-                  더 쉬운 루틴으로 바꾸기
-                </ThemedText>
+                {isPending ? (
+                  <ActivityIndicator size="small" color={theme.textSecondary} />
+                ) : (
+                  <ThemedText type="smallBold" themeColor="textSecondary">
+                    더 쉬운 루틴으로 바꾸기
+                  </ThemedText>
+                )}
               </Pressable>
             </ThemedView>
           )}

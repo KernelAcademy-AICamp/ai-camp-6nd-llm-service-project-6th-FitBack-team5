@@ -1,11 +1,29 @@
+/**
+ * AI 운동 루틴 생성.
+ *
+ * 흐름:
+ *   1) filterCandidates(): DB 에서 사용자 조건에 맞는 후보 15~25개 추리기
+ *   2) LLM 에 후보 목록 + 사용자 의도 전달 → ID 4~6개 + title/intro 반환
+ *   3) fetchExercisesByIds(): 선택된 ID 들의 전체 데이터 조회
+ *   4) 컨디션 배율로 reps/duration 조정 + min/max 로 clamp
+ *   5) form_cues 를 generateRepScripts 에 넘겨 운동 특화 코칭 완성
+ *
+ * LLM 출력은 ID 만 받으므로 출력 토큰이 종전 대비 ~95% 감소 → 20초 → ~2초.
+ */
+
 import Anthropic from '@anthropic-ai/sdk';
 import { useMutation } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 
+import {
+  fetchExercisesByIds,
+  filterCandidates,
+  type CandidateRow,
+  type ExerciseRow,
+} from './exercises';
 import { generateRepScripts } from './rep-scripts';
 
 const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-
 const client = apiKey
   ? new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
   : null;
@@ -17,204 +35,160 @@ export interface RoutineInput {
   condition: string;
   bodyPart: string;
   duration: string;
+  /** "더 쉬운 루틴으로 바꾸기" 진입점에서 true. 강도 상한·reps 배율·LLM 프롬프트를 한 단계 더 낮춤. */
+  easier?: boolean;
 }
 
-/**
- * Claude가 직접 반환하는 운동 데이터 (템플릿 형태).
- * earlyReps/middleReps/finalReps 는 `{count}` placeholder 포함 템플릿.
- */
-interface RawRoutineExercise {
+export interface RoutineExercise {
   name: string;
+  /** "12회 × 3세트" 또는 "2분"/"90초" — 화면 표시 및 complete.tsx 가 분 추출에 사용. */
   detail: string;
   description: string;
   caution: string;
-  /** 세트 기반 초반 2회용 템플릿 (정확히 2개, 시간 기반은 빈 배열) */
   earlyReps: string[];
-  /** 세트 기반 중반용 템플릿 (정확히 5개, 시간 기반은 빈 배열) */
   middleReps: string[];
-  /** 세트 기반 마지막 3회용 템플릿 (정확히 3개, 시간 기반은 빈 배열) */
   finalReps: string[];
-  /** 시간 기반 순차 cue (≈ totalSeconds÷12개, 세트 기반은 []) */
   timeScripts: string[];
-  /** 시간 기반 절반 시점 격려 한 문장 (세트 기반은 "") */
   halfwayEncouragement: string;
-}
-
-/**
- * 후처리 완료된 운동 데이터. repScripts 는 generateRepScripts() 로 펼친 결과.
- * 길이 = reps. 각 항목은 한글 카운트 + 동작 가이드가 합쳐진 완성 멘트.
- */
-export interface RoutineExercise extends RawRoutineExercise {
-  /** session 에서 repScripts[rep - 1] 로 그대로 발화 */
+  /** session.tsx 에서 repScripts[rep-1] 로 발화. form_cues 가 섞인 완성본. */
   repScripts: string[];
-}
-
-interface RawRoutine {
-  title: string;
-  meta: string;
-  intro: string;
-  exercises: RawRoutineExercise[];
+  /** TTS 톤 분기용. body_region 이 '스트레칭' 이면 명상 톤(stretch), 아니면 코치 톤(main). */
+  isStretch: boolean;
 }
 
 export interface Routine {
   id: string;
   title: string;
+  /** "15분 · 보통 컨디션 · 매트" — complete.tsx 가 /N분/ 정규식으로 시간 추출. */
   meta: string;
   intro: string;
   exercises: RoutineExercise[];
 }
 
-/** "12회 × 3세트" → 12, "2분" 또는 매칭 실패 → null */
-function parseRepsFromDetail(detail: string): number | null {
-  const m = detail.match(/(\d+)\s*회\s*[×x*]\s*(\d+)\s*세트/);
-  if (!m) return null;
-  const reps = parseInt(m[1], 10);
-  return Number.isFinite(reps) && reps > 0 ? reps : null;
+const CONDITION_REPS_MULTIPLIER: Record<string, number> = {
+  좋음: 1.2,
+  보통: 1.0,
+  피곤해요: 0.7,
+};
+
+/** easier=true 일 때 condition 배율에 추가로 곱하는 계수. */
+const EASIER_REPS_MULTIPLIER = 0.8;
+
+const DURATION_EX_COUNT: Record<string, number> = {
+  '10분': 4,
+  '15분': 5,
+  '20분': 6,
+};
+
+/** 세트 기반 운동의 1세트당 절대 상한. DB의 max_reps 와 별개로 항상 강제. */
+const HARD_REPS_CEILING = 25;
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
 }
 
-function expandRoutine(raw: RawRoutine): Routine {
-  return {
-    id: Crypto.randomUUID(),
-    ...raw,
-    exercises: raw.exercises.map((ex) => {
-      const reps = parseRepsFromDetail(ex.detail);
-      const repScripts =
-        reps && ex.earlyReps.length + ex.middleReps.length + ex.finalReps.length > 0
-          ? generateRepScripts({
-              exerciseId: ex.name,
-              exerciseName: ex.name,
-              reps,
-              secondsPerRep: 0,
-              earlyReps: ex.earlyReps,
-              middleReps: ex.middleReps,
-              finalReps: ex.finalReps,
-            })
-          : [];
-      return { ...ex, repScripts };
-    }),
-  };
-}
+// ── LLM 호출 ─────────────────────────────────────────────────
 
-const routineSchema = {
+const outputSchema = {
   type: 'object',
   properties: {
     title: {
       type: 'string',
-      description: '루틴 제목. 사용자 컨디션·부위·시간이 한눈에 들어오게. 예: "무릎 부담을 줄인 전신 홈트"',
-    },
-    meta: {
-      type: 'string',
-      description: '시간·난이도·장비를 가운뎃점으로 연결. 예: "15분 · 초보자용 · 매트 사용"',
+      description: '루틴 제목 한 줄. 컨디션·시간이 한눈에 들어오게.',
     },
     intro: {
       type: 'string',
-      description: '왜 이 루틴인지 한 문장. AI 코치 톤, 압박 금지. 예: "오늘은 보통 컨디션이므로 짧고 부담 없는 루틴을 추천해요."',
+      description: '왜 이 루틴인지 한 문장. 친근한 톤, 이모지 1개.',
     },
-    exercises: {
+    exerciseIds: {
       type: 'array',
-      description: '운동 4~6개. 워밍업 → 메인 → 마무리 순서',
-      items: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: '운동 이름. 예: "글루트 브릿지"' },
-          detail: {
-            type: 'string',
-            description: '시간 기반은 "2분", 세트 기반은 "12회 × 3세트" 형식만 사용',
-          },
-          description: {
-            type: 'string',
-            description:
-              '자세와 동작을 한두 문장으로 설명. 음성 코치가 그대로 읽을 문장. 예: "엉덩이를 천천히 들어올려요. 어깨와 무릎이 일직선이 되도록 유지하세요."',
-          },
-          caution: {
-            type: 'string',
-            description:
-              '주의할 점 한 문장. 예: "허리를 과도하게 꺾지 말고 엉덩이에 힘을 주세요." 특별히 주의할 게 없으면 빈 문자열.',
-          },
-          earlyReps: {
-            type: 'array',
-            description:
-              '초반 적응 2회용 멘트 템플릿. 정확히 2개. 각 멘트는 `{count}`로 시작 (코드가 "하나"/"둘" 등으로 치환). 자세 안내 위주. 예: ["{count}, 엉덩이를 천천히 들어올려요. 허리가 꺾이지 않게 조심해요.", "{count}, 같은 동작이에요. 발바닥으로 바닥을 밀고 천천히 내려와요."]. 시간 기반(N분)은 빈 배열 [].',
-            items: { type: 'string' },
-          },
-          middleReps: {
-            type: 'array',
-            description:
-              '중반용 멘트 템플릿. 정확히 5개. 각 멘트는 `{count}`로 시작. 호흡/자세 큐 짧게. 예: ["{count}, 좋아요. 천천히 올리고 내려와요.", "{count}, 엉덩이에 힘 주세요.", "{count}, 호흡 유지해요.", "{count}, 자세 좋아요. 그대로 가요.", "{count}, 급하게 하지 말고 조절해요."]. 시간 기반(N분)은 빈 배열 [].',
-            items: { type: 'string' },
-          },
-          finalReps: {
-            type: 'array',
-            description:
-              '마지막 3회용 멘트 템플릿. 정확히 3개. 각 멘트는 `{count}`로 시작. 격려/마무리. 예: ["{count}, 거의 다 왔어요. 천천히요.", "{count}, 한 번만 더 가요.", "{count}, 마지막이에요. 천천히 내려오면 완료예요."]. 시간 기반(N분)은 빈 배열 [].',
-            items: { type: 'string' },
-          },
-          timeScripts: {
-            type: 'array',
-            description:
-              '시간 기반(N분) 운동의 순차 자세/호흡 큐. 멘트 수 N ≈ totalSeconds ÷ 12 (60초→5개, 120초→10개, 180초→15개). 각 멘트 12~25자, `{count}` 미포함, 자연스러운 구어체. 순서대로 발화되므로 워밍업 자세 안내 → 본동작 큐 → 마무리 격려 순. 예: ["어깨를 내리고 코어를 잡아요.", "엉덩이가 처지지 않게 골반을 들어요.", "호흡 깊게 들이마시고 천천히 내쉬어요."]. 세트 기반(N회 × M세트)은 빈 배열 [].',
-            items: { type: 'string' },
-          },
-          halfwayEncouragement: {
-            type: 'string',
-            description:
-              '시간 기반(N분) 운동의 절반 시점 격려 한 문장. 15자 이내. 예: "절반 지났어요. 호흡 유지하세요." 세트 기반은 빈 문자열 "".',
-          },
-        },
-        required: [
-          'name',
-          'detail',
-          'description',
-          'caution',
-          'earlyReps',
-          'middleReps',
-          'finalReps',
-          'timeScripts',
-          'halfwayEncouragement',
-        ],
-        additionalProperties: false,
-      },
+      description:
+        '후보 목록의 ID 만 사용. 워밍업 1 → 메인 → 마무리 1 순서로 배치.',
+      items: { type: 'string' },
     },
   },
-  required: ['title', 'meta', 'intro', 'exercises'],
+  required: ['title', 'intro', 'exerciseIds'],
   additionalProperties: false,
 } as const;
 
-const systemPrompt = `당신은 사용자의 상태를 잘 살피는 친근하고 전문적인 AI 운동 코치입니다.
-사용자의 컨디션·시간·환경·조건에 맞춰 홈트레이닝 루틴을 추천합니다.
+const systemPrompt = `당신은 친근하고 전문적인 AI 운동 코치입니다.
+사용자 조건과 후보 운동 목록을 보고 최적의 루틴을 조합합니다.
 
 원칙:
-- 평가하거나 압박하지 않습니다. 데이터를 보여주고 다음 행동을 제안합니다.
-- 사용자가 선택한 시간을 합으로 맞춥니다 (워밍업 + 메인 + 마무리).
-- 불편한 부위가 있으면 그 부위에 부담 가는 동작은 제외합니다.
-- 장비/장소에 맞는 동작만 추천합니다.
-- 운동 이름은 한국어. 의학 용어보다 일반 표현 우선.
-- intro 문장은 짧게, 친근하게. 이모티콘 1~2개.
-- 각 운동의 description은 음성으로 읽기 좋게: 짧은 두 문장 이내, 자연스러운 구어체.
-- caution은 정말 주의할 게 있을 때만 한 문장. 없으면 빈 문자열.
-- detail 형식은 반드시 "N분" 또는 "N회 × M세트" 둘 중 하나만 사용 (파싱하기 위함).
-- 세트 기반(N회 × M세트) 운동:
-  · earlyReps 정확히 2개 (초반 자세 안내), middleReps 정확히 5개 (호흡/자세 큐), finalReps 정확히 3개 (격려/마무리).
-  · 모든 멘트는 반드시 \`{count}\`로 시작. 코드가 "하나", "둘", "셋" 등으로 치환함. "1, " "첫 번째," 같은 표현 절대 금지.
-  · 예: "{count}, 엉덩이를 천천히 들어올려요." (O) / "하나, 엉덩이를..." (X) / "1, 엉덩이를..." (X)
-  · timeScripts: [], halfwayEncouragement: "".
-- 시간 기반(N분) 운동:
-  · earlyReps, middleReps, finalReps 모두 빈 배열 [] (세트 기반 전용 필드).
-  · timeScripts: 자세/호흡 큐를 시간 길이에 맞게 N개 (N ≈ totalSeconds ÷ 12). 각 12~25자, \`{count}\` 미포함. 워밍업 → 본동작 → 마무리 순.
-  · halfwayEncouragement: 절반 시점 격려 한 문장 (15자 이내). 마지막 5초 카운트(오/사/삼/이/일)는 코드가 처리하므로 포함 금지.`;
+- 후보 목록에 없는 운동은 절대 추천하지 마세요. id 를 정확히 그대로 반환합니다.
+- 운동 순서: 워밍업 1개 → 메인 → 마무리 1개.
+- **워밍업과 마무리는 반드시 부위(body_region)가 '스트레칭' 인 운동에서만 골라야 합니다.**
+  · 워밍업: 부위='스트레칭' AND phase 에 'warmup' 포함
+  · 마무리: 부위='스트레칭' AND phase 에 'cooldown' 포함
+  · 스트레칭이 아닌 운동(상체/하체/코어/전신)은 워밍업/마무리에 절대 사용 금지.
+- 메인 운동은 신체 부위(상체/하체/코어/전신)가 골고루 자극되도록 다른 부위에서 섞어 고르세요.
+- 같은 부위 운동을 2개 이상 연속 배치하지 마세요.
+- **다양성 원칙**: 사용자 조건이 같아도 호출마다 운동 조합이 달라야 합니다.
+  · 항상 "가장 무난한" 운동만 고르지 말고, 후보 풀의 덜 흔한 옵션도 적극 시도하세요.
+  · 사용자 프롬프트의 "다양성 시드" 값이 다르면, 가능한 한 다른 운동 조합을 만드세요.
+- title 은 짧고 명료하게.
+- intro 는 짧고 친근하게 한 문장, 이모지 1개.`;
 
-function buildUserPrompt(input: RoutineInput): string {
-  return `다음 조건에 맞는 홈트 루틴을 추천해주세요.
-
-- 운동 목표: ${input.goal}
-- 운동 장소: ${input.place}
-- 사용 장비: ${input.equipment}
-- 오늘 컨디션: ${input.condition}
-- 불편한 부위: ${input.bodyPart}
-- 운동 가능 시간: ${input.duration}`;
+/** Fisher-Yates 셔플 — 후보 순서 편향을 제거하기 위한 매 호출 무작위화. */
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
-async function generateRoutine(input: RoutineInput): Promise<Routine> {
+function buildCandidatesList(candidates: CandidateRow[]): string {
+  return candidates
+    .map(
+      (c) =>
+        `${c.id} | ${c.name} | 부위:${c.body_region ?? '-'} | phase:${c.phase_tags.join(',')} | intensity:${c.intensity}`,
+    )
+    .join('\n');
+}
+
+function buildUserPrompt(
+  input: RoutineInput,
+  candidates: CandidateRow[],
+  count: number,
+): string {
+  // 매 호출마다 다른 6자 토큰 → LLM 에게 "이번 호출은 이전과 다르다"는 신호.
+  const seed = Math.random().toString(36).slice(2, 8);
+  // 후보 순서도 매번 다르게 — LLM 이 위쪽 항목을 우선 고르는 편향을 완화.
+  const shuffled = shuffle(candidates);
+
+  const easierNote = input.easier
+    ? `\n\n중요: 사용자가 "더 쉬운 루틴으로 바꾸기"를 눌렀습니다. 후보 중에서도 intensity 가 낮은 운동을 우선 선택해 부담을 한 단계 낮춰주세요.`
+    : '';
+
+  return `다양성 시드: ${seed}
+
+사용자 조건:
+- 목표: ${input.goal}
+- 장소: ${input.place}
+- 장비: ${input.equipment}
+- 컨디션: ${input.condition}
+- 불편한 부위: ${input.bodyPart}
+- 운동 시간: ${input.duration}
+
+총 ${count}개 운동을 골라주세요 (워밍업 1, 메인 ${count - 2}, 마무리 1).
+
+후보 운동 목록 (id | 이름 | 부위 | phase | intensity):
+${buildCandidatesList(shuffled)}${easierNote}`;
+}
+
+interface LlmResult {
+  title: string;
+  intro: string;
+  exerciseIds: string[];
+}
+
+async function pickExercisesFromLLM(
+  input: RoutineInput,
+  candidates: CandidateRow[],
+  count: number,
+): Promise<LlmResult> {
   if (!client) {
     throw new Error(
       '.env에 EXPO_PUBLIC_ANTHROPIC_API_KEY를 설정한 뒤 dev server를 재시작하세요.',
@@ -222,35 +196,143 @@ async function generateRoutine(input: RoutineInput): Promise<Routine> {
   }
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 5048,
+    model: 'claude-haiku-4-5',
+    max_tokens: 512,
     system: systemPrompt,
-    messages: [{ role: 'user', content: buildUserPrompt(input) }],
+    messages: [
+      { role: 'user', content: buildUserPrompt(input, candidates, count) },
+    ],
     output_config: {
-      format: { type: 'json_schema', schema: routineSchema },
+      format: { type: 'json_schema', schema: outputSchema },
     },
   });
 
   if (response.stop_reason === 'max_tokens') {
     throw new Error(
-      'AI 응답이 너무 길어 중간에 끊겼어요. 조건을 단순하게 바꾸거나 다시 시도해주세요.',
+      'AI 응답이 중간에 끊겼어요. 잠시 후 다시 시도해주세요.',
     );
   }
 
-  const textBlock = response.content.find((b) => b.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') {
-    throw new Error('AI가 빈 응답을 보냈어요. 잠시 후 다시 시도해주세요.');
+  const block = response.content.find((b) => b.type === 'text');
+  if (!block || block.type !== 'text') {
+    throw new Error('AI 가 빈 응답을 보냈어요. 잠시 후 다시 시도해주세요.');
   }
 
-  let raw: RawRoutine;
   try {
-    raw = JSON.parse(textBlock.text) as RawRoutine;
+    return JSON.parse(block.text) as LlmResult;
   } catch {
+    throw new Error('AI 응답 형식이 올바르지 않아요. 잠시 후 다시 시도해주세요.');
+  }
+}
+
+// ── Routine 조립 ─────────────────────────────────────────────
+
+interface ScaledDetail {
+  detail: string;
+  reps: number | null;
+}
+
+function buildDetail(row: ExerciseRow, condMul: number): ScaledDetail {
+  if (row.default_sets !== null && row.default_reps !== null) {
+    const scaled = Math.round(row.default_reps * condMul);
+    // 상한은 DB max_reps 와 전역 ceiling 중 작은 쪽.
+    const upper = Math.min(row.max_reps ?? scaled, HARD_REPS_CEILING);
+    const reps = clamp(scaled, row.min_reps ?? scaled, upper);
+    return {
+      detail: `${reps}회 × ${row.default_sets}세트`,
+      reps,
+    };
+  }
+  if (row.default_duration_sec !== null) {
+    const scaled = Math.round(row.default_duration_sec * condMul);
+    const sec = clamp(
+      scaled,
+      row.min_duration_sec ?? scaled,
+      row.max_duration_sec ?? scaled,
+    );
+    const detail =
+      sec >= 60 && sec % 60 === 0 ? `${sec / 60}분` : `${sec}초`;
+    return { detail, reps: null };
+  }
+  return { detail: '?', reps: null };
+}
+
+function buildRoutineExercise(row: ExerciseRow, condMul: number): RoutineExercise {
+  const { detail, reps } = buildDetail(row, condMul);
+
+  const repScripts =
+    reps !== null &&
+    reps > 0 &&
+    row.middle_reps.length + row.form_cues.length > 0
+      ? generateRepScripts({
+          exerciseId: row.id,
+          exerciseName: row.name,
+          reps,
+          secondsPerRep: 0,
+          earlyReps: row.early_reps,
+          middleReps: row.middle_reps,
+          finalReps: row.final_reps,
+          formCues: row.form_cues,
+        })
+      : [];
+
+  return {
+    name: row.name,
+    detail,
+    description: row.description_text,
+    caution: row.caution_text,
+    earlyReps: row.early_reps,
+    middleReps: row.middle_reps,
+    finalReps: row.final_reps,
+    timeScripts: row.time_scripts,
+    halfwayEncouragement: row.halfway_encouragement,
+    repScripts,
+    isStretch: row.body_region === '스트레칭',
+  };
+}
+
+// ── Main flow ────────────────────────────────────────────────
+
+async function generateRoutine(input: RoutineInput): Promise<Routine> {
+  // 1. DB 후보 필터
+  const candidates = await filterCandidates(input);
+  if (candidates.length < 4) {
     throw new Error(
-      'AI 응답 형식이 올바르지 않아요. 잠시 후 다시 시도해주세요.',
+      '조건에 맞는 운동이 너무 적어요. 컨디션이나 장비 조건을 조금 완화해보세요.',
     );
   }
-  return expandRoutine(raw);
+
+  // 2. LLM 으로 운동 선택
+  const count = DURATION_EX_COUNT[input.duration] ?? 5;
+  const llmResult = await pickExercisesFromLLM(input, candidates, count);
+
+  // 3. 선택된 ID 들의 전체 데이터 조회 + LLM 반환 순서대로 정렬
+  const candidateIds = new Set(candidates.map((c) => c.id));
+  const validIds = llmResult.exerciseIds.filter((id) => candidateIds.has(id));
+  if (validIds.length === 0) {
+    throw new Error('AI 가 후보 외 운동을 골랐어요. 다시 시도해주세요.');
+  }
+
+  const rows = await fetchExercisesByIds(validIds);
+  const rowById = new Map(rows.map((r) => [r.id, r]));
+  const orderedRows = validIds
+    .map((id) => rowById.get(id))
+    .filter((r): r is ExerciseRow => !!r);
+
+  // 4. 컨디션 배율 적용 + RoutineExercise 조립
+  const baseMul = CONDITION_REPS_MULTIPLIER[input.condition] ?? 1.0;
+  const condMul = input.easier ? baseMul * EASIER_REPS_MULTIPLIER : baseMul;
+  const exercises = orderedRows.map((row) => buildRoutineExercise(row, condMul));
+
+  const meta = `${input.duration} · ${input.condition} 컨디션 · ${input.equipment}`;
+
+  return {
+    id: Crypto.randomUUID(),
+    title: llmResult.title,
+    meta,
+    intro: llmResult.intro,
+    exercises,
+  };
 }
 
 export function useGenerateRoutine() {
