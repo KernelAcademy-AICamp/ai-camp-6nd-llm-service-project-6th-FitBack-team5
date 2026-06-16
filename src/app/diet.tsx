@@ -28,6 +28,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -1867,7 +1868,13 @@ function CalendarModal({
 
 // ── 화면 ────────────────────────────────────────────────────
 export default function DietScreen() {
-  const [selectedDate, setSelectedDate] = useState(() => isoOf(new Date()));
+  // 기록 캘린더(화면 B) 식단 딥링크 — ?date=YYYY-MM-DD로 진입 시 해당 날짜로.
+  const params = useLocalSearchParams<{ date?: string }>();
+  const [selectedDate, setSelectedDate] = useState(() => params.date ?? isoOf(new Date()));
+  useEffect(() => {
+    if (params.date && params.date !== selectedDate) setSelectedDate(params.date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.date]);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const { data: meals = [], isLoading, isError, refetch } = useMeals(selectedDate);
   const addMeal = useAddMeal(selectedDate);
