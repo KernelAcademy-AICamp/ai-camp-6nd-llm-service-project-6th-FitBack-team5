@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -62,66 +61,38 @@ type WorkoutLogInsert = {
   ai_feedback?: object | null;
 };
 
-const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-const anthropicClient = apiKey
-  ? new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
-  : null;
-
-const feedbackSchema = {
-  type: 'object',
-  properties: {
-    summary: { type: 'string', description: '오늘 운동의 한 줄 요약. 평가 톤 금지.' },
-    nextAdjustment: { type: 'string', description: '다음 운동을 위한 조정 한 문장.' },
-    encouragement: { type: 'string', description: '짧고 따뜻한 격려 한 문장.' },
-  },
-  required: ['summary', 'nextAdjustment', 'encouragement'],
-  additionalProperties: false,
-} as const;
-
-const FEEDBACK_SYSTEM_PROMPT = `당신은 친근한 홈트 AI 코치입니다.
-운동 기록을 받아 다음 운동 조정 방향을 JSON으로만 반환합니다.
-반드시 아래 형식만 반환하고 다른 텍스트는 포함하지 마세요:
-{"summary":string,"nextAdjustment":string,"encouragement":string}
-각 필드는 한 문장 이내 한국어.`;
-
+// 프롬프트·schema 는 모두 Edge Function (supabase/functions/workout-feedback) 에 있음.
+// 키는 서버 secret(ANTHROPIC_API_KEY) 으로만 존재. 클라이언트는 입력만 넘기고 결과를 받는다.
 async function fetchAiFeedback(input: {
   difficulty: Difficulty;
   painAreas: string[];
   completionStatus: CompletionStatus;
   memo: string;
 }): Promise<AiFeedback> {
-  if (!anthropicClient) {
-    throw new Error('Anthropic API key가 없습니다.');
+  const { data, error } = await supabase.functions.invoke<
+    AiFeedback & { error?: string }
+  >('workout-ai', { body: { action: 'workout-feedback', ...input } });
+
+  if (error || !data) {
+    throw new Error(
+      data?.error ?? error?.message ?? 'AI 피드백 생성에 실패했어요.',
+    );
   }
-
-  const userPrompt = `난이도: ${input.difficulty}
-통증 부위: ${input.painAreas.join(', ') || '없음'}
-완료 여부: ${input.completionStatus}
-메모: ${input.memo.trim() || '없음'}`;
-
-  const response = await anthropicClient.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 500,
-    system: FEEDBACK_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userPrompt }],
-    output_config: {
-      format: { type: 'json_schema', schema: feedbackSchema },
-    },
-  });
-
-  if (response.stop_reason === 'max_tokens') {
-    throw new Error('AI 응답이 중간에 끊겼습니다.');
+  if (data.error) {
+    throw new Error(data.error);
   }
-
-  const textBlock = response.content.find((b) => b.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') {
-    throw new Error('AI 응답이 비었습니다.');
-  }
-  try {
-    return JSON.parse(textBlock.text) as AiFeedback;
-  } catch {
+  if (
+    typeof data.summary !== 'string' ||
+    typeof data.nextAdjustment !== 'string' ||
+    typeof data.encouragement !== 'string'
+  ) {
     throw new Error('AI 응답 형식이 올바르지 않습니다.');
   }
+  return {
+    summary: data.summary,
+    nextAdjustment: data.nextAdjustment,
+    encouragement: data.encouragement,
+  };
 }
 
 const DIFFICULTY_OPTIONS = [
