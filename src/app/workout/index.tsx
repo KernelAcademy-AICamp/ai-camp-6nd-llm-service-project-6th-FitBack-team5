@@ -91,6 +91,7 @@ export default function WorkoutScreen() {
   const [bodyPart, setBodyPart] = useState<(typeof bodyParts)[number]>('없음');
   const [duration, setDuration] = useState<(typeof durations)[number]>('15분');
   const [recommendation, setRecommendation] = useState<Routine | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
   const { mutate: generate, isPending, error } = useGenerateRoutine();
   const router = useRouter();
   const setSessionRoutine = useWorkoutSession((s) => s.setRoutine);
@@ -111,8 +112,9 @@ export default function WorkoutScreen() {
     );
   }
 
-  function handleStartSession() {
-    if (!recommendation) return;
+  async function handleStartSession() {
+    if (!recommendation || isStarting) return;
+    setIsStarting(true);
     primeTts();
     setSessionRoutine(recommendation);
     // OpenAI TTS 사전 합성 — 세션 시작 전 모든 코칭 멘트를 백그라운드로 캐싱.
@@ -169,7 +171,17 @@ export default function WorkoutScreen() {
       getOrCreateAudio(FINISH_TEXT, lastMode).catch(() => {});
     }
 
+    // 레이스 방지 — 첫 운동 intro 만 동기 대기. session 진입 즉시 OpenAI TTS 가
+    // 메모리 캐시 HIT 되도록 함. 나머지는 백그라운드에서 계속 합성됨.
+    const firstEx = recommendation.exercises[0];
+    if (firstEx) {
+      const firstMode = firstEx.isStretch ? 'stretch' : 'main';
+      const firstIntroText = `${firstEx.name}을(를) 시작할게요. ${firstEx.description}`.trim();
+      await getOrCreateAudio(firstIntroText, firstMode).catch(() => null);
+    }
+
     router.push('/workout/session');
+    setIsStarting(false);
   }
 
   return (
@@ -306,15 +318,21 @@ export default function WorkoutScreen() {
 
               <Pressable
                 onPress={handleStartSession}
+                disabled={isStarting}
                 style={({ pressed }) => [
                   styles.cta,
                   {
                     backgroundColor: pressed ? Palette.primaryPressed : Palette.primary,
+                    opacity: isStarting ? 0.7 : 1,
                   },
                 ]}>
-                <ThemedText type="subtitle" style={{ color: '#FFFFFF' }}>
-                  운동 시작하기
-                </ThemedText>
+                {isStarting ? (
+                  <ActivityIndicator color={Palette.white} />
+                ) : (
+                  <ThemedText type="subtitle" style={{ color: '#FFFFFF' }}>
+                    운동 시작하기
+                  </ThemedText>
+                )}
               </Pressable>
 
               <Pressable
