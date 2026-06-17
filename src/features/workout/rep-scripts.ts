@@ -3,7 +3,10 @@
  *
  * - 처음 2회: earlyReps (순서대로)
  * - 마지막 3회: finalReps (순서대로)
- * - 그 사이: middleReps 순환
+ * - 그 사이: middleReps 순환 + formCues 가 슬롯 0/2/4 에 끼어듦
+ *   → 같은 부위 운동들이 공유하는 generic middleReps 위에,
+ *     운동 특화 폼 큐(formCues)가 자연스럽게 섞여 발화된다.
+ *   → formCues 가 비어 있으면 기존 동작 그대로 (middleReps 순환만).
  * - reps가 작으면 (1~4) early/final이 겹치지 않도록 clamp
  * - `{count}` placeholder는 "하나, 둘, ...열, 열하나..." 한글 카운트로 치환
  */
@@ -16,6 +19,8 @@ export interface CoachingPattern {
   earlyReps: string[];
   middleReps: string[];
   finalReps: string[];
+  /** 운동 특화 폼 큐 0~3개. 비어 있으면 middleReps generic 만 발화. */
+  formCues?: string[];
 }
 
 export const KOREAN_NUMBERS = [
@@ -42,8 +47,30 @@ function pickTemplate(pool: string[], i: number): string {
   return pool[i % pool.length];
 }
 
+/**
+ * middle 슬롯 인덱스 i 에 대해 cue 를 결정한다.
+ * - 슬롯 0, 2, 4 (mod 5): formCues 가 있으면 form 큐로 교체, 없으면 middle generic
+ * - 슬롯 1, 3 (mod 5): 항상 middle generic
+ *
+ * 결과적으로 12회 반복 운동의 중반 7회 중 약 4회가 운동 특화 멘트로 나간다.
+ */
+function pickMiddleTemplate(
+  middleReps: string[],
+  formCues: string[],
+  i: number,
+): string {
+  const slot = i % 5;
+  const formSlotIndex = slot === 0 ? 0 : slot === 2 ? 1 : slot === 4 ? 2 : -1;
+
+  if (formSlotIndex >= 0) {
+    const form = formCues[formSlotIndex];
+    if (form) return form;
+  }
+  return pickTemplate(middleReps, i);
+}
+
 export function generateRepScripts(pattern: CoachingPattern): string[] {
-  const { reps, earlyReps, middleReps, finalReps } = pattern;
+  const { reps, earlyReps, middleReps, finalReps, formCues = [] } = pattern;
   if (reps <= 0) return [];
 
   const earlyCount = Math.min(EARLY_REP_COUNT, reps);
@@ -57,7 +84,7 @@ export function generateRepScripts(pattern: CoachingPattern): string[] {
     out.push(fillCount(pickTemplate(earlyReps, i), n));
   }
   for (let i = 0; i < middleCount; i++, n++) {
-    out.push(fillCount(pickTemplate(middleReps, i), n));
+    out.push(fillCount(pickMiddleTemplate(middleReps, formCues, i), n));
   }
   for (let i = 0; i < finalCount; i++, n++) {
     out.push(fillCount(pickTemplate(finalReps, i), n));
