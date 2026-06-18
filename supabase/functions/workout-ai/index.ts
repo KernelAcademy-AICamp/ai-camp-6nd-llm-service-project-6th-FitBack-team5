@@ -35,7 +35,6 @@ function json(body: unknown, status = 200): Response {
 
 interface RoutineInput {
   goal: string;
-  place: string;
   equipment: string;
   condition: string;
   bodyPart: string;
@@ -124,7 +123,6 @@ function buildRoutineUserPrompt(
 
 사용자 조건:
 - 목표: ${input.goal}
-- 장소: ${input.place}
 - 장비: ${input.equipment}
 - 컨디션: ${input.condition}
 - 불편한 부위: ${input.bodyPart}

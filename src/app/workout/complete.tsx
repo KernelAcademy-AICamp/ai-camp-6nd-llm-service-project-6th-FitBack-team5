@@ -195,6 +195,8 @@ export default function CompleteScreen() {
           routine_title: routine.title,
           routine_meta: routine.meta,
           duration_min: parseDurationMin(routine.meta),
+          // 실제 경과 초 — 일부완료 시 "{실제}/{계획}분" 비율 표시에 사용.
+          actual_duration_sec: elapsedSec,
           exercise_count: total,
           pain_areas: [],
           completion_status: completionStatus,
@@ -462,30 +464,53 @@ export default function CompleteScreen() {
               </ThemedText>
             </View>
 
-            <Pressable
-              onPress={handleSaveReview}
-              disabled={!canSubmitReview}
-              style={({ pressed }) => [
-                styles.primaryCta,
-                {
-                  backgroundColor: !canSubmitReview
-                    ? Palette.bgMuted
-                    : pressed
-                      ? Palette.primaryPressed
-                      : Palette.primary,
-                  opacity: isReviewSaving ? 0.7 : 1,
-                },
-              ]}>
-              {isReviewSaving ? (
-                <ActivityIndicator color={Palette.white} />
-              ) : (
-                <ThemedText
-                  type="subtitle"
-                  style={{ color: canSubmitReview ? Palette.white : theme.textSecondary }}>
-                  운동 리뷰 남기기
+            <View style={styles.ctaRow}>
+              <Pressable
+                onPress={handleSaveReview}
+                disabled={!canSubmitReview}
+                style={({ pressed }) => [
+                  styles.primaryCta,
+                  styles.flex1,
+                  {
+                    backgroundColor: !canSubmitReview
+                      ? Palette.bgMuted
+                      : pressed
+                        ? Palette.primaryPressed
+                        : Palette.primary,
+                    opacity: isReviewSaving ? 0.7 : 1,
+                  },
+                ]}>
+                {isReviewSaving ? (
+                  <ActivityIndicator color={Palette.white} />
+                ) : (
+                  <ThemedText
+                    type="subtitle"
+                    style={{ color: canSubmitReview ? Palette.white : theme.textSecondary }}>
+                    운동 리뷰 남기기
+                  </ThemedText>
+                )}
+              </Pressable>
+
+              {/* 리뷰 남기지 않고 운동 홈으로 — clearRoutine + replace 로 뒤로가기 X */}
+              <Pressable
+                onPress={() => {
+                  clearRoutine();
+                  router.replace('/workout');
+                }}
+                style={({ pressed }) => [
+                  styles.primaryCta,
+                  styles.flex1,
+                  {
+                    backgroundColor: pressed ? Palette.gray100 : Palette.bgMuted,
+                    borderColor: Palette.lineDefault,
+                    borderWidth: StyleSheet.hairlineWidth,
+                  },
+                ]}>
+                <ThemedText type="subtitle" themeColor="text">
+                  운동 홈 가기
                 </ThemedText>
-              )}
-            </Pressable>
+              </Pressable>
+            </View>
           </ScrollView>
         </SafeAreaView>
         {toast && (
@@ -605,6 +630,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  ctaRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  flex1: { flex: 1 },
   toastContainer: {
     position: 'absolute',
     left: Spacing.lg,

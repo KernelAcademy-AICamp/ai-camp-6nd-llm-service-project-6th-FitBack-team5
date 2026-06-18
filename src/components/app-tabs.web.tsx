@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import {
   TabList,
   TabListProps,
@@ -20,6 +21,7 @@ const NAV = {
 } as const;
 
 export default function AppTabs() {
+  const router = useRouter();
   return (
     <Tabs>
       <TabSlot style={styles.slot} />
@@ -34,8 +36,11 @@ export default function AppTabs() {
           <TabTrigger name="diet" href="/diet" asChild>
             <TabButton icon={Utensils}>식단</TabButton>
           </TabTrigger>
+          {/* 운동 탭은 /workout 하위(coach·session·complete) 어디에 있어도 항상 운동 홈으로 리셋. */}
           <TabTrigger name="workout" href="/workout" asChild>
-            <TabButton icon={Dumbbell}>운동</TabButton>
+            <TabButton icon={Dumbbell} onPress={() => router.replace('/workout')}>
+              운동
+            </TabButton>
           </TabTrigger>
           <TabTrigger name="my" href="/my" asChild>
             <TabButton icon={User}>마이</TabButton>
