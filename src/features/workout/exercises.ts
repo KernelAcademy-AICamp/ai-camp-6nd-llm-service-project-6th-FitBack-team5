@@ -89,17 +89,12 @@ export async function filterCandidates(input: RoutineInput): Promise<CandidateRo
     let q = supabase
       .from('exercises')
       .select(selectCols)
-      .contains('place_tags', [input.place])
       .containedBy('equipment', userEquipment)
       .lte('intensity', maxIntensity);
 
     if (input.bodyPart && input.bodyPart !== '없음') {
       // contraindicated_parts 에 사용자가 불편한 부위가 들어 있으면 제외
       q = q.not('contraindicated_parts', 'cs', `{${input.bodyPart}}`);
-    }
-    if (input.place === '집') {
-      // 집에서는 점프 운동 자동 제외 (층간소음)
-      q = q.eq('is_high_impact', false);
     }
     return q;
   }

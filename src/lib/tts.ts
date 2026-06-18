@@ -141,6 +141,38 @@ function webStop(): void {
   window.speechSynthesis.cancel();
 }
 
+// ── 현재 재생 중인 mp3 인스턴스 추적 ─────────────────────────
+// playCue 가 캐시 URL 로 mp3 를 재생하면 여기 보관. tts.stop() 이 같이 정지시킨다.
+// 보관 안 하면 건너뛰기·일시정지 시 SpeechSynthesis 만 끊고 mp3 는 계속 흐름 → 다음 cue 와 겹침.
+let activeWebAudio: HTMLAudioElement | null = null;
+let activeNativePlayerStopper: (() => void) | null = null;
+
+function stopActiveAudio(): void {
+  if (activeWebAudio) {
+    const audio = activeWebAudio;
+    activeWebAudio = null;
+    // onended/onerror 를 먼저 떼서 pause 가 콜백을 트리거하지 않게 함.
+    // (안 그러면 stop 직후 다음 phase 의 onDone 이 두 번 발화될 수 있음)
+    audio.onended = null;
+    audio.onerror = null;
+    try {
+      audio.pause();
+      audio.src = '';
+    } catch {
+      // pause 실패는 무시 — 이미 release 된 상태일 수 있음
+    }
+  }
+  if (activeNativePlayerStopper) {
+    const stopper = activeNativePlayerStopper;
+    activeNativePlayerStopper = null;
+    try {
+      stopper();
+    } catch {
+      // 무시
+    }
+  }
+}
+
 export const tts: Tts = {
   speak(text, opts) {
     const trimmed = text?.trim();
@@ -160,6 +192,7 @@ export const tts: Tts = {
     });
   },
   stop() {
+    stopActiveAudio();
     if (Platform.OS === 'web') {
       webStop();
       return;
@@ -204,12 +237,24 @@ function webPlayAudioUrl(
     (onError ?? onDone)?.();
     return;
   }
+  // 이전 mp3 가 아직 흐르고 있으면 먼저 끊는다 — 호출자가 stop 을 잊었어도 겹침 방지.
+  stopActiveAudio();
   try {
     const audio = new window.Audio(url);
+    activeWebAudio = audio;
     audio.playbackRate = rate;
-    audio.onended = () => onDone?.();
-    audio.onerror = () => (onError ?? onDone)?.();
-    audio.play().catch(() => (onError ?? onDone)?.());
+    audio.onended = () => {
+      if (activeWebAudio === audio) activeWebAudio = null;
+      onDone?.();
+    };
+    audio.onerror = () => {
+      if (activeWebAudio === audio) activeWebAudio = null;
+      (onError ?? onDone)?.();
+    };
+    audio.play().catch(() => {
+      if (activeWebAudio === audio) activeWebAudio = null;
+      (onError ?? onDone)?.();
+    });
   } catch {
     (onError ?? onDone)?.();
   }
@@ -225,21 +270,40 @@ function nativePlayAudioUrl(
   onDone?: () => void,
   onError?: () => void,
 ): void {
+  // 이전 mp3 가 아직 흐르고 있으면 먼저 끊는다 — 호출자가 stop 을 잊었어도 겹침 방지.
+  stopActiveAudio();
+
   let player: AudioPlayer | null = null;
   let done = false;
+  let cancelled = false;
   const finish = (fn?: () => void) => {
     if (done) return;
     done = true;
+    if (activeNativePlayerStopper === stopThisPlayer) {
+      activeNativePlayerStopper = null;
+    }
     try {
       player?.remove();
     } catch {
       // remove 실패는 무시 — 이미 release 된 상태일 수 있음
     }
+    if (cancelled) return; // tts.stop() 으로 끊긴 경우 onDone 발화 금지
     fn?.();
+  };
+  // tts.stop() 이 호출하면 onDone 발화를 막고 player 를 release.
+  const stopThisPlayer = () => {
+    cancelled = true;
+    try {
+      player?.pause();
+    } catch {
+      // 무시
+    }
+    finish();
   };
 
   try {
     player = createAudioPlayer({ uri: url });
+    activeNativePlayerStopper = stopThisPlayer;
     player.playbackRate = rate;
     player.addListener('playbackStatusUpdate', (status) => {
       if (status.didJustFinish) finish(onDone);

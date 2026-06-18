@@ -132,7 +132,17 @@ export default function SessionScreen() {
   const router = useRouter();
   const routine = useWorkoutSession((s) => s.routine);
   const clearRoutine = useWorkoutSession((s) => s.clear);
-  const setCompletedCount = useWorkoutSession((s) => s.setCompletedCount);
+  const incrementCompleted = useWorkoutSession((s) => s.incrementCompleted);
+  const startSession = useWorkoutSession((s) => s.startSession);
+
+  // session 진입 시각을 한 번만 기록 (사용자가 화면 진입할 때).
+  // complete.tsx 가 경과 시간을 MM:SS 로 계산하기 위해 필요.
+  useEffect(() => {
+    startSession();
+  }, [startSession]);
+
+  // exercise-finish 단계에 자연 도달한 운동 idx 를 추적 — 동일 idx 중복 증가 방지.
+  const countedRef = useRef<Set<number>>(new Set());
 
   const [exerciseIdx, setExerciseIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>({ kind: 'intro' });
@@ -474,6 +484,12 @@ export default function SessionScreen() {
   // ── phase: exercise-finish ─ "{name}을 모두 완료했어요" → 다음 운동의 intro 또는 finish ──
   useEffect(() => {
     if (phase.kind !== 'exercise-finish' || isPaused || !current) return;
+    // 이 운동이 exercise-finish 단계까지 도달했다 = 건너뛰지 않고 자연 완료.
+    // 같은 idx 가 중복 카운트되지 않도록 ref Set 으로 가드.
+    if (!countedRef.current.has(exerciseIdx)) {
+      countedRef.current.add(exerciseIdx);
+      incrementCompleted();
+    }
     let cancelled = false;
     playCue({ rate: rateRef.current,
       text: `${current.name}을 모두 완료했어요.`,
@@ -483,7 +499,6 @@ export default function SessionScreen() {
           setExerciseIdx((i) => i + 1);
           setPhase({ kind: 'intro' });
         } else {
-          setCompletedCount(exerciseIdx + 1);
           setPhase({ kind: 'finish' });
         }
       },
@@ -492,13 +507,16 @@ export default function SessionScreen() {
       cancelled = true;
       tts.stop();
     };
-  }, [phase.kind, isPaused, current, exerciseIdx, total]);
+  }, [phase.kind, isPaused, current, exerciseIdx, total, incrementCompleted]);
 
-  // ── phase: finish ─ 전체 완료 멘트 ──
+  // ── phase: finish ─ 완료 페이지로 즉시 이동 ──
+  // 인-세션 완료 화면(축하 + "기록 남기기"/"그냥 닫기")은 제거.
+  // 자연 완료든 마지막 건너뛰기든 finish 도달 직후 complete.tsx 가 자동 저장 + AI 피드백 처리.
   useEffect(() => {
     if (phase.kind !== 'finish') return;
-    playCue({ rate: rateRef.current, text: '오늘 운동을 모두 마쳤어요. 수고하셨어요.' });
-  }, [phase.kind]);
+    tts.stop();
+    router.replace('/workout/complete');
+  }, [phase.kind, router]);
 
   // ────────────────────────────────────────────────────────────
   // 렌더링
@@ -512,30 +530,10 @@ export default function SessionScreen() {
   const nextPreview = nextPreviewText({ phase, parsed, nextExerciseName });
   const overallProgress = (exerciseIdx + exerciseFraction(phase, parsed)) / total;
 
+  // phase.kind === 'finish' 도달 시점에 위의 useEffect 가 router.replace 로 이동.
+  // 렌더 시점에 잠시 빈 화면이 보일 수 있으나 곧장 complete.tsx 로 교체됨.
   if (phase.kind === 'finish') {
-    return (
-      <ThemedView style={styles.finishContainer}>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.finishContent}>
-            <ThemedText type="display">운동 완료!</ThemedText>
-            <ThemedText style={styles.finishSub}>오늘도 한 칸 채웠어요.</ThemedText>
-          </View>
-          <Pressable
-            onPress={() => {
-              tts.stop();
-              router.push('/workout/complete');
-              // clearRoutine은 complete.tsx에서 처리
-            }}
-            style={styles.primaryButton}
-          >
-            <ThemedText style={styles.primaryButtonText}>기록 남기기</ThemedText>
-          </Pressable>
-          <Pressable onPress={handleClose} style={styles.textButton}>
-            <ThemedText style={styles.textButtonText}>그냥 닫기</ThemedText>
-          </Pressable>
-        </SafeAreaView>
-      </ThemedView>
-    );
+    return <ThemedView style={styles.container} />;
   }
 
   return (

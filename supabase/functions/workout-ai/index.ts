@@ -35,7 +35,6 @@ function json(body: unknown, status = 200): Response {
 
 interface RoutineInput {
   goal: string;
-  place: string;
   equipment: string;
   condition: string;
   bodyPart: string;
@@ -124,7 +123,6 @@ function buildRoutineUserPrompt(
 
 사용자 조건:
 - 목표: ${input.goal}
-- 장소: ${input.place}
 - 장비: ${input.equipment}
 - 컨디션: ${input.condition}
 - 불편한 부위: ${input.bodyPart}
@@ -210,19 +208,27 @@ function isCompletion(v: unknown): v is CompletionStatus {
 }
 
 async function handleWorkoutFeedback(payload: Record<string, unknown>): Promise<Response> {
-  const { difficulty, painAreas, completionStatus, memo } = payload;
+  const { difficulty, painAreas, completionStatus, memo, routineTitle, exerciseCount, calories } = payload;
 
-  if (!isDifficulty(difficulty) || !isCompletion(completionStatus)) {
-    return json({ error: 'difficulty/completionStatus invalid' }, 400);
+  // completionStatus 는 필수 — 완료 페이지 진입 즉시 호출됨. 나머지는 선택(리뷰 전이라 비어있을 수 있음).
+  if (!isCompletion(completionStatus)) {
+    return json({ error: 'completionStatus invalid' }, 400);
   }
+  const difficultyLabel = isDifficulty(difficulty) ? difficulty : '미입력';
   const pains: string[] = Array.isArray(painAreas)
     ? painAreas.filter((p): p is string => typeof p === 'string')
     : [];
   const memoStr = typeof memo === 'string' ? memo : '';
+  const titleStr = typeof routineTitle === 'string' ? routineTitle : '오늘의 운동';
+  const countStr = typeof exerciseCount === 'number' ? exerciseCount : '?';
+  const calStr = typeof calories === 'number' ? `${calories} kcal` : '미상';
 
-  const userPrompt = `난이도: ${difficulty}
-통증 부위: ${pains.join(', ') || '없음'}
+  const userPrompt = `운동 루틴: ${titleStr}
+운동 개수: ${countStr}
 완료 여부: ${completionStatus}
+추정 칼로리: ${calStr}
+난이도: ${difficultyLabel}
+통증 부위: ${pains.join(', ') || '없음'}
 메모: ${memoStr.trim() || '없음'}`;
 
   const response = await client.messages.create({
