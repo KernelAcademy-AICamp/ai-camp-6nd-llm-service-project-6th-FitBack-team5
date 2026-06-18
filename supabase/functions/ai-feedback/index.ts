@@ -1,95 +1,109 @@
-// Edge Function: ai-feedback
-// 식약처(FOOD_SAFETY) API 조회 + Claude로 운동/식단 피드백 생성 (시작용 스캐폴드)
-//
-// 로컬 실행:  npx supabase functions serve ai-feedback --env-file .env
-// 배포:       npx supabase functions deploy ai-feedback
-// secrets:    npx supabase secrets set FOOD_SAFETY_API_KEY=... ANTHROPIC_API_KEY=...
-//
-// 앱에서 호출:
-//   const { data, error } = await supabase.functions.invoke('ai-feedback', {
-//     body: { food: '닭가슴살' },
-//   });
+/**
+ * FitBack — ai-feedback Edge Function (Deno / Supabase) 통합 버전
+ *
+ * 기존 ai-feedback 함수의 "응답 검증 + 고정 폴백" 단계를 붙인 패턴입니다.
+ * 핵심: Claude 응답을 앱으로 그대로 내보내지 않고, validateChatbotResponse를
+ * 통과한 데이터만 반환합니다. 2회까지 재시도하고, 모두 실패하면 고정 폴백 응답을
+ * 반환해 앱이 항상 정상적으로 화면을 그릴 수 있게 합니다.
+ */
+
+import { SYSTEM_PROMPT } from "./systemPrompt.ts";
+import { validateChatbotResponse } from "./validateChatbotResponse.ts";
+import { FALLBACK_RESPONSE } from "./fallbackResponse.ts";
+import type { AppResponse, ChatbotResponse, RoiInfo } from "./chatbot.types.ts";
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  });
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 
-Deno.serve(async (req) => {
-  // CORS preflight
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+interface ChatbotRequest {
+  userContext: Record<string, unknown>; // 온보딩 프로필 + 운동목표
+  roi?: RoiInfo | null;                 // 프론트에서 계산한 ROI (AI가 생성 금지)
+  userMessage?: string;                 // 사용자 질문
+  questionAnswer?: string;             // 질문지 답변
+  photoAnalysis?: unknown;             // analyze-meal 결과 (사진인 경우)
+}
 
-  // 비밀 키는 Edge Function 환경에서만 읽음 (클라이언트에 절대 노출 안 됨)
-  const FOOD_SAFETY_API_KEY = Deno.env.get('FOOD_SAFETY_API_KEY');
-  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!FOOD_SAFETY_API_KEY || !ANTHROPIC_API_KEY) {
-    return json({ error: 'Missing FOOD_SAFETY_API_KEY or ANTHROPIC_API_KEY secret' }, 500);
-  }
-
-  let payload: { food?: string };
-  try {
-    payload = await req.json();
-  } catch {
-    return json({ error: 'Invalid JSON body' }, 400);
-  }
-
-  const food = (payload.food ?? '').trim();
-  if (!food) return json({ error: 'body.food 가 필요합니다' }, 400);
-
-  // 1) 식약처 API로 영양정보 조회 (엔드포인트/파라미터는 발급받은 API 문서에 맞게 조정)
-  //    예시: 식품영양성분 DB. 실제 URL/쿼리는 팀에서 쓰는 API에 맞춰 교체하세요.
-  let nutrition: unknown = null;
-  try {
-    const url =
-      `https://apis.data.go.kr/1471000/FoodNtrIrdntInfoService1/getFoodNtrItdntList1` +
-      `?serviceKey=${encodeURIComponent(FOOD_SAFETY_API_KEY)}` +
-      `&desc_kor_nm=${encodeURIComponent(food)}&type=json&numOfRows=1&pageNo=1`;
-    const res = await fetch(url);
-    if (res.ok) nutrition = await res.json();
-  } catch (e) {
-    console.error('food-safety fetch failed', e);
-  }
-
-  // 2) Claude로 친근한 코치 톤의 피드백 생성 (design.md Voice & Tone 반영)
-  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
+/** Claude 호출 → raw 텍스트 반환 */
+async function callClaude(userPayload: string): Promise<string> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
     headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
+      "content-type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
-      system:
-        'You are FitBack, a friendly AI fitness coach. 사용자를 평가하지 말고, ' +
-        '데이터를 보여주고, 다음 행동을 담백하고 친근하게 제안하라. 공포감·죄책감 유발 금지.',
-      messages: [
-        {
-          role: 'user',
-          content:
-            `음식: ${food}\n영양정보(JSON): ${JSON.stringify(nutrition)}\n` +
-            `이 음식에 대한 짧은 운동/식단 피드백을 1~2문장으로 한국어로 작성해줘.`,
-        },
-      ],
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      temperature: 0.4,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userPayload }],
     }),
   });
+  const data = await res.json();
+  return (data?.content ?? [])
+    .filter((b: { type: string }) => b.type === "text")
+    .map((b: { text: string }) => b.text)
+    .join("\n");
+}
 
-  if (!claudeRes.ok) {
-    const detail = await claudeRes.text();
-    return json({ error: 'Claude API error', detail }, 502);
+/**
+ * 검증 통과한 ChatbotResponse를 반환.
+ * 2회까지 재시도하고 모두 실패하면 고정 폴백(FALLBACK_RESPONSE)을 반환한다.
+ * → 절대 throw하지 않으므로 앱은 항상 렌더링 가능한 응답을 받는다.
+ */
+async function getValidatedResponse(payload: string): Promise<ChatbotResponse> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const raw = await callClaude(payload);
+      const result = validateChatbotResponse(raw);
+      if (result.ok) return result.data;
+      console.error(`[ai-feedback] 검증 실패(시도 ${attempt}): ${result.error}`);
+    } catch (err) {
+      console.error(`[ai-feedback] 호출 실패(시도 ${attempt}): ${(err as Error).message}`);
+    }
+  }
+  return FALLBACK_RESPONSE;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "POST only" }), {
+      status: 405,
+      headers: { ...CORS, "content-type": "application/json" },
+    });
   }
 
-  const claude = await claudeRes.json();
-  const feedback = claude?.content?.[0]?.text ?? '';
+  let body: ChatbotRequest;
+  try {
+    body = (await req.json()) as ChatbotRequest;
+  } catch {
+    console.error("[ai-feedback] 잘못된 요청 본문");
+    return new Response(JSON.stringify(FALLBACK_RESPONSE), {
+      headers: { ...CORS, "content-type": "application/json" },
+    });
+  }
 
-  return json({ food, nutrition, feedback });
+  const roi = body.roi ?? null;
+
+  const payload = JSON.stringify({
+    profile: body.userContext,
+    roi,                               // AI는 인용만, 생성 금지
+    message: body.userMessage ?? null,
+    answer: body.questionAnswer ?? null,
+    photo: body.photoAnalysis ?? null,
+  });
+
+  const chatResponse = await getValidatedResponse(payload);
+  const appResponse: AppResponse = { ...chatResponse, roi };
+
+  return new Response(JSON.stringify(appResponse), {
+    headers: { ...CORS, "content-type": "application/json" },
+  });
 });

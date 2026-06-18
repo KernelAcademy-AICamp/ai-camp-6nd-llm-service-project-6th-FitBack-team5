@@ -6,7 +6,7 @@ import {
   TabTrigger,
   TabTriggerSlotProps,
 } from 'expo-router/ui';
-import { CreditCard, Dumbbell, House, User, Utensils, type LucideIcon } from 'lucide-react-native';
+import { CreditCard, Dumbbell, House, Utensils, type LucideIcon } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MaxContentWidth } from '@/constants/theme';
@@ -36,9 +36,6 @@ export default function AppTabs() {
           </TabTrigger>
           <TabTrigger name="workout" href="/workout" asChild>
             <TabButton icon={Dumbbell}>운동</TabButton>
-          </TabTrigger>
-          <TabTrigger name="my" href="/my" asChild>
-            <TabButton icon={User}>마이</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
