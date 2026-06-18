@@ -1,6 +1,7 @@
 import { Apple, ArrowLeft, ArrowUp, Camera, Dumbbell, Flame, Sparkles, X } from 'lucide-react-native';
 import { useMemo, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Image,
   KeyboardAvoidingView,
@@ -26,6 +27,9 @@ import { useDietSummary } from '@/features/coach/useDietSummary';
 import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
 import { useMemberships } from '@/features/membership/useMemberships';
 import { useHomeActivity } from '@/features/home/useHomeActivity';
+import { type Routine, type RoutineInput, useGenerateRoutine } from '@/features/workout/useGenerateRoutine';
+import { prepareSessionAudio } from '@/features/workout/start-session';
+import { useWorkoutSession } from '@/stores/workout-session';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -35,6 +39,7 @@ interface ChatMsg {
   response?: AppResponse;
   isLoading?: boolean;
   isQuestion?: boolean;
+  wcRoutineResult?: Routine;
 }
 
 // ── Welcome screen option cards ──────────────────────────
@@ -46,7 +51,8 @@ const WELCOME_OPTIONS = [
     desc: '내 수준에 맞는 루틴을 짜드려요',
     iconColor: Palette.primary,
     bg: Palette.primaryLight,
-    message: '오늘 운동 루틴 짜줘',
+    message: null,
+    navigate: '/workout/coach' as const,
   },
   {
     icon: Apple,
@@ -65,6 +71,21 @@ const WELCOME_OPTIONS = [
     message: '식단 사진 분석해줘',
   },
 ];
+
+// ── Workout coach inline flow ─────────────────────────────
+
+type WcStepKey = 'goal' | 'equipment' | 'condition' | 'bodyPart' | 'duration';
+interface WcStep { key: WcStepKey; question: string; options: readonly string[] }
+const WC_STEPS: readonly WcStep[] = [
+  { key: 'goal', question: '오늘 어떤 목표로 운동하실 거예요?', options: ['체력 향상', '체중 감량', '자세 개선'] },
+  { key: 'equipment', question: '쓸 수 있는 장비가 있나요?', options: ['매트', '없음', '덤벨'] },
+  { key: 'condition', question: '오늘 컨디션은 어떠세요?', options: ['좋음', '보통', '피곤해요'] },
+  { key: 'bodyPart', question: '불편한 부위 있으세요?', options: ['없음', '무릎', '허리'] },
+  { key: 'duration', question: '얼마나 운동하실 거예요?', options: ['10분', '15분', '20분'] },
+];
+function buildWcInput(a: Partial<Record<WcStepKey, string>>, easier: boolean): RoutineInput {
+  return { goal: a.goal ?? '체력 향상', equipment: a.equipment ?? '매트', condition: a.condition ?? '보통', bodyPart: a.bodyPart ?? '없음', duration: a.duration ?? '15분', easier };
+}
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -229,6 +250,17 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [pendingIntent, setPendingIntent] = useState<ChatbotIntent | null>(null);
 
+  // Workout coach inline flow state
+  const [wcMode, setWcMode] = useState(false);
+  const [wcStepIdx, setWcStepIdx] = useState(0);
+  const [wcAnswers, setWcAnswers] = useState<Partial<Record<WcStepKey, string>>>({});
+  const [wcRoutine, setWcRoutine] = useState<Routine | null>(null);
+  const [wcIsStarting, setWcIsStarting] = useState(false);
+  const [wcShowCustom, setWcShowCustom] = useState(false);
+  const [wcCustomText, setWcCustomText] = useState('');
+  const { mutate: generateRoutine, isPending: routinePending } = useGenerateRoutine();
+  const setSessionRoutine = useWorkoutSession((s) => s.setRoutine);
+
   const scrollRef = useRef<ScrollView>(null);
 
   const membership = useMemo(() => {
@@ -249,9 +281,8 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     : Palette.gray500;
 
   const riskBg = !risk ? Palette.bgMuted
-    : risk.level === 'danger' ? Palette.lossLight
     : risk.level === 'safe' ? Palette.profitLight
-    : Palette.bgMuted;
+    : Palette.bgSurface;
 
   const riskLabel = !risk ? ''
     : risk.level === 'danger' ? '위험'
@@ -340,6 +371,75 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     callAI(message, answer || undefined);
   }
 
+  // ── Workout coach inline handlers ──────────────────────
+
+  function initWorkoutCoach() {
+    setMessages([
+      { role: 'coach', text: '안녕하세요! 오늘 운동을 함께 만들어볼게요. 몇 가지 여쭤볼게요.' },
+      { role: 'coach', text: WC_STEPS[0].question },
+    ]);
+    setWcStepIdx(0);
+    setWcAnswers({});
+    setWcRoutine(null);
+    setWcIsStarting(false);
+    setWcMode(true);
+    setWcShowCustom(false);
+    setWcCustomText('');
+    setView('chat');
+  }
+
+  function wcCallGenerate(allAnswers: Partial<Record<WcStepKey, string>>, easier: boolean) {
+    generateRoutine(buildWcInput(allAnswers, easier), {
+      onSuccess: (r) => {
+        setWcRoutine(r);
+        setMessages((prev) => [...prev, { role: 'coach', text: '', wcRoutineResult: r }]);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+      },
+      onError: () => {
+        setMessages((prev) => [...prev, { role: 'coach', text: '루틴을 만들지 못했어요. 잠시 후 다시 시도해주세요.' }]);
+      },
+    });
+  }
+
+  function wcHandleSelect(option: string) {
+    const step = wcStepIdx < WC_STEPS.length ? WC_STEPS[wcStepIdx] : null;
+    if (!step || routinePending) return;
+    setWcShowCustom(false);
+    setWcCustomText('');
+    const newAnswers = { ...wcAnswers, [step.key]: option };
+    setWcAnswers(newAnswers);
+    setMessages((prev) => [...prev, { role: 'user', text: option }]);
+    if (wcStepIdx + 1 < WC_STEPS.length) {
+      const next = WC_STEPS[wcStepIdx + 1];
+      setWcStepIdx(wcStepIdx + 1);
+      setMessages((prev) => [...prev, { role: 'coach', text: next.question }]);
+    } else {
+      setWcStepIdx(wcStepIdx + 1);
+      setMessages((prev) => [...prev, { role: 'coach', text: '잠시만요, 맞춤 루틴을 만들고 있어요...' }]);
+      wcCallGenerate(newAnswers, false);
+    }
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+  }
+
+  function wcHandleMakeEasier() {
+    if (routinePending || !wcRoutine) return;
+    setWcRoutine(null);
+    setMessages((prev) => [...prev,
+      { role: 'user', text: '더 쉬운 루틴으로 바꿔주세요' },
+      { role: 'coach', text: '강도를 한 단계 낮춰서 다시 만들어볼게요.' },
+    ]);
+    wcCallGenerate(wcAnswers, true);
+  }
+
+  async function wcHandleStartSession() {
+    if (!wcRoutine || wcIsStarting) return;
+    setWcIsStarting(true);
+    setSessionRoutine(wcRoutine);
+    await prepareSessionAudio(wcRoutine);
+    onClose();
+    router.push('/workout/session' as never);
+  }
+
   const isWaiting = pendingIntent !== null;
   const isThinking = aiFeedback.isPending;
 
@@ -370,6 +470,8 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
       </Pressable>
     </View>
   );
+
+
 
   // ── Welcome screen ────────────────────────────────────
 
@@ -411,8 +513,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
               </View>
               {risk.hasSessions ? (
                 <>
-                  {/* 핵심 숫자만 강조색 */}
-                  <ThemedText type="h1" style={{ color: riskColor }}>
+                  <ThemedText type="h1" themeColor="text">
                     활용률 {Math.round(risk.sessionFilledRatio * 100)}%
                   </ThemedText>
                   <ThemedText type="label" themeColor="textSecondary">
@@ -433,7 +534,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                 </>
               ) : (
                 <>
-                  <ThemedText type="h1" style={{ color: riskColor }}>D-{risk.remainingDays}</ThemedText>
+                  <ThemedText type="h1" themeColor="text">D-{risk.remainingDays}</ThemedText>
                   <ThemedText type="label" themeColor="textSecondary">{membership.name}</ThemedText>
                 </>
               )}
@@ -447,7 +548,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
               <Pressable
                 key={opt.label}
                 style={({ pressed }) => [styles.optionCard, pressed && styles.pressed]}
-                onPress={() => send(opt.message)}
+                onPress={() => 'navigate' in opt ? initWorkoutCoach() : send((opt as { message: string }).message)}
                 accessibilityRole="button">
                 <View style={[styles.optionIconWrap, { backgroundColor: opt.bg }]}>
                   <Icon icon={opt.icon} size={20} color={opt.iconColor} />
@@ -537,8 +638,8 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                 </View>
               )}
 
-              {/* Bubble: loading / question / plain error */}
-              {(m.isLoading || m.isQuestion || !m.response) && (
+              {/* Bubble: loading / question / plain error — wcRoutineResult는 별도 카드로 렌더 */}
+              {(m.isLoading || m.isQuestion || (!m.response && !m.wcRoutineResult)) && (
                 <View style={[styles.bubble, styles.coachBubble]}>
                   {m.isLoading
                     ? <TypingIndicator />
@@ -547,7 +648,38 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                 </View>
               )}
 
-              {/* Structured response */}
+              {/* Workout routine result card */}
+              {m.wcRoutineResult && (
+                <View style={[styles.responseCard, { maxWidth: '100%', alignSelf: 'stretch' }]}>
+                  <View style={[styles.miniTag, { alignSelf: 'flex-start', backgroundColor: Palette.primaryLight }]}>
+                    <ThemedText type="label" style={{ color: Palette.primary }}>AI 추천 루틴</ThemedText>
+                  </View>
+                  <ThemedText type="subtitle">{m.wcRoutineResult.title}</ThemedText>
+                  <ThemedText type="label" themeColor="textSecondary">{m.wcRoutineResult.meta}</ThemedText>
+                  <ThemedText type="caption">{m.wcRoutineResult.intro}</ThemedText>
+                  {m.wcRoutineResult.exercises.map((ex, i) => (
+                    <View key={ex.name} style={styles.exerciseRow}>
+                      <NumCircle n={i + 1} />
+                      <ThemedText type="caption" style={{ flex: 1 }}>{ex.name}</ThemedText>
+                      <ThemedText type="label" themeColor="textSecondary">{ex.detail}</ThemedText>
+                    </View>
+                  ))}
+                  <Pressable
+                    onPress={wcHandleStartSession}
+                    disabled={wcIsStarting}
+                    style={({ pressed }) => [styles.wcCta, { backgroundColor: pressed ? Palette.primaryPressed : Palette.primary, opacity: wcIsStarting ? 0.7 : 1 }]}>
+                    {wcIsStarting ? <ActivityIndicator color={Palette.white} /> : <ThemedText type="subtitle" style={{ color: Palette.white }}>운동 시작하기</ThemedText>}
+                  </Pressable>
+                  <Pressable
+                    onPress={wcHandleMakeEasier}
+                    disabled={routinePending || wcIsStarting}
+                    style={({ pressed }) => [styles.wcGhost, { opacity: pressed || routinePending || wcIsStarting ? 0.6 : 1 }]}>
+                    <ThemedText type="label" themeColor="textSecondary">더 쉬운 루틴으로 바꾸기</ThemedText>
+                  </Pressable>
+                </View>
+              )}
+
+              {/* Structured AI response */}
               {m.response ? (
                 <>
                   <ResponseBody response={m.response} />
@@ -608,11 +740,66 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
 
       {/* Bottom panel */}
       <View style={styles.inputSection}>
-        {isWaiting && pendingIntent ? (
+        {/* Workout coach selection — replaces input bar while collecting */}
+        {wcMode && wcStepIdx < WC_STEPS.length && !wcRoutine && !routinePending ? (
+          <View style={styles.wcChipPanel}>
+            {/* Progress indicator */}
+            <View style={styles.wcProgressRow}>
+              <ThemedText type="label" themeColor="textSecondary">
+                {wcStepIdx + 1} / {WC_STEPS.length}
+              </ThemedText>
+              <View style={styles.wcProgressTrack}>
+                {WC_STEPS.map((_, i) => (
+                  <View
+                    key={i}
+                    style={[styles.wcProgressDot, { backgroundColor: i <= wcStepIdx ? Palette.primary : Palette.lineDefault }]}
+                  />
+                ))}
+              </View>
+            </View>
+            {wcShowCustom ? (
+              <View style={{ gap: Spacing.sm }}>
+                <TextInput
+                  style={styles.wcCustomInput}
+                  value={wcCustomText}
+                  onChangeText={setWcCustomText}
+                  placeholder="직접 입력해주세요"
+                  placeholderTextColor={Palette.gray300}
+                  onSubmitEditing={() => { if (wcCustomText.trim()) wcHandleSelect(wcCustomText.trim()); }}
+                  returnKeyType="done"
+                  autoFocus
+                />
+                <Pressable
+                  onPress={() => { if (wcCustomText.trim()) wcHandleSelect(wcCustomText.trim()); }}
+                  style={({ pressed }) => [styles.wcOptionBtn, { backgroundColor: pressed ? Palette.primaryPressed : Palette.primary }]}>
+                  <ThemedText type="captionBold" style={{ color: Palette.white }}>
+                    {wcCustomText.trim() ? '이걸로 할게요' : '넘어갈게요'}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={{ gap: Spacing.sm }}>
+                {WC_STEPS[wcStepIdx].options.map((opt) => (
+                  <Pressable
+                    key={opt}
+                    onPress={() => wcHandleSelect(opt)}
+                    style={({ pressed }) => [styles.wcOptionBtn, styles.wcOptionBtnOutline, pressed && styles.pressed]}>
+                    <ThemedText type="captionBold" style={{ color: Palette.gray900 }}>{opt}</ThemedText>
+                  </Pressable>
+                ))}
+                <Pressable
+                  onPress={() => setWcShowCustom(true)}
+                  style={({ pressed }) => [styles.wcOptionBtn, styles.wcOptionBtnDashed, pressed && styles.pressed]}>
+                  <ThemedText type="captionBold" style={{ color: Palette.gray500 }}>기타 (직접입력)</ThemedText>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        ) : isWaiting && pendingIntent ? (
           <View style={styles.intentPanel}>
             <IntentQuestion intent={pendingIntent} onAnswer={onIntentAnswer} />
           </View>
-        ) : !isThinking ? (
+        ) : !isThinking && !wcMode ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -629,7 +816,8 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
             ))}
           </ScrollView>
         ) : null}
-        {inputBar}
+        {/* input bar — wcMode 수집 중에는 숨김 */}
+        {!(wcMode && wcStepIdx < WC_STEPS.length && !wcRoutine && !routinePending) && inputBar}
       </View>
     </KeyboardAvoidingView>
   );
@@ -773,6 +961,18 @@ const styles = StyleSheet.create({
     borderRadius: Radius.button, padding: Spacing.md,
     alignSelf: 'stretch',
   },
+
+  // Workout coach inline styles
+  wcChipPanel: { paddingHorizontal: ScreenPadding, paddingTop: Spacing.sm, paddingBottom: Spacing.sm, gap: Spacing.sm },
+  wcProgressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  wcProgressTrack: { flexDirection: 'row', gap: 5 },
+  wcProgressDot: { width: 20, height: 4, borderRadius: 2 },
+  wcOptionBtn: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderRadius: Radius.small, alignItems: 'center' },
+  wcOptionBtnOutline: { borderWidth: 1, borderColor: Palette.lineDefault, backgroundColor: Palette.bgSurface },
+  wcOptionBtnDashed: { borderWidth: 1, borderStyle: 'dashed', borderColor: Palette.gray300, backgroundColor: Palette.bgSurface },
+  wcCustomInput: { borderWidth: 1, borderColor: Palette.lineDefault, borderRadius: Radius.small, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, fontSize: 15, color: Palette.gray900, backgroundColor: Palette.bgSurface },
+  wcCta: { height: 48, borderRadius: Radius.button, alignItems: 'center', justifyContent: 'center' },
+  wcGhost: { height: 40, alignItems: 'center', justifyContent: 'center' },
 
   // Bottom input section
   inputSection: { borderTopWidth: 0.5, borderTopColor: Palette.lineDefault },
