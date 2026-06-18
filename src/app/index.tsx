@@ -1,178 +1,327 @@
-import { Bell, CalendarDays, Menu, Sparkles, TriangleAlert, X } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { AlarmClock, Bell, Calendar, ChevronRight, LogOut, Menu, Ruler, Sparkles, TrendingUp, Weight } from 'lucide-react-native';
+import { useRef, useState } from 'react';
+import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, ScrollView, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Button, Card, Icon } from '@/components/ui';
-import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
-import { MyDrawer } from '@/features/auth/MyDrawer';
+import { Card, Icon, ProgressBar } from '@/components/ui';
+import {
+  BottomTabInset,
+  Elevation,
+  MaxContentWidth,
+  Palette,
+  Radius,
+  ScreenPadding,
+  Spacing,
+} from '@/constants/theme';
+import { useProfile } from '@/features/auth/useProfile';
+import { CoachChat } from '@/features/coach/CoachChat';
 import { MonthCalendar } from '@/features/home/MonthCalendar';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
-import { computeRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
-import { MembershipDetail } from '@/features/membership/MembershipDetail';
-import { MembershipManage } from '@/features/membership/MembershipManage';
-import { buildPortfolioItems, MembershipPortfolioCard, PortfolioHero, type PortfolioItem } from '@/features/membership/PortfolioView';
+import { MembershipStatsCard } from '@/features/membership/MembershipStatsCard';
+import { supabase } from '@/lib/supabase';
+import { useCurrentUser } from '@/stores/auth';
+import {
+  computeRisk,
+  formatNumber,
+  sortByRisk,
+  summarize,
+  type RiskInfo,
+} from '@/features/membership/dashboard';
 import { useCoach } from '@/features/membership/useCoach';
-import { daysUntil, useMemberships, type Membership } from '@/features/membership/useMemberships';
+import { useMemberships, type Membership } from '@/features/membership/useMemberships';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { useVisitPattern } from '@/features/membership/useVisitPattern';
 
-/** AI 코치 한 줄(말풍선 + 마스코트 자리). 비대화(명세: 말풍선만). */
-function CoachBubble({ text }: { text: string }) {
+/** 만원 단위 축약: 230000 → "23만원", 4500 → "4,500원" */
+function wonShort(n: number): string {
+  if (n >= 10000) return `${Math.round(n / 10000)}만원`;
+  return `${formatNumber(n)}원`;
+}
+
+function CharacterImage() {
   return (
-    <View style={styles.bubbleRow}>
-      <View style={styles.bubble}>
-        <View style={styles.bubbleHead}>
-          <Icon icon={Sparkles} size={13} color={Palette.primary} />
-          <ThemedText type="label" style={{ color: Palette.primary }}>
-            AI 코치
-          </ThemedText>
-        </View>
-        <ThemedText type="caption">{text}</ThemedText>
-      </View>
-    </View>
+    <Image
+      source={require('../../assets/images/character.png')}
+      style={styles.characterImage}
+      resizeMode="contain"
+    />
   );
 }
 
-/** 알림 모달 — 만료 D-7 회원권 + 예정 일정(현재 없음). 명세 §4. */
-function AlarmModal({ expiring, onClose }: { expiring: Membership[]; onClose: () => void }) {
-  return (
-    <View style={styles.alarmRoot}>
-      <View style={styles.topBar}>
-        <ThemedText type="h2">알림</ThemedText>
-        <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
-          <Icon icon={X} size={22} color={Palette.gray500} />
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.alarmBody}>
-        {expiring.length === 0 ? (
-          <ThemedText type="caption" themeColor="textSecondary">
-            새로운 알림이 없어요.
-          </ThemedText>
-        ) : (
-          expiring.map((m) => (
-            <Card key={m.id} accentColor={Palette.warning}>
-              <View style={styles.alarmItem}>
-                <Icon icon={TriangleAlert} size={16} color={Palette.warning} />
-                <ThemedText type="caption">
-                  {m.name} · 만료 D-{Math.max(0, daysUntil(m.endDate))}
-                </ThemedText>
-              </View>
-            </Card>
-          ))
-        )}
-      </ScrollView>
-    </View>
-  );
-}
-
-/** 홈 = 회원권 활용도 통합 대시보드 (명세 v1.0 / UX Flow v2). */
 export default function HomeScreen() {
+  const { data: profile } = useProfile();
   const { data: memberships, isLoading } = useMemberships();
   const { data: stats } = useMonthlyStats();
   const { data: visitPattern } = useVisitPattern();
+  const user = useCurrentUser();
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  const [showMy, setShowMy] = useState(false);
-  const [showAlarm, setShowAlarm] = useState(false);
-  const [showManage, setShowManage] = useState<{ add: boolean } | null>(null);
-  const [detail, setDetail] = useState<{ m: Membership; risk: RiskInfo; monthlyVisits: number } | null>(null);
+  const [showCoach, setShowCoach] = useState(false);
+  const [showMyDrawer, setShowMyDrawer] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
+  const [activeCard, setActiveCard] = useState(0);
+  const [carouselWidth, setCarouselWidth] = useState(
+    Math.min(windowWidth, MaxContentWidth) - ScreenPadding * 2,
+  );
+  const carouselRef = useRef<ScrollView>(null);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
-  const withRisk = list.map((m) => ({ m, risk: computeRisk(m, visitsOf(m.id)), visits: visitsOf(m.id) }));
-  const summary = summarize(withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })));
-  const items = buildPortfolioItems(list);
-  const expiring = list.filter((m) => m.status === 'expiring').sort((a, b) => daysUntil(a.endDate) - daysUntil(b.endDate));
+  const withRisk = list.map((m) => ({
+    m,
+    risk: computeRisk(m, visitsOf(m.id)),
+    visits: visitsOf(m.id),
+  }));
+  const summary = summarize(
+    withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })),
+  );
 
+  // 횟수제 합산 지표
+  const sessioned = withRisk.filter((x) => x.risk.hasSessions);
+  const totalUsed = sessioned.reduce((s, x) => s + x.risk.usedSessions, 0);
+  const totalTotal = sessioned.reduce((s, x) => s + (x.risk.totalSessions ?? 0), 0);
+  const sessionedCost = sessioned.reduce((s, x) => s + x.m.cost, 0);
+  const utilization = totalTotal > 0 ? Math.round((totalUsed / totalTotal) * 100) : null;
+
+  const recovered = withRisk.reduce((s, x) => s + x.risk.valueUsed, 0);
+  const totalPaid = list.reduce((s, x) => s + x.cost, 0);
+  const remainingValue = withRisk.reduce((s, x) => s + x.risk.valueAtRisk, 0);
+  const effPrice = totalUsed > 0 ? Math.round(sessionedCost / totalUsed) : null;
+
+  const name = profile?.display_name || '회원';
+
+  // 알림 배너: 일정에 예약된 운동이 당일인 경우에만 표시 (미구현 — 항상 null)
+  const bannerItem = null as { m: Membership; risk: RiskInfo; visits: number } | null;
+
+  // AI 코치 훅 (말풍선용)
   const coach = useCoach({ withRisk, summary, monthly: stats, pattern: visitPattern });
-
-  function handleCheckIn() {
-    if (list.length === 0) {
-      const msg = '먼저 회원권을 등록해 주세요.';
-      if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('회원권 출석', msg);
-      return;
-    }
-    setShowCheckIn(true);
-  }
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-          {/* 글로벌 상단바: ☰ 마이 · 제목 · 📅 캘린더 · 🔔 알림 */}
+
+          {/* ── 헤더 ── */}
           <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <Pressable onPress={() => setShowMy(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="마이 메뉴">
-                <Icon icon={Menu} size={22} color={Palette.gray900} />
+            <Pressable
+              onPress={() => setShowMyDrawer(true)}
+              style={({ pressed }) => [styles.headerLeft, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="메뉴 열기">
+              <Icon icon={Menu} size={22} color={Palette.gray700} />
+              <ThemedText type="h1">마이</ThemedText>
+            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => setShowCalendar(true)}
+                style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="달력 보기">
+                <Icon icon={Calendar} size={22} color={Palette.gray700} />
               </Pressable>
-              <ThemedText type="h1">회원권 활용도</ThemedText>
-            </View>
-            <View style={styles.headerIcons}>
-              <Pressable onPress={() => setShowCalendar(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="일정 캘린더">
-                <Icon icon={CalendarDays} size={22} color={Palette.gray500} />
-              </Pressable>
-              <Pressable onPress={() => setShowAlarm(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="알림">
-                <View>
-                  <Icon icon={Bell} size={22} color={expiring.length > 0 ? Palette.gray900 : Palette.gray300} />
-                  {expiring.length > 0 ? <View style={styles.dot} /> : null}
-                </View>
+              <Pressable
+                style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="알림">
+                <Icon icon={Bell} size={22} color={Palette.gray700} />
               </Pressable>
             </View>
           </View>
 
-          {/* 알림 배너 — 만료 D-7 있으면 노출(없으면 비활성) */}
-          {expiring.length > 0 ? (
-            <Pressable onPress={() => setShowAlarm(true)} style={({ pressed }) => [styles.banner, pressed && styles.pressed]}>
-              <Icon icon={TriangleAlert} size={16} color={Palette.white} />
-              <ThemedText type="captionBold" style={styles.bannerText}>
-                {expiring[0].name} 만료 D-{Math.max(0, daysUntil(expiring[0].endDate))}
+          {/* ── 알림 배너 — 만료 임박 회원권 ── */}
+          {bannerItem ? (
+            <Pressable
+              onPress={() => router.navigate('/membership')}
+              style={({ pressed }) => [styles.banner, pressed && styles.pressed]}>
+              <Icon icon={AlarmClock} size={16} color={Palette.white} />
+              <ThemedText type="captionBold" style={styles.bannerText} numberOfLines={1}>
+                {bannerItem.risk.hasSessions && (bannerItem.risk.remainingSessions ?? 99) <= 5
+                  ? `${bannerItem.m.name} · ${formatNumber(bannerItem.risk.remainingSessions ?? 0)}회 남음`
+                  : `D-${bannerItem.risk.remainingDays} ${bannerItem.m.name} 만료`}
               </ThemedText>
+              <View style={styles.bannerChevron}>
+                <Icon icon={ChevronRight} size={16} color={Palette.white} />
+              </View>
             </Pressable>
           ) : null}
 
-          {/* AI 코치 말풍선 */}
-          {list.length > 0 && coach.data ? <CoachBubble text={coach.data.action} /> : null}
-
-          {/* 요약 헤더(히어로) */}
+          {/* ── AI 코치 말풍선 ── */}
           {list.length > 0 ? (
-            <PortfolioHero items={items} onCta={handleCheckIn} />
-          ) : !isLoading ? (
-            <Card>
-              <ThemedText type="body">회원권을 등록하면 본전 회수가 시작돼요.</ThemedText>
-              <Button label="회원권 등록하기" onPress={() => setShowManage({ add: true })} style={styles.emptyBtn} />
-            </Card>
+            <Pressable
+              onPress={() => setShowCoach(true)}
+              style={({ pressed }) => [styles.bubble, pressed && styles.pressed]}
+              accessibilityRole="button">
+              {coach.isLoading ? (
+                <View style={styles.bubbleLoading}>
+                  <ActivityIndicator size="small" color={Palette.white} />
+                  <ThemedText type="caption" style={{ color: Palette.white }}>
+                    코치가 분석 중이에요…
+                  </ThemedText>
+                </View>
+              ) : coach.data ? (
+                <ThemedText type="caption" style={{ color: Palette.white }} numberOfLines={3}>
+                  {coach.data.headline}
+                  {coach.data.insight ? `\n${coach.data.insight}` : ''}
+                </ThemedText>
+              ) : (
+                <ThemedText type="caption" style={{ color: Palette.white }}>
+                  {name}님, 오늘도 파이팅!
+                </ThemedText>
+              )}
+              {/* 말풍선 꼬리 (하단 오른쪽) */}
+              <View style={styles.bubbleTail} />
+            </Pressable>
           ) : null}
 
-          {/* 등록된 회원권 */}
+          {/* ── 메인 ROI 카드 ── */}
+          {list.length > 0 ? (
+            <View style={[styles.mainCard, Elevation.level1]}>
+              {/* 캐릭터: 카드 밖으로 튀어나옴 */}
+              <View style={styles.characterWrap} pointerEvents="none">
+                <CharacterImage />
+              </View>
+              {/* 상단: 헤드라인 */}
+              <View style={styles.cardTop}>
+                <View style={styles.cardTopLeft}>
+                  {effPrice != null ? (
+                    <View style={styles.checkInBadge}>
+                      <Icon icon={TrendingUp} size={12} color={Palette.primary} />
+                      <ThemedText type="label" style={styles.checkInText}>
+                        오늘 체크인으로 {wonShort(effPrice)} UP
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                  <ThemedText type="display" style={styles.mainAmount}>
+                    {formatNumber(recovered)}원
+                  </ThemedText>
+                </View>
+              </View>
+
+              {/* 활용도 진행바 */}
+              {utilization != null ? (
+                <View style={styles.utilRow}>
+                  <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                    활용도
+                  </ThemedText>
+                  <View style={styles.utilBarWrap}>
+                    <ProgressBar ratio={utilization / 100} color={Palette.primary} height={10} label={`활용도 ${utilization}%`} />
+                  </View>
+                  <ThemedText type="captionBold" themeColor="text">
+                    {utilization}%
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {/* 구분선 */}
+              <View style={styles.divider} />
+
+              {/* 3개 통계 */}
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <ThemedText type="label" themeColor="textSecondary">
+                    총 회수
+                  </ThemedText>
+                  <ThemedText type="captionBold">{wonShort(recovered)}</ThemedText>
+                </View>
+                <View style={[styles.statItem, styles.statItemCenter]}>
+                  <ThemedText type="label" themeColor="textSecondary">
+                    남은 금액
+                  </ThemedText>
+                  <ThemedText type="captionBold">{wonShort(remainingValue)}</ThemedText>
+                </View>
+                <View style={[styles.statItem, styles.statItemRight]}>
+                  <ThemedText type="label" themeColor="textSecondary">
+                    원금
+                  </ThemedText>
+                  <ThemedText type="captionBold">{wonShort(totalPaid)}</ThemedText>
+                </View>
+              </View>
+
+              {/* 회원권 활용하기 버튼 */}
+              <Pressable
+                onPress={() => setShowCheckIn(true)}
+                style={({ pressed }) => [styles.utilBtn, pressed && styles.pressed]}
+                accessibilityRole="button">
+                <ThemedText type="subtitle" style={styles.utilBtnText}>
+                  회원권 활용하기
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : !isLoading ? (
+            /* 회원권 없을 때 */
+            <Pressable
+              onPress={() => router.navigate('/membership')}
+              style={[styles.mainCard, Elevation.level1, styles.emptyCard]}>
+              <ThemedText type="body" themeColor="textSecondary" style={{ textAlign: 'center' }}>
+                회원권을 등록하면 활용도를 분석해드려요.
+              </ThemedText>
+              <View style={styles.utilBtn}>
+                <ThemedText type="subtitle" style={styles.utilBtnText}>
+                  회원권 등록하기
+                </ThemedText>
+              </View>
+            </Pressable>
+          ) : null}
+
+          {/* ── 등록된 회원권 캐러셀 ── */}
           {list.length > 0 ? (
             <View style={styles.section}>
               <View style={styles.sectionHead}>
                 <ThemedText type="captionBold">등록된 회원권</ThemedText>
-                <Pressable onPress={() => setShowManage({ add: false })} hitSlop={8} accessibilityRole="button">
-                  <ThemedText type="label" themeColor="textSecondary">
+                <Pressable
+                  onPress={() => router.navigate('/membership')}
+                  style={({ pressed }) => [styles.seeAll, pressed && styles.pressed]}
+                  accessibilityRole="button">
+                  <ThemedText type="label" style={{ color: Palette.gray500 }}>
                     전체보기
                   </ThemedText>
+                  <Icon icon={ChevronRight} size={14} color={Palette.gray500} />
                 </Pressable>
               </View>
-              {items.map((it: PortfolioItem) => (
-                <MembershipPortfolioCard
-                  key={it.m.id}
-                  item={it}
-                  onPress={() =>
-                    setDetail({ m: it.m, risk: computeRisk(it.m, visitsOf(it.m.id)), monthlyVisits: visitsOf(it.m.id) })
+              <ScrollView
+                ref={carouselRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}
+                onScroll={(e) => {
+                  if (carouselWidth > 0) {
+                    setActiveCard(Math.round(e.nativeEvent.contentOffset.x / carouselWidth));
                   }
-                />
-              ))}
+                }}>
+                {sortByRisk(withRisk, (x) => x.risk).map(({ m, risk, visits }) => (
+                  <View key={m.id} style={{ width: carouselWidth }}>
+                    <MembershipStatsCard
+                      m={m}
+                      risk={risk}
+                      monthlyVisits={visits}
+                      onPress={() => router.navigate('/membership')}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+              {withRisk.length > 1 ? (
+                <View style={styles.dots}>
+                  {withRisk.map((_, i) => (
+                    <View key={i} style={[styles.dot, i === activeCard && styles.dotActive]} />
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
         </ScrollView>
       </SafeAreaView>
 
-      <Modal visible={showCheckIn} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCheckIn(false)}>
+      {/* 체크인 모달 */}
+      <Modal
+        visible={showCheckIn}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCheckIn(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
@@ -180,7 +329,12 @@ export default function HomeScreen() {
         </ThemedView>
       </Modal>
 
-      <Modal visible={showCalendar} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCalendar(false)}>
+      {/* 달력 모달 */}
+      <Modal
+        visible={showCalendar}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCalendar(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <MonthCalendar onClose={() => setShowCalendar(false)} />
@@ -188,38 +342,89 @@ export default function HomeScreen() {
         </ThemedView>
       </Modal>
 
-      <Modal visible={showMy} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowMy(false)}>
+      {/* MY 코치 모달 */}
+      <Modal
+        visible={showCoach}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCoach(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <MyDrawer onClose={() => setShowMy(false)} />
+            <CoachChat onClose={() => setShowCoach(false)} />
           </SafeAreaView>
         </ThemedView>
       </Modal>
 
-      <Modal visible={showAlarm} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAlarm(false)}>
-        <ThemedView style={styles.modalRoot}>
-          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <AlarmModal expiring={expiring} onClose={() => setShowAlarm(false)} />
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
+      {/* 마이 드로어 */}
+      <Modal
+        visible={showMyDrawer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMyDrawer(false)}>
+        <Pressable style={styles.drawerOverlay} onPress={() => setShowMyDrawer(false)}>
+          <Pressable style={styles.drawerPanel} onPress={() => {}}>
+            <SafeAreaView edges={['top', 'bottom']} style={styles.drawerSafe}>
+              <ScrollView contentContainerStyle={styles.drawerBody} showsVerticalScrollIndicator={false}>
+                <ThemedText type="h1" style={styles.drawerTitle}>마이</ThemedText>
 
-      <Modal visible={!!showManage} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowManage(null)}>
-        <ThemedView style={styles.modalRoot}>
-          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            {showManage ? <MembershipManage startAdd={showManage.add} onClose={() => setShowManage(null)} /> : null}
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
+                {/* 프로필 */}
+                <Card>
+                  <ThemedText type="h2">{name}</ThemedText>
+                  <ThemedText type="caption" themeColor="textSecondary">
+                    {user?.email ?? ''}
+                  </ThemedText>
+                </Card>
 
-      <Modal visible={!!detail} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetail(null)}>
-        <ThemedView style={styles.modalRoot}>
-          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            {detail ? (
-              <MembershipDetail m={detail.m} risk={detail.risk} monthlyVisits={detail.monthlyVisits} onClose={() => setDetail(null)} />
-            ) : null}
-          </SafeAreaView>
-        </ThemedView>
+                {/* 신체 정보 */}
+                <Card>
+                  <ThemedText type="captionBold">내 정보</ThemedText>
+                  <View style={styles.infoRows}>
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoRowLeft}>
+                        <Icon icon={Ruler} size={16} color={Palette.gray500} />
+                        <ThemedText type="caption" themeColor="textSecondary">키</ThemedText>
+                      </View>
+                      <ThemedText type="captionBold">
+                        {profile?.height != null ? `${profile.height} cm` : '-'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoRowLeft}>
+                        <Icon icon={Weight} size={16} color={Palette.gray500} />
+                        <ThemedText type="caption" themeColor="textSecondary">몸무게</ThemedText>
+                      </View>
+                      <ThemedText type="captionBold">
+                        {profile?.weight != null ? `${profile.weight} kg` : '-'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </Card>
+
+                {/* About */}
+                <Card accentColor={Palette.primary}>
+                  <View style={styles.aboutHead}>
+                    <Icon icon={Sparkles} size={16} color={Palette.primary} />
+                    <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                      FitBack은 이렇게 일해요
+                    </ThemedText>
+                  </View>
+                  <ThemedText type="caption" themeColor="textSecondary">
+                    평가하지 않아요. 데이터를 보여주고, 다음 행동을 제안해요.
+                  </ThemedText>
+                </Card>
+
+                {/* 로그아웃 */}
+                <Pressable
+                  onPress={() => supabase.auth.signOut()}
+                  style={({ pressed }) => [styles.logoutBtn, pressed && styles.pressed]}
+                  accessibilityRole="button">
+                  <Icon icon={LogOut} size={16} color={Palette.gray500} />
+                  <ThemedText type="caption" themeColor="textSecondary">로그아웃</ThemedText>
+                </Pressable>
+              </ScrollView>
+            </SafeAreaView>
+          </Pressable>
+        </Pressable>
       </Modal>
     </ThemedView>
   );
@@ -237,31 +442,200 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   body: { gap: Spacing.md, paddingBottom: Spacing.lg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pressed: { opacity: 0.75 },
+
+  // 헤더
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xs,
+  },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  dot: { position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: 4, backgroundColor: Palette.warning },
+  headerActions: { flexDirection: 'row', gap: Spacing.xs },
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // 알림 배너
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     backgroundColor: Palette.gray900,
+    borderRadius: Radius.button,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.card,
+    paddingVertical: 14,
   },
-  bannerText: { color: Palette.white, flex: 1 },
-  pressed: { opacity: 0.8 },
-  bubbleRow: { flexDirection: 'row' },
-  bubble: { flex: 1, gap: 4, backgroundColor: Palette.primaryLight, borderRadius: Radius.card, padding: Spacing.md },
-  bubbleHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  emptyBtn: { marginTop: Spacing.sm },
-  section: { gap: Spacing.sm },
-  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  alarmRoot: { flex: 1 },
-  alarmBody: { paddingHorizontal: ScreenPadding, paddingBottom: Spacing.xl, gap: Spacing.sm },
-  alarmItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: ScreenPadding, paddingVertical: Spacing.md },
+  bannerText: { flex: 1, color: Palette.white },
+  bannerChevron: { marginLeft: 'auto' },
+
+  // 말풍선
+  bubble: {
+    backgroundColor: Palette.primary,
+    borderRadius: Radius.card,
+    padding: Spacing.md,
+    marginBottom: Spacing.xs,
+  },
+  bubbleLoading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  bubbleTail: {
+    position: 'absolute',
+    bottom: -9,
+    right: 28,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderTopWidth: 9,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: Palette.primary,
+  },
+
+  // 메인 ROI 카드
+  mainCard: {
+    backgroundColor: Palette.bgSurface,
+    borderRadius: Radius.card,
+    padding: Spacing.md,
+    gap: Spacing.lg,
+    borderWidth: 0.5,
+    borderColor: Palette.lineDefault,
+    overflow: 'visible',
+  },
+  characterWrap: {
+    position: 'absolute',
+    top: -20,
+    right: Spacing.md,
+    zIndex: 2,
+  },
+  emptyCard: { alignItems: 'center', gap: Spacing.md },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  cardTopLeft: { flex: 1, gap: Spacing.xs },
+  checkInBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    alignSelf: 'flex-start',
+    backgroundColor: Palette.primaryLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+  },
+  checkInText: { color: Palette.primary },
+  mainAmount: { color: Palette.gray900 },
+
+  characterImage: {
+    width: 120,
+    height: 120,
+  },
+
+  // 활용도 바
+  utilRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  utilBarWrap: { flex: 1 },
+
+  // 구분선
+  divider: { height: 0.5, backgroundColor: Palette.lineDefault },
+
+  // 통계 3열
+  statsRow: { flexDirection: 'row', gap: Spacing.sm },
+  statItem: {
+    flex: 1,
+    gap: 4,
+    backgroundColor: Palette.bgMuted,
+    borderRadius: Radius.card,
+    padding: Spacing.sm,
+  },
+  statItemCenter: {},
+  statItemRight: {},
+
+  // 회원권 활용하기 버튼 (아웃라인)
+  utilBtn: {
+    height: 44,
+    borderRadius: Radius.button,
+    borderWidth: 1.5,
+    borderColor: Palette.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.xs,
+  },
+  utilBtnText: { color: Palette.primary },
+
+  // 등록된 회원권 섹션
+  section: { gap: Spacing.sm, marginTop: Spacing.sm },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingTop: Spacing.sm,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.gray300,
+  },
+  dotActive: {
+    width: 18,
+    backgroundColor: Palette.primary,
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  seeAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+
   modalRoot: { flex: 1, backgroundColor: Palette.bgBase },
   modalSafe: { flex: 1 },
+
+  // 마이 드로어
+  drawerOverlay: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  drawerPanel: {
+    width: '75%',
+    maxWidth: 320,
+    backgroundColor: Palette.bgBase,
+  },
+  drawerSafe: { flex: 1 },
+  drawerBody: {
+    gap: Spacing.md,
+    padding: ScreenPadding,
+    paddingBottom: Spacing.xl,
+  },
+  drawerTitle: { marginBottom: Spacing.xs },
+  infoRows: { gap: Spacing.sm, marginTop: Spacing.sm },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infoRowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  aboutHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: 4 },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.button,
+    borderWidth: 1,
+    borderColor: Palette.lineStrong,
+  },
 });
