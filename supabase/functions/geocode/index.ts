@@ -20,6 +20,7 @@ interface KakaoDoc {
   address_name?: string;
   road_address_name?: string;
   category_name?: string;
+  category_group_code?: string; // 카카오 업종 그룹코드 (FD6=음식점, CE7=카페 …)
   x: string; // 경도(lng)
   y: string; // 위도(lat)
 }
@@ -29,7 +30,12 @@ const SPORT_KEYWORDS = [
   '헬스', '피트니스', '스포츠', '체육', '요가', '필라테스', '크로스핏', '짐',
   'PT', '운동', '클라이밍', '복싱', '수영', '골프', '테니스', '댄스', '무용', '발레', '주짓수', '검도', '태권도',
 ];
+// 운동이 아닌데 키워드가 섞여 들어올 수 있는 업종은 그룹코드로 제외(음식점·카페).
+const EXCLUDE_GROUP_CODES = ['FD6', 'CE7'];
 function isSport(d: KakaoDoc): boolean {
+  // 1) 음식점·카페는 무조건 제외 ("헬스밥상" 같은 식당 오탐 방지)
+  if (d.category_group_code && EXCLUDE_GROUP_CODES.includes(d.category_group_code)) return false;
+  // 2) 카테고리/상호에 운동 키워드 포함 시 운동 시설로 분류
   const hay = `${d.category_name ?? ''} ${d.place_name ?? ''}`;
   return SPORT_KEYWORDS.some((k) => hay.includes(k));
 }
