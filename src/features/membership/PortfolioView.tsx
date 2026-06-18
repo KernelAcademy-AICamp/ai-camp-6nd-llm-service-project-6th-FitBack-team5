@@ -100,7 +100,7 @@ export function PortfolioHero({
         <Stat label="원금" value={won(principal)} />
       </View>
 
-      <Button label="회원권 활용하기" variant="secondary" onPress={onCta} style={styles.cta} />
+      <Button label="회원권 출석" variant="secondary" onPress={onCta} style={styles.cta} />
     </Card>
   );
 }
