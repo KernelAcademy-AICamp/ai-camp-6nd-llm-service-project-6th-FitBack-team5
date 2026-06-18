@@ -18,6 +18,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
+import { won } from '@/features/membership/dashboard';
+import { perVisitValue, weeksBetween } from '@/features/membership/portfolio';
 import { ExerciseRecordForm } from '@/features/membership/ExerciseRecordForm';
 import { KakaoMap } from '@/features/membership/KakaoMap';
 import { getPosition } from '@/features/membership/location';
@@ -342,11 +344,33 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
     setOriginQuery('');
   }
 
-  // asExercise=true: 위치 보정 경로 — 방문(출석) 기록 후 바로 운동 기록 화면으로(출석 근거).
+  // 선택 회원권의 회당 회수 가치(오늘 가면 되찾는 금액)
+  const perVisit = selected
+    ? perVisitValue({
+        type: selected.type,
+        principal: selected.cost,
+        visitCount: selected.usedVisits,
+        totalSessions: selected.maxVisits,
+        weeklyGoal: selected.weeklyGoal,
+        totalWeeks: weeksBetween(selected.startDate, selected.endDate),
+      })
+    : 0;
+
+  // asExercise=true: 위치 보정(자기신고) — GPS 미검증으로 기록, 회수액 미반영(명세 §4.2).
   function checkIn(asExercise = false) {
     if (!selected) return;
+    const verified = !asExercise;
     mutate(
-      { membershipId: selected.id, centerName: center?.name ?? selected.name },
+      {
+        membershipId: selected.id,
+        centerName: center?.name ?? selected.name,
+        method: verified ? 'geofence' : 'fallback',
+        verifyStatus: verified ? 'verified' : 'unverified',
+        recoveredAmount: verified ? perVisit : 0,
+        centerLat: dest?.lat ?? null,
+        centerLng: dest?.lng ?? null,
+        distanceM: verified && gps.km != null ? Math.round(gps.km * 1000) : null,
+      },
       {
         onSuccess: (data) => {
           setVisitId((data as { id: string }).id);
@@ -392,6 +416,11 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             {selected ? (
               <ThemedText type="caption" themeColor="textSecondary">
                 {selected.name}
+              </ThemedText>
+            ) : null}
+            {perVisit > 0 ? (
+              <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                오늘 다녀오면 +{won(perVisit)} 되찾아요
               </ThemedText>
             ) : null}
             <CheckItem label="휴대폰" checked={phone} onToggle={() => setPhone((v) => !v)} />
@@ -660,6 +689,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
                 <ThemedText type="label" themeColor="textSecondary" style={styles.center}>
                   체크인은 센터 {Math.round(CHECK_IN_RADIUS_KM * 1000)}m 이내에서만 됩니다.
                   실제로 왔는데 위치가 안 잡히면 아래로 출석을 남기세요.
+                  (GPS 미검증으로 기록되고, 회수 금액엔 반영되지 않아요.)
                 </ThemedText>
                 <Button
                   label="운동 기록으로 출석하기"
@@ -679,9 +709,14 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             </View>
             <ThemedText type="h1">축하합니다!</ThemedText>
             <ThemedText type="h2" style={{ color: Palette.profit }}>오늘도 출석 완료!</ThemedText>
+            {perVisit > 0 ? (
+              <ThemedText type="h2" style={{ color: Palette.primary }}>
+                +{won(perVisit)} 되찾았어요
+              </ThemedText>
+            ) : null}
             {selected ? (
               <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
-                {selected.name} · 방문이 기록됐어요.
+                {selected.name} · 검증된 방문으로 기록됐어요.
               </ThemedText>
             ) : null}
             <Button label="운동 기록하기" onPress={() => setStep('exercise')} style={styles.popupBtn} />
