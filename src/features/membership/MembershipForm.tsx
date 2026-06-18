@@ -37,9 +37,8 @@ const PERIODS: { value: MembershipPeriod; label: string }[] = [
 ];
 
 const TYPES: { value: MembershipType; label: string; desc: string }[] = [
-  { value: 'free', label: '자유이용', desc: '언제든 이용 (무제한)' },
-  { value: 'session', label: 'PT 세션', desc: '정해진 횟수만 이용' },
-  { value: 'class', label: '클래스', desc: '클래스 예약제' },
+  { value: 'period', label: '기간권', desc: '기간 내 무제한 (헬스 정액 등)' },
+  { value: 'session', label: '인세권(PT)', desc: '정해진 횟수만 이용' },
 ];
 
 function todayISO(): string {
@@ -81,8 +80,10 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   const [cost, setCost] = useState('');
   const [period, setPeriod] = useState<MembershipPeriod>('month');
   const [startDate, setStartDate] = useState(todayISO());
-  const [type, setType] = useState<MembershipType>('free');
+  const [type, setType] = useState<MembershipType>('period');
   const [maxVisits, setMaxVisits] = useState('');
+  const [weeklyGoal, setWeeklyGoal] = useState(''); // 기간권 주당 목표
+  const [usedScan, setUsedScan] = useState(false);
   const [centerName, setCenterName] = useState('');
   const [centerCoord, setCenterCoord] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -97,21 +98,27 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
   const { mutate, isPending, error } = useCreateMembership();
   const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
 
-  const showVisits = type !== 'free';
+  const showVisits = type === 'session';
+  const showGoal = type === 'period';
   const costNum = Number(cost);
   const visitsNum = Number(maxVisits);
+  const goalNum = Number(weeklyGoal);
   const dateOk = isValidDate(startDate);
   const nameOk = name.trim().length > 0;
   const costOk = cost.length > 0 && !Number.isNaN(costNum) && costNum >= 0;
   const visitsOk =
     !showVisits || (maxVisits.length > 0 && Number.isInteger(visitsNum) && visitsNum > 0);
+  const goalOk =
+    !showGoal || (weeklyGoal.length > 0 && Number.isInteger(goalNum) && goalNum > 0);
 
-  const canSubmit = nameOk && costOk && dateOk && visitsOk && !isPending;
+  const canSubmit = nameOk && costOk && dateOk && visitsOk && goalOk && !isPending;
 
   const nameError = touched.name && !nameOk ? '회원권명을 입력해 주세요. (필수)' : null;
   const costError = touched.cost && !costOk ? '비용을 숫자로 입력해 주세요. (필수)' : null;
   const visitsError =
     touched.maxVisits && showVisits && !visitsOk ? '횟수를 1 이상 입력해 주세요. (필수)' : null;
+  const goalError =
+    touched.weeklyGoal && showGoal && !goalOk ? '주당 목표 방문을 1 이상 입력해 주세요. (필수)' : null;
 
   const inputStyle = (key: string, hasError?: boolean) => [
     styles.input,
@@ -128,6 +135,7 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
       if (parsed.name) setName(parsed.name);
       if (parsed.cost != null) setCost(String(parsed.cost));
       if (parsed.startDate && isValidDate(parsed.startDate)) setStartDate(parsed.startDate);
+      setUsedScan(true);
     } catch (e) {
       const msg = (e as Error).message;
       if (Platform.OS === 'web') window.alert(msg);
@@ -192,7 +200,7 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
 
   function handleSubmit() {
     if (!canSubmit) {
-      setTouched({ name: true, cost: true, startDate: true, maxVisits: true });
+      setTouched({ name: true, cost: true, startDate: true, maxVisits: true, weeklyGoal: true });
       return;
     }
     mutate(
@@ -203,6 +211,8 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
         startDate,
         type,
         maxVisits: showVisits ? visitsNum : null,
+        weeklyGoal: showGoal ? goalNum : null,
+        inputMethod: usedScan ? 'receipt_scan' : 'manual',
         centerName: centerName.trim() || null,
         centerLat: centerCoord?.lat ?? null,
         centerLng: centerCoord?.lng ?? null,
@@ -328,6 +338,24 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
               placeholder="예: 30"
               placeholderTextColor={Palette.gray300}
               style={inputStyle('maxVisits', !!visitsError)}
+            />
+          </Field>
+        )}
+
+        {showGoal && (
+          <Field label="주당 목표 방문" required error={goalError}>
+            <TextInput
+              value={weeklyGoal}
+              onChangeText={setWeeklyGoal}
+              onFocus={() => setFocused('weeklyGoal')}
+              onBlur={() => {
+                setFocused(null);
+                touch('weeklyGoal');
+              }}
+              keyboardType="numeric"
+              placeholder="예: 2 (일주일에 2번)"
+              placeholderTextColor={Palette.gray300}
+              style={inputStyle('weeklyGoal', !!goalError)}
             />
           </Field>
         )}

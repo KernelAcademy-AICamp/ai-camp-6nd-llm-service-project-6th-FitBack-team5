@@ -31,9 +31,8 @@ const PERIODS: { value: MembershipPeriod; label: string }[] = [
 ];
 
 const TYPES: { value: MembershipType; label: string; desc: string; ex: string }[] = [
-  { value: 'free', label: '자유이용 (헬스)', desc: '매일 원할 때 언제든 이용 · 정액제(무제한) · 예약 필요 없음', ex: '예) 헬스장 월 36만원' },
-  { value: 'session', label: 'PT 세션', desc: '정해진 횟수만 이용 · 예약 1:1 · 횟수 소진까지', ex: '예) PT 4회 36만원' },
-  { value: 'class', label: '클래스', desc: '클래스마다 예약 · 무제한 또는 횟수제 · 시간대 선택', ex: '예) 필라테스 월 15만원' },
+  { value: 'period', label: '기간권 (헬스 등)', desc: '기간 내 무제한 이용 · 예약 필요 없음', ex: '예) 헬스장 월 36만원' },
+  { value: 'session', label: '인세권 (PT)', desc: '정해진 횟수만 이용 · 예약 1:1 · 횟수 소진까지', ex: '예) PT 4회 36만원' },
 ];
 
 const GOALS: { value: FitnessGoal; label: string }[] = [
@@ -66,9 +65,8 @@ export function OnboardingFlow() {
   // 형태
   const [type, setType] = useState<MembershipType | null>(null);
   // 형태별
-  const [sessionCount, setSessionCount] = useState(''); // 세션권 횟수
-  const [classMode, setClassMode] = useState<'unlimited' | 'count'>('unlimited');
-  const [classCount, setClassCount] = useState('');
+  const [sessionCount, setSessionCount] = useState(''); // 인세권 횟수
+  const [weeklyGoal, setWeeklyGoal] = useState(''); // 기간권 주당 목표 방문
   // 센터
   const [centerName, setCenterName] = useState('');
   const [coord, setCoord] = useState<{ lat: number; lng: number } | null>(null);
@@ -87,11 +85,11 @@ export function OnboardingFlow() {
   const dateOk = isValidDate(startDate);
   const membershipOk = name.trim().length > 0 && cost.length > 0 && costNum > 0 && dateOk;
   const detailOk =
-    type === 'free'
-      ? true
-      : type === 'session'
-        ? Number(sessionCount) > 0
-        : classMode === 'unlimited' || Number(classCount) > 0;
+    type === 'session'
+      ? Number(sessionCount) > 0
+      : type === 'period'
+        ? Number(weeklyGoal) > 0
+        : false;
 
   const inputStyle = (key: string) => [styles.input, focused === key && styles.inputFocused];
   const stepIndex = STEP_ORDER.indexOf(step);
@@ -161,14 +159,8 @@ export function OnboardingFlow() {
 
   function submit() {
     if (!type) return;
-    const maxVisits =
-      type === 'free'
-        ? null
-        : type === 'session'
-          ? Number(sessionCount)
-          : classMode === 'unlimited'
-            ? null
-            : Number(classCount);
+    const maxVisits = type === 'session' ? Number(sessionCount) : null;
+    const weeklyGoalNum = type === 'period' ? Number(weeklyGoal) : null;
     mutate(
       {
         height: height ? Number(height) : null,
@@ -180,6 +172,8 @@ export function OnboardingFlow() {
           startDate,
           type,
           maxVisits,
+          weeklyGoal: weeklyGoalNum,
+          inputMethod: 'manual',
           centerName: centerName.trim() || null,
           centerLat: coord?.lat ?? null,
           centerLng: coord?.lng ?? null,
@@ -391,10 +385,30 @@ export function OnboardingFlow() {
 
           {step === 'detail' ? (
             <>
-              {type === 'free' ? (
+              {type === 'period' ? (
                 <>
-                  <ThemedText type="h1">자유이용권으로 설정했어요</ThemedText>
-                  <ThemedText type="body" themeColor="textSecondary">추가 입력은 없어요. 바로 시작할 수 있어요.</ThemedText>
+                  <ThemedText type="h1">일주일에 몇 번 갈 목표예요?</ThemedText>
+                  <ThemedText type="body" themeColor="textSecondary">목표 방문으로 회당 가치·되찾는 금액을 계산해요.</ThemedText>
+                  <View style={styles.segmentRow}>
+                    {[2, 3, 4, 5].map((n) => {
+                      const on = weeklyGoal === String(n);
+                      return (
+                        <Pressable key={n} onPress={() => setWeeklyGoal(String(n))} style={[styles.segment, on && styles.segOn]}>
+                          <ThemedText type={on ? 'captionBold' : 'caption'} style={on ? styles.activeText : undefined}>주 {n}회</ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <TextInput
+                    value={weeklyGoal}
+                    onChangeText={(t) => setWeeklyGoal(t.replace(/[^0-9]/g, ''))}
+                    onFocus={() => setFocused('wg')}
+                    onBlur={() => setFocused(null)}
+                    keyboardType="numeric"
+                    placeholder="직접 입력 (예: 3)"
+                    placeholderTextColor={Palette.gray300}
+                    style={inputStyle('wg')}
+                  />
                 </>
               ) : null}
 
@@ -427,38 +441,6 @@ export function OnboardingFlow() {
                       회당 비용 · {formatNumber(Math.round(costNum / Number(sessionCount)))}원
                     </ThemedText>
                   ) : null}
-                </>
-              ) : null}
-
-              {type === 'class' ? (
-                <>
-                  <ThemedText type="h1">이용 방식은?</ThemedText>
-                  <View style={styles.segmentRow}>
-                    {(['unlimited', 'count'] as const).map((mode) => {
-                      const on = classMode === mode;
-                      return (
-                        <Pressable key={mode} onPress={() => setClassMode(mode)} style={[styles.segment, on && styles.segOn]}>
-                          <ThemedText type={on ? 'captionBold' : 'caption'} style={on ? styles.activeText : undefined}>
-                            {mode === 'unlimited' ? '무제한' : '횟수제'}
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  {classMode === 'count' ? (
-                    <TextInput
-                      value={classCount}
-                      onChangeText={(t) => setClassCount(t.replace(/[^0-9]/g, ''))}
-                      onFocus={() => setFocused('cc')}
-                      onBlur={() => setFocused(null)}
-                      keyboardType="numeric"
-                      placeholder="횟수 입력 (예: 20)"
-                      placeholderTextColor={Palette.gray300}
-                      style={inputStyle('cc')}
-                    />
-                  ) : (
-                    <ThemedText type="caption" themeColor="textSecondary">무제한은 횟수 입력이 없어요.</ThemedText>
-                  )}
                 </>
               ) : null}
 

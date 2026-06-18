@@ -1,132 +1,60 @@
 import { router } from 'expo-router';
-import { MapPin, MessageCircle, TrendingDown, TrendingUp } from 'lucide-react-native';
+import { Bell, CalendarDays, ChevronRight, MapPin, Sparkles } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Modal, Platform, Pressable, StyleSheet, ScrollView, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Circle } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Icon } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
-import { useProfile } from '@/features/auth/useProfile';
-import { CoachChat } from '@/features/coach/CoachChat';
-import { HomeStrip } from '@/features/home/HomeStrip';
-import { MonthCalendar } from '@/features/home/MonthCalendar';
-import { WeeklyRecord } from '@/features/home/WeeklyRecord';
+import { computeRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
+import { MembershipDetail } from '@/features/membership/MembershipDetail';
+import { buildPortfolioItems, MembershipPortfolioCard, PortfolioHero, type PortfolioItem } from '@/features/membership/PortfolioView';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
-import { CoachCard } from '@/features/membership/CoachCard';
-import { computeRisk, formatNumber, summarize, won } from '@/features/membership/dashboard';
-import { HelpButton } from '@/features/membership/HelpButton';
-import { useMemberships } from '@/features/membership/useMemberships';
-import { useMonthCompare } from '@/features/membership/useMonthCompare';
+import { MonthCalendar } from '@/features/home/MonthCalendar';
+import { useCoach } from '@/features/membership/useCoach';
+import { useMemberships, type Membership } from '@/features/membership/useMemberships';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { useVisitPattern } from '@/features/membership/useVisitPattern';
 
-const UTIL_HELP = [
-  '활용도 = 사용한 횟수 ÷ 전체 횟수예요. (횟수제 회원권 합산)',
-  '가치 회수 = 지금까지 다닌 만큼 되찾은 회원권 가치(사용 횟수 × 회당 비용)예요.',
-  '많이 갈수록 활용도와 회수 가치가 올라가요.',
-];
-
-/** 활용도 도넛 링 (흰색, Primary 배경 위). 중앙엔 회수 가치 금액. */
-function UtilRing({ pct, centerValue }: { pct: number | null; centerValue: string }) {
-  const size = 96;
-  const r = 40;
-  const sw = 9;
-  const c = 2 * Math.PI * r;
-  const ratio = pct != null ? Math.min(1, Math.max(0, pct / 100)) : 0;
+/** AI 코치 한 줄(말풍선) — coach Edge Function 결과의 action. */
+function CoachBubble({ text }: { text: string }) {
   return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.25)" strokeWidth={sw} fill="none" />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={Palette.white}
-          strokeWidth={sw}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${c * ratio} ${c}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
-      <View style={styles.ringCenter}>
-        <ThemedText type="captionBold" style={styles.ringValue}>
-          {centerValue}
-        </ThemedText>
-        <ThemedText type="label" style={styles.dimWhite}>
-          가치 회수
+    <View style={styles.bubble}>
+      <View style={styles.bubbleHead}>
+        <Icon icon={Sparkles} size={13} color={Palette.primary} />
+        <ThemedText type="label" style={{ color: Palette.primary }}>
+          AI 코치
         </ThemedText>
       </View>
+      <ThemedText type="caption">{text}</ThemedText>
     </View>
   );
 }
 
-function HeroStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <View style={styles.heroStat}>
-      <ThemedText type="label" style={styles.dimWhite}>
-        {label}
-      </ThemedText>
-      <ThemedText type="captionBold" style={styles.white}>
-        {value}
-      </ThemedText>
-      {sub ? (
-        <ThemedText type="label" style={styles.dimWhite}>
-          {sub}
-        </ThemedText>
-      ) : null}
-    </View>
-  );
-}
-
-/**
- * 홈 대시보드 (앱 디폴트). P0: 블록① 히어로(회원권 활용도) + 블록② AI 코치.
- */
+/** 홈 = 회원권 활용도 통합 화면 (명세 v1.1 / 시안). */
 export default function HomeScreen() {
-  const { data: profile } = useProfile();
   const { data: memberships, isLoading } = useMemberships();
   const { data: stats } = useMonthlyStats();
   const { data: visitPattern } = useVisitPattern();
-  const { data: monthCompare } = useMonthCompare();
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  const [showCoach, setShowCoach] = useState(false);
+  const [detail, setDetail] = useState<{ m: Membership; risk: RiskInfo; monthlyVisits: number } | null>(null);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
-  const withRisk = list.map((m) => ({
-    m,
-    risk: computeRisk(m, visitsOf(m.id)),
-    visits: visitsOf(m.id),
-  }));
-  const summary = summarize(
-    withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })),
-  );
+  const withRisk = list.map((m) => ({ m, risk: computeRisk(m, visitsOf(m.id)), visits: visitsOf(m.id) }));
+  const summary = summarize(withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })));
+  const items = buildPortfolioItems(list);
 
-  // 횟수제 합산 지표
-  const sessioned = withRisk.filter((x) => x.risk.hasSessions);
-  const totalUsed = sessioned.reduce((s, x) => s + x.risk.usedSessions, 0);
-  const totalTotal = sessioned.reduce((s, x) => s + (x.risk.totalSessions ?? 0), 0);
-  const sessionedCost = sessioned.reduce((s, x) => s + x.m.cost, 0);
-  const utilization = totalTotal > 0 ? Math.round((totalUsed / totalTotal) * 100) : null;
-
-  const recovered = withRisk.reduce((s, x) => s + x.risk.valueUsed, 0); // 가치 회수(누적)
-  const totalPaid = list.reduce((s, x) => s + x.cost, 0); // 총 결제 금액
-  const remainingValue = withRisk.reduce((s, x) => s + x.risk.valueAtRisk, 0); // 남은 가치
-  const listPrice = totalTotal > 0 ? Math.round(sessionedCost / totalTotal) : null; // 정가 회당
-  const effPrice = totalUsed > 0 ? Math.round(sessionedCost / totalUsed) : listPrice; // 실제 회당
-
-  const name = profile?.display_name || '회원';
-  const mom = monthCompare?.changePct ?? null;
+  const coach = useCoach({ withRisk, summary, monthly: stats, pattern: visitPattern });
 
   function handleCheckIn() {
     if (list.length === 0) {
       const msg = '먼저 회원권을 등록해 주세요.';
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('오늘 체크인', msg);
+      else Alert.alert('체크인', msg);
       return;
     }
     setShowCheckIn(true);
@@ -136,97 +64,70 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+          {/* 헤더 */}
           <View style={styles.header}>
-            <View>
-              <ThemedText type="h1">FitBack</ThemedText>
-              <ThemedText type="caption" themeColor="textSecondary">
-                {name}님, 오늘도 파이팅
-              </ThemedText>
+            <ThemedText type="h1">회원권 활용도</ThemedText>
+            <View style={styles.headerIcons}>
+              <Pressable onPress={() => setShowCalendar(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="기록 캘린더">
+                <Icon icon={CalendarDays} size={22} color={Palette.gray500} />
+              </Pressable>
+              <Icon icon={Bell} size={22} color={Palette.gray300} />
             </View>
-            <Pressable
-              onPress={() => setShowCoach(true)}
-              style={({ pressed }) => [styles.coachBtn, pressed && styles.coachBtnPressed]}
-              accessibilityRole="button">
-              <Icon icon={MessageCircle} size={16} color={Palette.primary} />
-              <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                MY 코치
-              </ThemedText>
-            </Pressable>
           </View>
 
-          {/* 블록 ① 히어로 — 회원권 활용도 (솔리드 Primary) */}
+          {/* 오늘 체크인 배너 */}
           {list.length > 0 ? (
-            <Pressable onPress={() => router.navigate('/membership')}>
-              <View style={styles.hero}>
-                <View style={styles.heroTop}>
-                  <View style={styles.heroLeft}>
-                    <View style={styles.labelRow}>
-                      <ThemedText type="caption" style={styles.dimWhite}>
-                        이번 달 회원권 활용도
-                      </ThemedText>
-                      <HelpButton title="활용도가 뭔가요?" paragraphs={UTIL_HELP} color="rgba(255,255,255,0.7)" />
-                    </View>
-                    <ThemedText type="display" style={styles.white}>
-                      {utilization != null ? `${utilization}%` : '기간제'}
-                    </ThemedText>
-                    {mom != null ? (
-                      <View style={styles.momChip}>
-                        <Icon icon={mom >= 0 ? TrendingUp : TrendingDown} size={12} color={Palette.white} />
-                        <ThemedText type="label" style={styles.white}>
-                          지난 달보다 {mom >= 0 ? '+' : ''}
-                          {mom}%
-                        </ThemedText>
-                      </View>
-                    ) : null}
-                  </View>
-                  <UtilRing pct={utilization} centerValue={won(recovered)} />
-                </View>
-
-                <View style={styles.heroDivider} />
-
-                <View style={styles.heroStats}>
-                  <HeroStat label="총 결제 금액" value={won(totalPaid)} />
-                  <HeroStat label="남은 가치" value={won(remainingValue)} />
-                  <HeroStat
-                    label="1회당 비용"
-                    value={effPrice != null ? `${formatNumber(effPrice)}원` : '-'}
-                    sub={listPrice != null && effPrice !== listPrice ? `정가 ${formatNumber(listPrice)}원` : undefined}
-                  />
-                </View>
-              </View>
+            <Pressable
+              onPress={handleCheckIn}
+              style={({ pressed }) => [styles.banner, pressed && styles.pressed]}
+              accessibilityRole="button">
+              <Icon icon={MapPin} size={16} color={Palette.white} />
+              <ThemedText type="captionBold" style={styles.bannerText}>
+                오늘 체크인하기
+              </ThemedText>
+              <Icon icon={ChevronRight} size={18} color={Palette.white} />
             </Pressable>
+          ) : null}
+
+          {/* AI 코치 한 줄 */}
+          {list.length > 0 && coach.data ? <CoachBubble text={coach.data.action} /> : null}
+
+          {/* 히어로(요약) */}
+          {list.length > 0 ? (
+            <PortfolioHero items={items} onCta={handleCheckIn} />
           ) : !isLoading ? (
             <Card>
-              <ThemedText type="body">회원권을 등록하면 활용도를 분석해드려요.</ThemedText>
-              <Button
-                label="회원권 등록하러 가기"
-                onPress={() => router.navigate('/membership')}
-                style={styles.emptyBtn}
-              />
+              <ThemedText type="body">회원권을 등록하면 본전 회수가 시작돼요.</ThemedText>
+              <Button label="회원권 등록하기" onPress={() => router.navigate('/membership')} style={styles.emptyBtn} />
             </Card>
           ) : null}
 
-          {/* 오늘 체크인 — 센터 가기 플로우 진입 (디폴트 페이지 핵심 액션) */}
+          {/* 등록된 회원권 */}
           {list.length > 0 ? (
-            <Button label="오늘 체크인" icon={MapPin} onPress={handleCheckIn} />
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <ThemedText type="captionBold">등록된 회원권</ThemedText>
+                <Pressable onPress={() => router.navigate('/membership')} hitSlop={8} accessibilityRole="button">
+                  <ThemedText type="label" themeColor="textSecondary">
+                    전체보기
+                  </ThemedText>
+                </Pressable>
+              </View>
+              {items.map((it: PortfolioItem) => (
+                <MembershipPortfolioCard
+                  key={it.m.id}
+                  item={it}
+                  onPress={() =>
+                    setDetail({ m: it.m, risk: computeRisk(it.m, visitsOf(it.m.id)), monthlyVisits: visitsOf(it.m.id) })
+                  }
+                />
+              ))}
+            </View>
           ) : null}
-
-          {/* 화면 A — 이번주 기록(주간 인라인) + 달력보기 → 화면 B */}
-          <WeeklyRecord onOpenCalendar={() => setShowCalendar(true)} />
-
-          {/* 블록 ② AI 코치 — 오늘의 액션 */}
-          <CoachCard withRisk={withRisk} summary={summary} monthly={stats} pattern={visitPattern} />
-
-          {/* 블록 ③ 3대 기능 스트립 */}
-          <HomeStrip withRisk={withRisk} />
         </ScrollView>
       </SafeAreaView>
 
-      <Modal
-        visible={showCheckIn}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowCheckIn(false)}>
+      <Modal visible={showCheckIn} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCheckIn(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
@@ -234,12 +135,7 @@ export default function HomeScreen() {
         </ThemedView>
       </Modal>
 
-      {/* 화면 B — 월 캘린더 상세 */}
-      <Modal
-        visible={showCalendar}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowCalendar(false)}>
+      <Modal visible={showCalendar} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCalendar(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <MonthCalendar onClose={() => setShowCalendar(false)} />
@@ -247,15 +143,12 @@ export default function HomeScreen() {
         </ThemedView>
       </Modal>
 
-      {/* MY 코치 */}
-      <Modal
-        visible={showCoach}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowCoach(false)}>
+      <Modal visible={!!detail} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetail(null)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <CoachChat onClose={() => setShowCoach(false)} />
+            {detail ? (
+              <MembershipDetail m={detail.m} risk={detail.risk} monthlyVisits={detail.monthlyVisits} onClose={() => setDetail(null)} />
+            ) : null}
           </SafeAreaView>
         </ThemedView>
       </Modal>
@@ -274,58 +167,30 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  body: { gap: Spacing.lg, paddingBottom: Spacing.lg },
-
-  hero: {
-    backgroundColor: Palette.primary,
-    borderRadius: 20,
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
-  heroLeft: { flex: 1, gap: Spacing.xs },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  white: { color: Palette.white },
-  dimWhite: { color: 'rgba(255,255,255,0.7)' },
-  momChip: {
+  body: { gap: Spacing.md, paddingBottom: Spacing.lg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  ringCenter: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 1,
-  },
-  ringValue: { color: Palette.white },
-  heroDivider: { height: 0.5, backgroundColor: 'rgba(255,255,255,0.25)' },
-  heroStats: { flexDirection: 'row', justifyContent: 'space-between' },
-  heroStat: { gap: 2, flex: 1 },
-
-  emptyBtn: { marginTop: Spacing.sm },
-
-  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  coachBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
+    gap: Spacing.sm,
+    backgroundColor: Palette.gray900,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    backgroundColor: Palette.primaryLight,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.card,
   },
-  coachBtnPressed: { opacity: 0.7 },
-
+  bannerText: { color: Palette.white, flex: 1 },
+  pressed: { opacity: 0.8 },
+  bubble: {
+    gap: 4,
+    backgroundColor: Palette.primaryLight,
+    borderRadius: Radius.card,
+    padding: Spacing.md,
+  },
+  bubbleHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  emptyBtn: { marginTop: Spacing.sm },
+  section: { gap: Spacing.sm },
+  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modalRoot: { flex: 1, backgroundColor: Palette.bgBase },
   modalSafe: { flex: 1 },
 });

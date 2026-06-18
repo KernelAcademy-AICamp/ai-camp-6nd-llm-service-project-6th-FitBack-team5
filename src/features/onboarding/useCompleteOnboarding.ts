@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 import { computeEndDate } from '@/features/membership/useCreateMembership';
-import type { MembershipPeriod, MembershipType } from '@/features/membership/useMemberships';
+import type { MembershipInputMethod, MembershipPeriod, MembershipType } from '@/features/membership/useMemberships';
 
 export type FitnessGoal = 'fat_loss' | 'muscle_gain' | 'health' | 'body_shape' | 'habit';
 
@@ -18,7 +18,9 @@ export interface OnboardingInput {
     period: MembershipPeriod;
     startDate: string;
     type: MembershipType;
-    maxVisits: number | null; // free/예약 무제한 = null
+    maxVisits: number | null; // 인세권 총 횟수 (기간권 = null)
+    weeklyGoal: number | null; // 기간권 주당 목표 (인세권 = null)
+    inputMethod?: MembershipInputMethod;
     centerName: string | null;
     centerLat: number | null;
     centerLng: number | null;
@@ -60,7 +62,9 @@ export function useCompleteOnboarding() {
           start_date: m.startDate,
           end_date: computeEndDate(m.startDate, m.period),
           type: m.type,
-          max_visits: m.type === 'free' ? null : m.maxVisits,
+          max_visits: m.type === 'session' ? m.maxVisits : null,
+          weekly_goal: m.type === 'period' ? m.weeklyGoal ?? null : null,
+          input_method: m.inputMethod ?? 'manual',
         })
         .select()
         .single();

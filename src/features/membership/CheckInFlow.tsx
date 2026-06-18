@@ -696,7 +696,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         {step === 'exercise' && visitId ? (
           <ExerciseRecordForm
             visitId={visitId}
-            membershipType={selected?.type ?? 'free'}
+            membershipType={selected?.type ?? 'period'}
             remainingVisits={selected?.remainingVisits ?? null}
             onDone={() => setStep('logged')}
             onSkip={onClose}
