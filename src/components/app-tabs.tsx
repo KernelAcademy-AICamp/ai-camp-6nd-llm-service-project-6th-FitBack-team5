@@ -17,14 +17,6 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="membership">
-        <NativeTabs.Trigger.Label>회원권</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="diet">
         <NativeTabs.Trigger.Label>식단</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
@@ -40,7 +32,6 @@ export default function AppTabs() {
           renderingMode="template"
         />
       </NativeTabs.Trigger>
-
     </NativeTabs>
   );
 }

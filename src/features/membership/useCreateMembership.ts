@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
-import type { MembershipPeriod, MembershipType } from './useMemberships';
+import type { MembershipInputMethod, MembershipPeriod, MembershipType } from './useMemberships';
 
 export interface NewMembershipInput {
   name: string;
@@ -11,8 +11,11 @@ export interface NewMembershipInput {
   period: MembershipPeriod;
   startDate: string; // 'YYYY-MM-DD'
   type: MembershipType;
-  /** session/class only; ignored (stored null) for free. */
+  /** 인세권(session) 총 횟수. 기간권(period)은 null. */
   maxVisits: number | null;
+  /** 기간권(period) 주당 목표 방문. 인세권은 null. */
+  weeklyGoal?: number | null;
+  inputMethod?: MembershipInputMethod;
   /** 선택: 센터명 + 좌표(현재 위치). 좌표가 있으면 centers에 함께 저장(GPS·날씨·경로용). */
   centerName?: string | null;
   centerLat?: number | null;
@@ -63,7 +66,9 @@ export function useCreateMembership() {
           start_date: input.startDate,
           end_date: computeEndDate(input.startDate, input.period),
           type: input.type,
-          max_visits: input.type === 'free' ? null : input.maxVisits,
+          max_visits: input.type === 'session' ? input.maxVisits : null,
+          weekly_goal: input.type === 'period' ? input.weeklyGoal ?? null : null,
+          input_method: input.inputMethod ?? 'manual',
         })
         .select()
         .single();

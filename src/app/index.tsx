@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { AlarmClock, Bell, Calendar, ChevronRight, LogOut, Menu, Ruler, Sparkles, TrendingUp, Weight } from 'lucide-react-native';
+import { AlarmClock, Bell, Calendar, ChevronRight, LogOut, Menu, Ruler, Sparkles, TrendingUp, Weight, X } from 'lucide-react-native';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, ScrollView, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,9 +28,12 @@ import {
   formatNumber,
   sortByRisk,
   summarize,
+  type RiskInfo,
 } from '@/features/membership/dashboard';
 import { useCoach } from '@/features/membership/useCoach';
-import { useMemberships } from '@/features/membership/useMemberships';
+import { daysUntil, useMemberships, type Membership } from '@/features/membership/useMemberships';
+import { summarizePortfolio } from '@/features/membership/portfolio';
+import { buildPortfolioItems, todayGain } from '@/features/membership/PortfolioView';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { useVisitPattern } from '@/features/membership/useVisitPattern';
 
@@ -60,6 +63,7 @@ export default function HomeScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showCoach, setShowCoach] = useState(false);
   const [showMyDrawer, setShowMyDrawer] = useState(false);
+  const [showAlarm, setShowAlarm] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
   const [activeCard, setActiveCard] = useState(0);
   const [carouselWidth, setCarouselWidth] = useState(
@@ -78,22 +82,22 @@ export default function HomeScreen() {
     withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })),
   );
 
-  // 횟수제 합산 지표
-  const sessioned = withRisk.filter((x) => x.risk.hasSessions);
-  const totalUsed = sessioned.reduce((s, x) => s + x.risk.usedSessions, 0);
-  const totalTotal = sessioned.reduce((s, x) => s + (x.risk.totalSessions ?? 0), 0);
-  const sessionedCost = sessioned.reduce((s, x) => s + x.m.cost, 0);
-  const utilization = totalTotal > 0 ? Math.round((totalUsed / totalTotal) * 100) : null;
-
-  const recovered = withRisk.reduce((s, x) => s + x.risk.valueUsed, 0);
-  const totalPaid = list.reduce((s, x) => s + x.cost, 0);
-  const remainingValue = withRisk.reduce((s, x) => s + x.risk.valueAtRisk, 0);
-  const effPrice = totalUsed > 0 ? Math.round(sessionedCost / totalUsed) : null;
+  // 목표 기준 회수 지표 (명세 v1.0 활용도 화면 — portfolio). 기간권 weekly_goal 환산 포함.
+  const items = buildPortfolioItems(list);
+  const psummary = summarizePortfolio(items.map((x) => ({ value: x.value, expired: x.expired })));
+  const recovered = psummary.recovered; // 누적 회수(상승)
+  const remainingValue = psummary.remaining; // 목표까지 남은
+  const totalPaid = items.filter((x) => !x.expired).reduce((s, x) => s + x.m.cost, 0); // 원금
+  const utilization = Math.round(psummary.progressPct); // 활용도(목표 75% 기준)
+  const effPrice = todayGain(items); // 오늘 체크인으로 버는 금액(회당 가치)
 
   const name = profile?.display_name || '회원';
 
-  // 알림 배너: 일정에 예약된 운동이 당일인 경우에만 표시 (미구현 — 항상 null)
-  const bannerItem: (typeof withRisk)[0] | null = null;
+  // 만료 D-7 알림(명세 §4) — 임박 회원권을 배너/알림 모달에 노출
+  const expiring = list
+    .filter((m) => m.status === 'expiring')
+    .sort((a, b) => daysUntil(a.endDate) - daysUntil(b.endDate));
+  const bannerItem = expiring[0] ? withRisk.find((x) => x.m.id === expiring[0].id) ?? null : null;
 
   // AI 코치 훅 (말풍선용)
   const coach = useCoach({ withRisk, summary, monthly: stats, pattern: visitPattern });
@@ -122,10 +126,14 @@ export default function HomeScreen() {
                 <Icon icon={Calendar} size={22} color={Palette.gray700} />
               </Pressable>
               <Pressable
+                onPress={() => setShowAlarm(true)}
                 style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}
                 accessibilityRole="button"
                 accessibilityLabel="알림">
-                <Icon icon={Bell} size={22} color={Palette.gray700} />
+                <View>
+                  <Icon icon={Bell} size={22} color={expiring.length > 0 ? Palette.gray700 : Palette.gray300} />
+                  {expiring.length > 0 ? <View style={styles.alarmDot} /> : null}
+                </View>
               </Pressable>
             </View>
           </View>
@@ -185,7 +193,7 @@ export default function HomeScreen() {
               {/* 상단: 헤드라인 */}
               <View style={styles.cardTop}>
                 <View style={styles.cardTopLeft}>
-                  {effPrice != null ? (
+                  {effPrice > 0 ? (
                     <View style={styles.checkInBadge}>
                       <Icon icon={TrendingUp} size={12} color={Palette.primary} />
                       <ThemedText type="label" style={styles.checkInText}>
@@ -207,6 +215,10 @@ export default function HomeScreen() {
                   </ThemedText>
                   <View style={styles.utilBarWrap}>
                     <ProgressBar ratio={utilization / 100} color={Palette.primary} height={10} label={`활용도 ${utilization}%`} />
+                    {/* 25/50/75% 단계 마커 (마라톤) */}
+                    {[25, 50, 75].map((mk) => (
+                      <View key={mk} style={[styles.stageMarker, { left: `${mk}%` }]} />
+                    ))}
                   </View>
                   <ThemedText type="captionBold" themeColor="text">
                     {utilization}%
@@ -245,7 +257,7 @@ export default function HomeScreen() {
                 style={({ pressed }) => [styles.utilBtn, pressed && styles.pressed]}
                 accessibilityRole="button">
                 <ThemedText type="subtitle" style={styles.utilBtnText}>
-                  회원권 활용하기
+                  회원권 출석
                 </ThemedText>
               </Pressable>
             </View>
@@ -324,6 +336,42 @@ export default function HomeScreen() {
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
+
+      {/* 알림 모달 — 만료 D-7 (명세 §4) */}
+      <Modal
+        visible={showAlarm}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowAlarm(false)}>
+        <ThemedView style={styles.modalRoot}>
+          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+            <View style={styles.alarmHeader}>
+              <ThemedText type="h2">알림</ThemedText>
+              <Pressable onPress={() => setShowAlarm(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
+                <Icon icon={X} size={22} color={Palette.gray500} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.alarmBody}>
+              {expiring.length === 0 ? (
+                <ThemedText type="caption" themeColor="textSecondary">
+                  새로운 알림이 없어요.
+                </ThemedText>
+              ) : (
+                expiring.map((m) => (
+                  <Card key={m.id} accentColor={Palette.warning}>
+                    <View style={styles.alarmItem}>
+                      <Icon icon={AlarmClock} size={16} color={Palette.warning} />
+                      <ThemedText type="caption">
+                        {m.name} · 만료 D-{Math.max(0, daysUntil(m.endDate))}
+                      </ThemedText>
+                    </View>
+                  </Card>
+                ))
+              )}
+            </ScrollView>
           </SafeAreaView>
         </ThemedView>
       </Modal>
@@ -543,7 +591,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
-  utilBarWrap: { flex: 1 },
+  utilBarWrap: { flex: 1, position: 'relative', justifyContent: 'center' },
+  stageMarker: { position: 'absolute', top: 1, bottom: 1, width: 1, backgroundColor: 'rgba(0,0,0,0.18)' },
+  alarmDot: { position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: 4, backgroundColor: Palette.warning },
+  alarmHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: ScreenPadding, paddingVertical: Spacing.md },
+  alarmBody: { paddingHorizontal: ScreenPadding, paddingBottom: Spacing.xl, gap: Spacing.sm },
+  alarmItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
 
   // 구분선
   divider: { height: 0.5, backgroundColor: Palette.lineDefault },

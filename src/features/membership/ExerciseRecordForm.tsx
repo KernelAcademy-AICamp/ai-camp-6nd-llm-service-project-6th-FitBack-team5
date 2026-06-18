@@ -48,29 +48,25 @@ export function ExerciseRecordForm({
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
   const [trainer, setTrainer] = useState('');
-  const [className, setClassName] = useState('');
   const [focused, setFocused] = useState<string | null>(null);
   const { mutate, isPending, error } = useCreateExerciseRecord();
 
-  const isFree = membershipType === 'free';
+  const isPeriod = membershipType === 'period';
   const isSession = membershipType === 'session';
-  const isClass = membershipType === 'class';
 
-  // 자유이용권만 부위 필수. PT/클래스는 방문(출석)만으로도 기록 가능.
-  const canSubmit = (!isFree || part != null) && !isPending;
+  // 기간권만 부위 필수. 인세권(PT)은 방문(출석)만으로도 기록 가능.
+  const canSubmit = (!isPeriod || part != null) && !isPending;
 
   function save() {
     const durationNum = duration ? Number(duration) : null;
     const autoData = isSession
       ? { kind: 'session', trainer: trainer.trim() || null, status: '세션 완료' }
-      : isClass
-        ? { kind: 'class', className: className.trim() || null, status: '수강 완료' }
-        : { kind: 'free', status: '운동 완료' };
+      : { kind: 'free', status: '운동 완료' };
     mutate(
       {
         visitId,
-        exercisePart: isFree ? part : null,
-        intensity: isFree ? intensity : null,
+        exercisePart: isPeriod ? part : null,
+        intensity: isPeriod ? intensity : null,
         duration: durationNum,
         notes: notes.trim() || null,
         autoData,
@@ -84,16 +80,16 @@ export function ExerciseRecordForm({
   return (
     <View style={styles.wrap}>
       <ThemedText type="h2">
-        {isSession ? 'PT 세션 기록' : isClass ? '클래스 기록' : '운동 기록'}
+        {isSession ? 'PT 세션 기록' : '운동 기록'}
       </ThemedText>
-      {(isSession || isClass) && (
+      {isSession && (
         <ThemedText type="caption" themeColor="textSecondary">
           수고하셨습니다!{isSession && remainingVisits != null ? ` 남은 세션 ${formatNumber(remainingVisits)}회` : ''}
         </ThemedText>
       )}
 
       {/* 자유이용권: 부위 (필수) */}
-      {isFree && (
+      {isPeriod && (
         <View style={styles.field}>
           <View style={styles.labelRow}>
             <ThemedText type="label" themeColor="textSecondary">
@@ -120,7 +116,7 @@ export function ExerciseRecordForm({
       )}
 
       {/* 자유이용권: 강도 */}
-      {isFree && (
+      {isPeriod && (
         <View style={styles.field}>
           <ThemedText type="label" themeColor="textSecondary">
             강도
@@ -161,25 +157,7 @@ export function ExerciseRecordForm({
         </View>
       )}
 
-      {/* 예약권(클래스): 클래스명 */}
-      {isClass && (
-        <View style={styles.field}>
-          <ThemedText type="label" themeColor="textSecondary">
-            클래스명 (선택)
-          </ThemedText>
-          <TextInput
-            value={className}
-            onChangeText={setClassName}
-            onFocus={() => setFocused('className')}
-            onBlur={() => setFocused(null)}
-            placeholder="예: 스피닝, 필라테스"
-            placeholderTextColor={Palette.gray300}
-            style={inputStyle('className')}
-          />
-        </View>
-      )}
-
-      {/* 공통: 시간 (자유이용권/클래스는 의미 큼, PT는 선택) */}
+      {/* 공통: 시간 (기간권은 의미 큼, PT는 선택) */}
       <View style={styles.field}>
         <ThemedText type="label" themeColor="textSecondary">
           시간 (분)
@@ -219,7 +197,7 @@ export function ExerciseRecordForm({
       ) : null}
 
       <Button
-        label={isSession ? '세션 기록 저장' : isClass ? '수강 기록 저장' : '운동 기록 저장'}
+        label={isSession ? '세션 기록 저장' : '운동 기록 저장'}
         onPress={save}
         loading={isPending}
         disabled={!canSubmit}
