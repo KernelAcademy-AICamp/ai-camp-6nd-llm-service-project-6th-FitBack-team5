@@ -240,7 +240,8 @@ function MacroProgress({
   caption?: string;
 }) {
   const labelColor = focused ? Palette.primary : Palette.gray500;
-  const barColor = focused ? Palette.primary : Palette.gray300;
+  const fillColor = focused ? Palette.primary : Palette.gray400;
+  const valuePct = goal > 0 ? Math.min((value / goal) * 100, 100) : 0;
   return (
     <View style={styles.macroCol}>
       <Txt variant="caption" weight={focused ? '600' : '400'} color={labelColor}>
@@ -251,12 +252,23 @@ function MacroProgress({
           {value}
         </Txt>
         <Txt variant="caption" color={Palette.gray500}>
-          {' '}
-          / {goal}g
+          g
         </Txt>
       </View>
       <View style={styles.macroBar}>
-        <ProgressBar ratio={goal > 0 ? value / goal : 0} color={barColor} />
+        {/* 범위 바 */}
+        <View style={styles.rangeBarWrap}>
+          <View style={styles.rangeBarTrack} />
+          <View style={[styles.rangeBarFill, { width: `${valuePct}%` as any, backgroundColor: fillColor }]} />
+          {/* 목표 지점 세로 선 */}
+          <View style={styles.rangeBarGoalLine} />
+        </View>
+        {/* 목표 수치 */}
+        <View style={styles.rangeLabels}>
+          <Txt variant="label" color={Palette.gray400} style={{ position: 'absolute', right: 0 }}>
+            {goal}g
+          </Txt>
+        </View>
       </View>
       {focused && caption && (
         <Txt variant="label" color={Palette.primary}>
@@ -399,7 +411,7 @@ const MEAL_VISUAL: Record<MealType, { icon: IconName; tint: string }> = {
   간식: { icon: 'egg', tint: '#F5A623' },
 };
 
-// 끼니 슬롯 — 해당 끼니의 기록을 요약(없으면 추가 버튼). 탭하면 그 끼니로 기록 추가.
+// 끼니 슬롯 카드 — 2×2 그리드. 탭하면 그 끼니로 기록 추가/상세 진입.
 function MealSlot({ type, meals, onPress }: { type: MealType; meals: Meal[]; onPress: (t: MealType) => void }) {
   const v = MEAL_VISUAL[type];
   const mine = meals.filter((m) => m.mealType === type);
@@ -409,41 +421,36 @@ function MealSlot({ type, meals, onPress }: { type: MealType; meals: Meal[]; onP
   const time = mine[0]?.time;
   return (
     <Pressable onPress={() => onPress(type)} style={styles.slotCard}>
-      <View style={styles.slotIcon}>
-        <Icon name={v.icon} size={28} color={v.tint} />
+      {/* + 버튼 — 우상단 */}
+      <View style={styles.slotAddCorner}>
+        <Icon name="add" size={18} color={has ? Palette.gray400 : Palette.primary} />
       </View>
-      <View style={styles.flex1}>
-        <Txt variant="body" weight="700">
-          {type}
-        </Txt>
+
+      {/* 아이콘 영역 */}
+      <View style={styles.slotIconWrap}>
+        <View style={[styles.slotIconCircle, { backgroundColor: v.tint + '22' }]}>
+          <Icon name={v.icon} size={34} color={v.tint} />
+        </View>
+      </View>
+
+      {/* 하단 텍스트 */}
+      <View style={styles.slotInfo}>
+        <Txt variant="body" weight="700" color={Palette.gray900}>{type}</Txt>
         {has ? (
           <>
-            <Txt variant="caption" color={Palette.gray700} numberOfLines={1}>
-              {name}
-            </Txt>
-            <Txt variant="caption" color={Palette.gray500}>
-              {time} · {kcal} kcal
-            </Txt>
+            <Txt variant="label" color={Palette.gray500} numberOfLines={1}>{name}</Txt>
+            <Txt variant="label" color={Palette.gray400}>{time} · {kcal} kcal</Txt>
           </>
         ) : (
-          <Txt variant="caption" color={Palette.gray500}>
-            아직 기록 없음
-          </Txt>
+          <Txt variant="label" color={Palette.gray400}>아직 기록 없음</Txt>
         )}
       </View>
-      {has ? (
-        <View style={styles.slotRight}>
-          <View style={styles.slotBadge}>
-            <Icon name="check" size={12} color={Palette.success} />
-            <Txt variant="label" weight="600" color={Palette.success}>
-              기록됨
-            </Txt>
-          </View>
-          <Icon name="chevron-right" size={20} color={Palette.gray300} />
-        </View>
-      ) : (
-        <View style={styles.slotAddBtn}>
-          <Icon name="add" size={20} color={Palette.primary} />
+
+      {/* 기록됨 뱃지 */}
+      {has && (
+        <View style={styles.slotBadge}>
+          <Icon name="check" size={10} color={Palette.success} />
+          <Txt variant="label" weight="600" color={Palette.success}>기록됨</Txt>
         </View>
       )}
     </Pressable>
@@ -1450,28 +1457,6 @@ function ResultView({
           </View>
         </View>
 
-        {/* 다음 식사 가이드 */}
-        <View style={styles.nextMealSection}>
-          <Txt variant="body" weight="700" color={Palette.gray900}>
-            다음 식사 추천
-          </Txt>
-          <View style={styles.nextMealRow}>
-            {displayGuide.map((item) => (
-              <View key={item.title} style={styles.nextMealCard}>
-                <View style={styles.nextMealIcon}>
-                  <Icon name={item.icon} size={28} color={Palette.primary} />
-                </View>
-                <Txt variant="body" weight="700" color={Palette.gray900} style={{ textAlign: 'center' }}>
-                  {item.title}
-                </Txt>
-                <Txt variant="caption" color={Palette.gray500} style={{ textAlign: 'center' }}>
-                  {item.desc}
-                </Txt>
-              </View>
-            ))}
-          </View>
-        </View>
-
         {/* AI 코치 피드백 (얼굴 없음) — 한 줄 요약 제목 + 상세 */}
         <View style={styles.coachCard}>
           <View style={styles.coachHead}>
@@ -1508,6 +1493,28 @@ function ResultView({
               ) : null}
             </>
           )}
+        </View>
+
+        {/* 다음 식사 가이드 */}
+        <View style={styles.nextMealSection}>
+          <Txt variant="body" weight="700" color={Palette.gray900}>
+            다음 식사 추천
+          </Txt>
+          <View style={styles.nextMealRow}>
+            {displayGuide.map((item) => (
+              <View key={item.title} style={styles.nextMealCard}>
+                <View style={styles.nextMealIcon}>
+                  <Icon name={item.icon} size={28} color={Palette.primary} />
+                </View>
+                <Txt variant="body" weight="700" color={Palette.gray900} style={{ textAlign: 'center' }}>
+                  {item.title}
+                </Txt>
+                <Txt variant="caption" color={Palette.gray500} style={{ textAlign: 'center' }}>
+                  {item.desc}
+                </Txt>
+              </View>
+            ))}
+          </View>
         </View>
 
         {/* 메모 남기기 */}
@@ -2103,25 +2110,9 @@ export default function DietScreen() {
             </View>
           </Card>
 
-          {/* ② 기록 전: 오늘의 식단 가이드 / 기록 후: 부족 영양소 기반 AI 식단 추천 */}
-          <Card style={styles.aiRecCard}>
-            {!hasLog ? (
-              // 상태 1 — 목표 제시 + 기록 유도
-              <>
-                <Txt variant="body" weight="600">
-                  오늘의 식단 가이드
-                </Txt>
-                <Txt variant="caption" color={Palette.gray500}>
-                  오늘 운동 기준 목표예요.
-                </Txt>
-                <Txt variant="caption" color={Palette.gray700}>
-                  단백질 {target.protein}g · 탄수화물 {target.carb}g · 지방 {target.fat}g
-                </Txt>
-                <Txt variant="caption" color={Palette.gray500}>
-                  첫 식사를 기록하면 부족한 영양소를 분석해드려요.
-                </Txt>
-              </>
-            ) : deficitLines.length > 0 ? (
+          {/* ② 기록 후: 부족 영양소 기반 AI 식단 추천 */}
+          {hasLog && <Card style={styles.aiRecCard}>
+            {deficitLines.length > 0 ? (
               // 상태 2 — 부족 영양소(상위 2개) 분석 + 균형 잡힌 추천
               <>
                 <View style={styles.aiHead}>
@@ -2198,7 +2189,7 @@ export default function DietScreen() {
                 </Txt>
               </>
             )}
-          </Card>
+          </Card>}
 
           {/* ③+④ 오늘 기록 — 섭취 칼로리 + 끼니별 슬롯 통합 */}
           <View style={styles.listHeadRow}>
@@ -2260,7 +2251,7 @@ export default function DietScreen() {
                 </Pressable>
               </View>
             ) : (
-              <View>
+              <View style={styles.slotGrid}>
                 {MEAL_TYPES.map((t) => (
                   <MealSlot key={t} type={t} meals={meals} onPress={handleSlotPress} />
                 ))}
@@ -2396,6 +2387,11 @@ const styles = StyleSheet.create({
   },
   macroValueRow: { flexDirection: 'row', alignItems: 'baseline' },
   macroBar: { marginTop: Spacing.xs },
+  rangeBarWrap: { position: 'relative', height: 6 },
+  rangeBarTrack: { position: 'absolute', left: 0, right: 0, height: 6, borderRadius: Radius.full, backgroundColor: Palette.gray100 },
+  rangeBarFill: { position: 'absolute', left: 0, height: 6, borderRadius: Radius.full },
+  rangeBarGoalLine: { position: 'absolute', right: 0, top: -2, bottom: -2, width: 2, borderRadius: 1, backgroundColor: Palette.gray400 },
+  rangeLabels: { position: 'relative', height: 14, marginTop: 2 },
 
   // progress
   track: { height: 6, borderRadius: Radius.full, backgroundColor: Palette.gray100, overflow: 'hidden' },
@@ -2595,16 +2591,41 @@ const styles = StyleSheet.create({
   },
   addMealBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   slotList: { gap: Spacing.sm },
-  slotCard: {
+  slotGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Palette.lineDefault,
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
   },
-  slotIcon: { width: 48, height: 48, borderRadius: Radius.card, backgroundColor: Palette.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  slotRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  slotCard: {
+    width: '48.5%',
+    minHeight: 168,
+    backgroundColor: Palette.bgSurface,
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Palette.lineDefault,
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  slotAddCorner: {
+    position: 'absolute',
+    top: Spacing.sm,
+    right: Spacing.sm,
+    width: 28,
+    height: 28,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.bgMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotIconWrap: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
+  slotIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: Radius.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotInfo: { gap: 2 },
   slotBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2613,14 +2634,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
-  },
-  slotAddBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.full,
-    backgroundColor: Palette.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-start',
   },
   // 섹션 위 여백 32px (스크롤 gap 16 + marginTop 16)
   kcalTitle: { marginTop: Spacing.md, marginLeft: Spacing.xs, marginBottom: -Spacing.sm },
