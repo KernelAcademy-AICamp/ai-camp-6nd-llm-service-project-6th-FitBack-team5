@@ -26,7 +26,6 @@ import { generateRepScripts } from './rep-scripts';
 
 export interface RoutineInput {
   goal: string;
-  place: string;
   equipment: string;
   condition: string;
   bodyPart: string;
