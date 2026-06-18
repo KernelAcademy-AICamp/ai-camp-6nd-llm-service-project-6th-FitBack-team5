@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Bell, CalendarDays, ChevronRight, MapPin, Sparkles } from 'lucide-react-native';
+import { Bell, CalendarDays, Sparkles } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -75,18 +75,14 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* 오늘 체크인 배너 */}
+          {/* 알림 영역 — 체크인 아님(체크인은 '회원권 활용하기'에서만). */}
           {list.length > 0 ? (
-            <Pressable
-              onPress={handleCheckIn}
-              style={({ pressed }) => [styles.banner, pressed && styles.pressed]}
-              accessibilityRole="button">
-              <Icon icon={MapPin} size={16} color={Palette.white} />
-              <ThemedText type="captionBold" style={styles.bannerText}>
-                오늘 체크인하기
+            <View style={styles.banner}>
+              <Icon icon={Bell} size={16} color={Palette.white} />
+              <ThemedText type="caption" style={styles.bannerText}>
+                새로운 알림이 없어요
               </ThemedText>
-              <Icon icon={ChevronRight} size={18} color={Palette.white} />
-            </Pressable>
+            </View>
           ) : null}
 
           {/* AI 코치 한 줄 */}
@@ -180,7 +176,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card,
   },
   bannerText: { color: Palette.white, flex: 1 },
-  pressed: { opacity: 0.8 },
   bubble: {
     gap: 4,
     backgroundColor: Palette.primaryLight,
