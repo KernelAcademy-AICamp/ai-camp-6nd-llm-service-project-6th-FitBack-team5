@@ -236,7 +236,7 @@ export function OnboardingFlow() {
           </View>
         ) : null}
 
-        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           {/* ── 1) 내 정보 ── */}
           {step === 'info' ? (
             <>
@@ -294,7 +294,6 @@ export function OnboardingFlow() {
                   style={inputStyle('w')}
                 />
               </View>
-              <Button label="다음" onPress={() => setStep('goal')} style={styles.action} />
             </>
           ) : null}
 
@@ -321,7 +320,6 @@ export function OnboardingFlow() {
                   </Card>
                 );
               })}
-              <Button label="다음" onPress={() => setStep('membership')} style={styles.action} />
             </>
           ) : null}
 
@@ -448,12 +446,6 @@ export function OnboardingFlow() {
                 </Pressable>
               </View>
 
-              <Button label="등록완료" onPress={() => setStep('type')} disabled={!membershipOk} style={styles.action} />
-              <Pressable onPress={submitSkip} disabled={isPending} style={styles.skipBtn} hitSlop={6}>
-                <ThemedText type="captionBold" style={{ color: Palette.gray500 }}>
-                  다음에 등록하기
-                </ThemedText>
-              </Pressable>
             </>
           ) : null}
 
@@ -477,7 +469,6 @@ export function OnboardingFlow() {
                   </Card>
                 );
               })}
-              <Button label="다음" onPress={() => setStep('detail')} disabled={!type} style={styles.action} />
             </>
           ) : null}
 
@@ -567,7 +558,6 @@ export function OnboardingFlow() {
               {error ? (
                 <ThemedText type="caption" style={styles.error}>저장 실패: {(error as Error).message}</ThemedText>
               ) : null}
-              <Button label="완료" onPress={submitWithMembership} loading={isPending} disabled={!detailOk} style={styles.action} />
             </>
           ) : null}
 
@@ -579,14 +569,32 @@ export function OnboardingFlow() {
               </View>
               <ThemedText type="h1">준비 완료!</ThemedText>
               <ThemedText type="body" themeColor="textSecondary">이제 시작해볼까요? 회원권을 똑똑하게 챙겨드릴게요.</ThemedText>
-              <Button
-                label="시작하기"
-                onPress={() => queryClient.invalidateQueries({ queryKey: ['profile'] })}
-                style={styles.action}
-              />
             </View>
           ) : null}
         </ScrollView>
+
+        {/* 하단 고정 CTA (모바일 UX — 주요 버튼은 하단) */}
+        <View style={styles.footer}>
+          {step === 'info' ? <Button label="다음" onPress={() => setStep('goal')} /> : null}
+          {step === 'goal' ? <Button label="다음" onPress={() => setStep('membership')} /> : null}
+          {step === 'membership' ? (
+            <>
+              <Button label="등록완료" onPress={() => setStep('type')} disabled={!membershipOk} />
+              <Pressable onPress={submitSkip} disabled={isPending} style={styles.skipBtn} hitSlop={6}>
+                <ThemedText type="captionBold" style={{ color: Palette.gray500 }}>
+                  다음에 등록하기
+                </ThemedText>
+              </Pressable>
+            </>
+          ) : null}
+          {step === 'type' ? <Button label="다음" onPress={() => setStep('detail')} disabled={!type} /> : null}
+          {step === 'detail' ? (
+            <Button label="완료" onPress={submitWithMembership} loading={isPending} disabled={!detailOk} />
+          ) : null}
+          {step === 'done' ? (
+            <Button label="시작하기" onPress={() => queryClient.invalidateQueries({ queryKey: ['profile'] })} />
+          ) : null}
+        </View>
       </SafeAreaView>
 
       {/* 생년월일 휠 */}
@@ -621,10 +629,19 @@ const styles = StyleSheet.create({
   progress: { flexDirection: 'row', gap: Spacing.xs, paddingHorizontal: ScreenPadding, paddingTop: Spacing.md },
   dot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: Palette.gray100 },
   dotOn: { backgroundColor: Palette.primary },
+  scroll: { flex: 1 },
   body: { paddingHorizontal: ScreenPadding, paddingVertical: Spacing.lg, gap: Spacing.md },
   field: { gap: Spacing.sm },
-  action: { marginTop: Spacing.md },
-  skipBtn: { marginTop: Spacing.sm, alignItems: 'center', paddingVertical: Spacing.sm },
+  footer: {
+    paddingHorizontal: ScreenPadding,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
+    gap: Spacing.sm,
+    borderTopWidth: 0.5,
+    borderTopColor: Palette.lineDefault,
+    backgroundColor: Palette.bgBase,
+  },
+  skipBtn: { alignItems: 'center', paddingVertical: Spacing.sm },
   pressed: { opacity: 0.7 },
   input: {
     borderWidth: 1.5,
