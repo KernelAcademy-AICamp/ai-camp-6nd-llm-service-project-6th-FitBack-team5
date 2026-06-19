@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
-import { AlarmClock, Bell, Calendar, ChevronRight, LogOut, Menu, Ruler, Sparkles, TrendingUp, Trash2, Weight, X } from 'lucide-react-native';
+import { AlarmClock, Bell, Calendar, ChevronRight, Menu, TrendingUp, X } from 'lucide-react-native';
 import { useState } from 'react';
-import { Image, Modal, Platform, Pressable, StyleSheet, ScrollView, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CountUp } from '@/components/count-up';
@@ -20,14 +20,13 @@ import {
 import { useProfile } from '@/features/auth/useProfile';
 import { CoachChat } from '@/features/coach/CoachChat';
 import { MonthCalendar } from '@/features/home/MonthCalendar';
-import { LocationPermissionModal } from '@/features/home/LocationPermissionModal';
+import { PermissionGate } from '@/features/home/PermissionGate';
 import { MembershipMiniList } from '@/features/home/MembershipMiniList';
 import { WorkoutStatusCard } from '@/features/home/WorkoutStatusCard';
 import { useSchedules } from '@/features/home/useSchedules';
+import { MyPanel } from '@/features/auth/MyPanel';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { MembershipForm } from '@/features/membership/MembershipForm';
-import { useDeleteAccountData } from '@/features/auth/useDeleteAccountData';
-import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 import {
   computeRisk,
@@ -70,22 +69,10 @@ export default function HomeScreen() {
   const [showAlarm, setShowAlarm] = useState(false);
   const [showMembershipForm, setShowMembershipForm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const deleteAccount = useDeleteAccountData();
 
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
-  }
-
-  function confirmWithdraw() {
-    const ok =
-      Platform.OS === 'web'
-        ? window.confirm('회원 데이터를 삭제할까요? 회원권·기록이 모두 사라지고 처음부터 다시 시작해요. (계정은 유지)')
-        : true;
-    if (!ok) return;
-    deleteAccount.mutate(undefined, {
-      onSuccess: () => setShowMyDrawer(false),
-    });
   }
 
   const list = memberships ?? [];
@@ -382,88 +369,7 @@ export default function HomeScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setShowMyDrawer(false)}>
-        <ThemedView style={styles.modalRoot}>
-          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <View style={styles.alarmHeader}>
-              <ThemedText type="h2">마이</ThemedText>
-              <Pressable onPress={() => setShowMyDrawer(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
-                <Icon icon={X} size={22} color={Palette.gray500} />
-              </Pressable>
-            </View>
-            <ScrollView contentContainerStyle={styles.drawerBody} showsVerticalScrollIndicator={false}>
-              {/* 프로필 */}
-              <Card>
-                <ThemedText type="h2">{name}</ThemedText>
-                <ThemedText type="caption" themeColor="textSecondary">
-                  {user?.email ?? ''}
-                </ThemedText>
-              </Card>
-
-              {/* 신체 정보 */}
-              <Card>
-                <ThemedText type="captionBold">내 정보</ThemedText>
-                <View style={styles.infoRows}>
-                  <View style={styles.infoRow}>
-                    <View style={styles.infoRowLeft}>
-                      <Icon icon={Ruler} size={16} color={Palette.gray500} />
-                      <ThemedText type="caption" themeColor="textSecondary">키</ThemedText>
-                    </View>
-                    <ThemedText type="captionBold">
-                      {profile?.height != null ? `${profile.height} cm` : '-'}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <View style={styles.infoRowLeft}>
-                      <Icon icon={Weight} size={16} color={Palette.gray500} />
-                      <ThemedText type="caption" themeColor="textSecondary">몸무게</ThemedText>
-                    </View>
-                    <ThemedText type="captionBold">
-                      {profile?.weight != null ? `${profile.weight} kg` : '-'}
-                    </ThemedText>
-                  </View>
-                </View>
-              </Card>
-
-              {/* About */}
-              <Card accentColor={Palette.primary}>
-                <View style={styles.aboutHead}>
-                  <Icon icon={Sparkles} size={16} color={Palette.primary} />
-                  <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                    FitBack은 이렇게 일해요
-                  </ThemedText>
-                </View>
-                <ThemedText type="caption" themeColor="textSecondary">
-                  평가하지 않아요. 데이터를 보여주고, 다음 행동을 제안해요.
-                </ThemedText>
-              </Card>
-
-              {/* 계정 설정 */}
-              <Card>
-                <ThemedText type="captionBold">계정 설정</ThemedText>
-                <Pressable
-                  onPress={() => supabase.auth.signOut()}
-                  style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}
-                  accessibilityRole="button">
-                  <Icon icon={LogOut} size={16} color={Palette.gray500} />
-                  <ThemedText type="caption" style={styles.settingLabel}>로그아웃</ThemedText>
-                  <Icon icon={ChevronRight} size={16} color={Palette.gray300} />
-                </Pressable>
-              </Card>
-
-              {/* 회원 탈퇴 (작게, 하단) */}
-              <Pressable
-                onPress={confirmWithdraw}
-                disabled={deleteAccount.isPending}
-                style={({ pressed }) => [styles.withdrawBtn, pressed && styles.pressed]}
-                accessibilityRole="button">
-                <Icon icon={Trash2} size={13} color={Palette.gray400} />
-                <ThemedText type="label" themeColor="textSecondary">
-                  {deleteAccount.isPending ? '처리 중…' : '회원 탈퇴'}
-                </ThemedText>
-              </Pressable>
-            </ScrollView>
-          </SafeAreaView>
-        </ThemedView>
+        <MyPanel onClose={() => setShowMyDrawer(false)} />
       </Modal>
 
       {/* 회원권 등록 모달 (#4a) */}
@@ -482,8 +388,8 @@ export default function HomeScreen() {
         </ThemedView>
       </Modal>
 
-      {/* 위치 권한 안내 (#2, 최초 진입 1회) */}
-      {user ? <LocationPermissionModal userId={user.id} /> : null}
+      {/* 진입 권한 안내 (#2, 위치 → 알림, 최초 1회) */}
+      {user ? <PermissionGate userId={user.id} /> : null}
 
       {/* 토스트 */}
       {toast ? (
