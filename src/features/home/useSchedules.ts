@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
@@ -86,7 +87,10 @@ export function useAddSchedule() {
       if (error) throw error;
       return data as Schedule;
     },
-    onSuccess: () => invalidateAll(qc, user?.id),
+    onSuccess: (s) => {
+      logEvent(EVENTS.scheduleAdded, { type: s.type, source: s.source });
+      invalidateAll(qc, user?.id);
+    },
   });
 }
 

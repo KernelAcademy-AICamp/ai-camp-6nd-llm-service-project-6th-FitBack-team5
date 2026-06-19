@@ -11,6 +11,7 @@ import {
 
 import { ThemedText } from '@/components/themed-text';
 import { Elevation, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import { supabase } from '@/lib/supabase';
 
 const TEST_EMAIL = process.env.EXPO_PUBLIC_DEV_TEST_EMAIL ?? '';
@@ -41,6 +42,8 @@ export function LoginScreen() {
         setErrorMessage(error.message);
       } else if (!data.session) {
         setInfoMessage('확인 메일을 보냈어요. 메일의 링크를 누른 뒤 로그인해 주세요.');
+      } else {
+        logEvent(EVENTS.signup);
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
