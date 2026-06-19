@@ -16,7 +16,7 @@ import {
   Spacing,
 } from '@/constants/theme';
 import { DayWorkoutList } from '@/features/workout/DayWorkoutList';
-import { SelectedDayCard } from '@/features/workout/SelectedDayCard';
+import { SelectedDayCard, SelectedDayFeedback } from '@/features/workout/SelectedDayCard';
 import { WeekStatusCard } from '@/features/workout/WeekStatusCard';
 import { WorkoutDateStrip } from '@/features/workout/WorkoutDateStrip';
 
@@ -55,6 +55,9 @@ export default function WorkoutScreen() {
 
           {/* 선택일에 한 모든 운동 컴팩트 목록 — 클릭 액션 없음. */}
           <DayWorkoutList date={selectedDate} />
+
+          {/* 선택일 AI 피드백 — 홈트했어요 카드 바로 아래. 기록 없으면 미노출. */}
+          <SelectedDayFeedback date={selectedDate} />
 
           {/* AI 추천 루틴 받기 입구 카드 — 탭하면 챗봇이 6가지 항목을 차례로 물어봄. */}
           <Pressable

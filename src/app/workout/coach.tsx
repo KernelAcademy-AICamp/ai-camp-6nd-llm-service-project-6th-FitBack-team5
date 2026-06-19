@@ -9,7 +9,7 @@
  */
 
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, Dumbbell, Sliders, Sparkles, Wrench } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -35,6 +35,7 @@ import { prepareSessionAudio } from '@/features/workout/start-session';
 import {
   type Routine,
   type RoutineInput,
+  useGenerateDevRoutine,
   useGenerateRoutine,
 } from '@/features/workout/useGenerateRoutine';
 import { useTheme } from '@/hooks/use-theme';
@@ -100,7 +101,12 @@ export default function CoachScreen() {
   const router = useRouter();
   const setSessionRoutine = useWorkoutSession((s) => s.setRoutine);
   const { mutate, isPending, error } = useGenerateRoutine();
+  // ── dev: 영상 시범 테스트용 고정 루틴. 제거 시 이 줄 + 'dev' 핸들러·카드만 삭제. ──
+  const { mutate: mutateDev, isPending: isDevPending } = useGenerateDevRoutine();
 
+  // 진입 시 모드 선택부터. preset = AI 추천 6질문 흐름, custom = 사용자 정의(추후 구현), dev = 영상 시범 테스트용 고정 루틴.
+  type Mode = 'select' | 'preset' | 'custom' | 'dev';
+  const [mode, setMode] = useState<Mode>('select');
   const [messages, setMessages] = useState<Message[]>([]);
   const [stepIdx, setStepIdx] = useState(0);
   const [answers, setAnswers] = useState<Partial<Record<StepKey, string>>>({});
@@ -109,15 +115,14 @@ export default function CoachScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
 
-  // 초기 인사 + 첫 질문
+  // 초기 인사 — 두 모드 중 하나를 고르도록 안내.
   useEffect(() => {
     setMessages([
       {
         id: 'bot-greet',
         role: 'bot',
-        text: '안녕하세요! 오늘 운동을 함께 만들어볼게요. 몇 가지 여쭤볼게요.',
+        text: '안녕하세요! 오늘 어떤 방식으로 운동하실래요?',
       },
-      { id: 'bot-q-0', role: 'bot', text: STEPS[0].question },
     ]);
   }, []);
 
@@ -128,7 +133,55 @@ export default function CoachScreen() {
   }, [messages, routine, isPending]);
 
   const currentStep: Step | null = stepIdx < STEPS.length ? STEPS[stepIdx] : null;
-  const isCollecting = currentStep !== null && !routine;
+  const isCollecting = mode === 'preset' && currentStep !== null && !routine;
+  const isModeSelect = mode === 'select';
+
+  function handleSelectMode(selected: 'preset' | 'custom' | 'dev') {
+    if (selected === 'preset') {
+      setMode('preset');
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-mode-${Date.now()}`, role: 'user', text: 'AI 추천 홈트 루틴' },
+        { id: 'bot-q-0', role: 'bot', text: STEPS[0].question },
+      ]);
+    } else if (selected === 'custom') {
+      setMode('custom');
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-mode-${Date.now()}`, role: 'user', text: '오늘 운동 커스텀' },
+        {
+          id: `bot-custom-stub-${Date.now()}`,
+          role: 'bot',
+          text: '곧 준비될 기능이에요! 지금은 "AI 추천 홈트 루틴"을 이용해주세요.',
+        },
+      ]);
+    } else {
+      // dev — 고정 루틴 즉시 호출, LLM 우회.
+      setMode('dev');
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-mode-${Date.now()}`, role: 'user', text: '개발용 (3운동 고정)' },
+        {
+          id: `bot-dev-${Date.now()}`,
+          role: 'bot',
+          text: '코브라 자세 → 플랭크 → 스쿼트 순으로 준비할게요.',
+        },
+      ]);
+      mutateDev(undefined, {
+        onSuccess: (r) => setRoutine(r),
+        onError: (e) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `bot-dev-err-${Date.now()}`,
+              role: 'bot',
+              text: e instanceof Error ? e.message : '개발용 루틴 생성 실패.',
+            },
+          ]);
+        },
+      });
+    }
+  }
 
   function callGenerate(allAnswers: Partial<Record<StepKey, string>>, easier: boolean) {
     const input = buildInput(allAnswers, easier);
@@ -261,6 +314,63 @@ export default function CoachScreen() {
             </View>
           ))}
 
+          {/* 모드 선택 — 진입 직후 1회 노출. 칩이 아닌 큰 카드 2장 세로 적층. */}
+          {isModeSelect && (
+            <View style={styles.modeCardCol}>
+              <Pressable
+                onPress={() => handleSelectMode('preset')}
+                style={({ pressed }) => [
+                  styles.modeCard,
+                  { borderColor: Palette.lineDefault, opacity: pressed ? 0.85 : 1 },
+                ]}>
+                <View style={[styles.modeIcon, { backgroundColor: Palette.primaryLight }]}>
+                  <Dumbbell color={Palette.primary} size={24} />
+                </View>
+                <View style={styles.modeText}>
+                  <ThemedText type="subtitle">AI 추천 홈트 루틴</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    내 상황에 맞는 루틴을 추천해드려요
+                  </ThemedText>
+                </View>
+              </Pressable>
+
+              <Pressable
+                onPress={() => handleSelectMode('custom')}
+                style={({ pressed }) => [
+                  styles.modeCard,
+                  { borderColor: Palette.lineDefault, opacity: pressed ? 0.85 : 1 },
+                ]}>
+                <View style={[styles.modeIcon, { backgroundColor: Palette.bgMuted }]}>
+                  <Sliders color={Palette.gray500} size={24} />
+                </View>
+                <View style={styles.modeText}>
+                  <ThemedText type="subtitle">오늘 운동 커스텀</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    운동을 직접 선택해서 만들어요
+                  </ThemedText>
+                </View>
+              </Pressable>
+
+              {/* ── dev: 영상 시범 테스트용. 제거 시 이 Pressable 블록만 삭제. ── */}
+              <Pressable
+                onPress={() => handleSelectMode('dev')}
+                style={({ pressed }) => [
+                  styles.modeCard,
+                  { borderColor: Palette.lineDefault, opacity: pressed ? 0.85 : 1 },
+                ]}>
+                <View style={[styles.modeIcon, { backgroundColor: Palette.bgMuted }]}>
+                  <Wrench color={Palette.gray500} size={24} />
+                </View>
+                <View style={styles.modeText}>
+                  <ThemedText type="subtitle">개발용 (3운동 고정)</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    코브라 → 플랭크 → 스쿼트, 영상 테스트 전용
+                  </ThemedText>
+                </View>
+              </Pressable>
+            </View>
+          )}
+
           {/* 현재 질문에 대한 옵션 — 봇 버블 바로 아래 인라인 노출. */}
           {isCollecting && currentStep && !isPending && (
             <View style={styles.inlineChipRow}>
@@ -285,7 +395,7 @@ export default function CoachScreen() {
           )}
 
           {/* 루틴 생성 중 인디케이터 */}
-          {isPending && (
+          {(isPending || isDevPending) && (
             <View style={[styles.bubbleRow, { justifyContent: 'flex-start' }]}>
               <View style={styles.avatar}>
                 <Sparkles color={Palette.white} size={16} />
@@ -297,7 +407,7 @@ export default function CoachScreen() {
           )}
 
           {/* 결과 카드 */}
-          {routine && !isPending && (
+          {routine && !isPending && !isDevPending && (
             <ThemedView
               type="backgroundElement"
               style={[
@@ -535,5 +645,30 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // 모드 선택 — 세로로 쌓인 큰 카드 2장.
+  modeCardCol: {
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  modeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: Palette.bgSurface,
+  },
+  modeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeText: {
+    flex: 1,
+    gap: Spacing.xs,
   },
 });

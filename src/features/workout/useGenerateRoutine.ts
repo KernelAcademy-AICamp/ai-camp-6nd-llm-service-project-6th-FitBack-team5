@@ -49,6 +49,8 @@ export interface RoutineExercise {
   repScripts: string[];
   /** TTS 톤 분기용. body_region 이 '스트레칭' 이면 명상 톤(stretch), 아니면 코치 톤(main). */
   isStretch: boolean;
+  /** Supabase Storage 의 시범 영상 URL. session.tsx 가 VideoView 로 재생. 영상 없으면 null. */
+  videoUrl: string | null;
 }
 
 export interface Routine {
@@ -186,6 +188,7 @@ function buildRoutineExercise(row: ExerciseRow, condMul: number): RoutineExercis
     halfwayEncouragement: row.halfway_encouragement,
     repScripts,
     isStretch: row.body_region === '스트레칭',
+    videoUrl: row.video_url,
   };
 }
 
@@ -235,4 +238,41 @@ async function generateRoutine(input: RoutineInput): Promise<Routine> {
 
 export function useGenerateRoutine() {
   return useMutation({ mutationFn: generateRoutine });
+}
+
+// ╔════════════════════════════════════════════════════════════
+// ║ 개발용 고정 루틴 — 영상(스쿼트·코브라·플랭크) 시범 테스트 전용.
+// ║ 제거 시 이 블록 + coach.tsx 의 'dev' 모드 옵션·핸들러를 같이 삭제.
+// ╚════════════════════════════════════════════════════════════
+
+const FIXED_DEV_NAMES = ['코브라 자세', '플랭크', '스쿼트'] as const;
+
+async function generateFixedDevRoutine(): Promise<Routine> {
+  const { data, error } = await supabase
+    .from('exercises')
+    .select('*')
+    .in('name', FIXED_DEV_NAMES);
+  if (error) throw error;
+  const rows = (data ?? []) as ExerciseRow[];
+  const byName = new Map(rows.map((r) => [r.name, r]));
+  const ordered = FIXED_DEV_NAMES.map((n) => byName.get(n)).filter(
+    (r): r is ExerciseRow => !!r,
+  );
+  if (ordered.length < FIXED_DEV_NAMES.length) {
+    throw new Error(
+      '개발용 운동 행이 부족해요. 마이그레이션 29·31 적용을 확인해주세요.',
+    );
+  }
+  const exercises = ordered.map((row) => buildRoutineExercise(row, 1.0));
+  return {
+    id: Crypto.randomUUID(),
+    title: '[개발용] 코브라·플랭크·스쿼트',
+    meta: '개발 테스트 · 고정 3운동',
+    intro: '시범 영상 테스트용 고정 루틴이에요. 🛠',
+    exercises,
+  };
+}
+
+export function useGenerateDevRoutine() {
+  return useMutation({ mutationFn: generateFixedDevRoutine });
 }

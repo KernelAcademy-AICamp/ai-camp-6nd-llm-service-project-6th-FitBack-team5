@@ -41,6 +41,7 @@ export interface ExerciseRow {
   final_reps: string[];
   time_scripts: string[];
   halfway_encouragement: string;
+  video_url: string | null;
 }
 
 /** LLM 입력용 압축 행 — 선택 판단에 필요한 최소 필드만. */
