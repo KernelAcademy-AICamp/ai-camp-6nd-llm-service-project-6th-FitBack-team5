@@ -10,6 +10,7 @@ import { Button, Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { formatNumber } from '@/features/membership/dashboard';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
+import { NumberWheelPicker } from '@/features/membership/NumberWheelPicker';
 import { getPosition } from '@/features/membership/location';
 import { recognizeText } from '@/features/membership/ocr';
 import { parseReceipt } from '@/features/membership/parseReceipt';
@@ -88,6 +89,8 @@ export function OnboardingFlow() {
   const [gender, setGender] = useState<'F' | 'M' | null>(null);
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
+  const [heightPickerOpen, setHeightPickerOpen] = useState(false);
+  const [weightPickerOpen, setWeightPickerOpen] = useState(false);
   // 회원권
   const [name, setName] = useState('');
   const [cost, setCost] = useState('');
@@ -270,29 +273,19 @@ export function OnboardingFlow() {
 
               <View style={styles.field}>
                 <ThemedText type="label" themeColor="textSecondary">키 (cm)</ThemedText>
-                <TextInput
-                  value={height}
-                  onChangeText={(t) => setHeight(t.replace(/[^0-9.]/g, ''))}
-                  onFocus={() => setFocused('h')}
-                  onBlur={() => setFocused(null)}
-                  keyboardType="numeric"
-                  placeholder="예: 168"
-                  placeholderTextColor={Palette.gray300}
-                  style={inputStyle('h')}
-                />
+                <Pressable onPress={() => setHeightPickerOpen(true)} style={styles.input}>
+                  <ThemedText type="body" themeColor={height ? 'text' : 'textSecondary'}>
+                    {height ? `${height} cm` : '예: 168'}
+                  </ThemedText>
+                </Pressable>
               </View>
               <View style={styles.field}>
                 <ThemedText type="label" themeColor="textSecondary">체중 (kg)</ThemedText>
-                <TextInput
-                  value={weight}
-                  onChangeText={(t) => setWeight(t.replace(/[^0-9.]/g, ''))}
-                  onFocus={() => setFocused('w')}
-                  onBlur={() => setFocused(null)}
-                  keyboardType="numeric"
-                  placeholder="예: 58"
-                  placeholderTextColor={Palette.gray300}
-                  style={inputStyle('w')}
-                />
+                <Pressable onPress={() => setWeightPickerOpen(true)} style={styles.input}>
+                  <ThemedText type="body" themeColor={weight ? 'text' : 'textSecondary'}>
+                    {weight ? `${weight} kg` : '예: 58'}
+                  </ThemedText>
+                </Pressable>
               </View>
             </>
           ) : null}
@@ -618,6 +611,34 @@ export function OnboardingFlow() {
           setPickerOpen(false);
         }}
         onCancel={() => setPickerOpen(false)}
+      />
+      {/* 키 휠 */}
+      <NumberWheelPicker
+        visible={heightPickerOpen}
+        value={height ? Number(height) : 165}
+        min={120}
+        max={220}
+        suffix=" cm"
+        title="키 선택"
+        onConfirm={(v) => {
+          setHeight(String(v));
+          setHeightPickerOpen(false);
+        }}
+        onCancel={() => setHeightPickerOpen(false)}
+      />
+      {/* 체중 휠 */}
+      <NumberWheelPicker
+        visible={weightPickerOpen}
+        value={weight ? Number(weight) : 60}
+        min={30}
+        max={200}
+        suffix=" kg"
+        title="체중 선택"
+        onConfirm={(v) => {
+          setWeight(String(v));
+          setWeightPickerOpen(false);
+        }}
+        onCancel={() => setWeightPickerOpen(false)}
       />
     </ThemedView>
   );
