@@ -91,11 +91,15 @@ export function DateWheelPicker({
   value,
   onConfirm,
   onCancel,
+  minYear = 2020,
+  maxYear = 2035,
 }: {
   visible: boolean;
   value: string; // 'YYYY-MM-DD'
   onConfirm: (date: string) => void;
   onCancel: () => void;
+  minYear?: number;
+  maxYear?: number;
 }) {
   const init = useMemo(() => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -116,7 +120,7 @@ export function DateWheelPicker({
     }
   }, [visible, init]);
 
-  const years = rangeArr(2020, 2035);
+  const years = rangeArr(minYear, maxYear);
   const months = rangeArr(1, 12);
   const maxDay = daysInMonth(year, month);
   const days = rangeArr(1, maxDay);
