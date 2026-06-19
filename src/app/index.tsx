@@ -126,7 +126,6 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="메뉴 열기">
               <Icon icon={Menu} size={22} color={Palette.gray700} />
-              <ThemedText type="h1">마이</ThemedText>
             </Pressable>
             <View style={styles.headerActions}>
               <Pressable
