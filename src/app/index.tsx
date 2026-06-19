@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { AlarmClock, Bell, Calendar, ChevronRight, LogOut, Menu, Ruler, Sparkles, TrendingUp, Weight, X } from 'lucide-react-native';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, ScrollView, useWindowDimensions, View } from 'react-native';
+import { useState } from 'react';
+import { Image, Modal, Pressable, StyleSheet, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CountUp } from '@/components/count-up';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card, Icon, ProgressBar } from '@/components/ui';
@@ -19,19 +20,19 @@ import {
 import { useProfile } from '@/features/auth/useProfile';
 import { CoachChat } from '@/features/coach/CoachChat';
 import { MonthCalendar } from '@/features/home/MonthCalendar';
+import { MembershipMiniList } from '@/features/home/MembershipMiniList';
+import { WorkoutStatusCard } from '@/features/home/WorkoutStatusCard';
+import { useSchedules } from '@/features/home/useSchedules';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
-import { MembershipStatsCard } from '@/features/membership/MembershipStatsCard';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 import {
   computeRisk,
   formatNumber,
-  sortByRisk,
   summarize,
-  type RiskInfo,
 } from '@/features/membership/dashboard';
 import { useCoach } from '@/features/membership/useCoach';
-import { daysUntil, useMemberships, type Membership } from '@/features/membership/useMemberships';
+import { daysUntil, useMemberships } from '@/features/membership/useMemberships';
 import { summarizePortfolio } from '@/features/membership/portfolio';
 import { buildPortfolioItems, todayGain } from '@/features/membership/PortfolioView';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
@@ -64,12 +65,6 @@ export default function HomeScreen() {
   const [showCoach, setShowCoach] = useState(false);
   const [showMyDrawer, setShowMyDrawer] = useState(false);
   const [showAlarm, setShowAlarm] = useState(false);
-  const { width: windowWidth } = useWindowDimensions();
-  const [activeCard, setActiveCard] = useState(0);
-  const [carouselWidth, setCarouselWidth] = useState(
-    Math.min(windowWidth, MaxContentWidth) - ScreenPadding * 2,
-  );
-  const carouselRef = useRef<ScrollView>(null);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -98,6 +93,13 @@ export default function HomeScreen() {
     .filter((m) => m.status === 'expiring')
     .sort((a, b) => daysUntil(a.endDate) - daysUntil(b.endDate));
   const bannerItem = expiring[0] ? withRisk.find((x) => x.m.id === expiring[0].id) ?? null : null;
+
+  // 오늘 예정된 일정(planned) — 알림에 노출 (#5 알림 연계)
+  const today = new Date();
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const { data: monthSchedules } = useSchedules(today.getFullYear(), today.getMonth() + 1);
+  const todayPlans = (monthSchedules ?? []).filter((s) => s.date === todayYmd && s.status === 'planned');
+  const hasAlarm = expiring.length > 0 || todayPlans.length > 0;
 
   // AI 코치 훅 (말풍선용)
   const coach = useCoach({ withRisk, summary, monthly: stats, pattern: visitPattern });
@@ -131,8 +133,8 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="알림">
                 <View>
-                  <Icon icon={Bell} size={22} color={expiring.length > 0 ? Palette.gray700 : Palette.gray300} />
-                  {expiring.length > 0 ? <View style={styles.alarmDot} /> : null}
+                  <Icon icon={Bell} size={22} color={hasAlarm ? Palette.gray700 : Palette.gray300} />
+                  {hasAlarm ? <View style={styles.alarmDot} /> : null}
                 </View>
               </Pressable>
             </View>
@@ -155,32 +157,9 @@ export default function HomeScreen() {
             </Pressable>
           ) : null}
 
-          {/* ── AI 코치 말풍선 ── */}
+          {/* ── ① 내 운동 상태 카드 (분석 비주얼 + 코치 통합) ── */}
           {list.length > 0 ? (
-            <Pressable
-              onPress={() => setShowCoach(true)}
-              style={({ pressed }) => [styles.bubble, pressed && styles.pressed]}
-              accessibilityRole="button">
-              {coach.isLoading ? (
-                <View style={styles.bubbleLoading}>
-                  <ActivityIndicator size="small" color={Palette.white} />
-                  <ThemedText type="caption" style={{ color: Palette.white }}>
-                    코치가 분석 중이에요…
-                  </ThemedText>
-                </View>
-              ) : coach.data ? (
-                <ThemedText type="caption" style={{ color: Palette.white }} numberOfLines={3}>
-                  {coach.data.headline}
-                  {coach.data.insight ? `\n${coach.data.insight}` : ''}
-                </ThemedText>
-              ) : (
-                <ThemedText type="caption" style={{ color: Palette.white }}>
-                  {name}님, 오늘도 파이팅!
-                </ThemedText>
-              )}
-              {/* 말풍선 꼬리 (하단 오른쪽) */}
-              <View style={styles.bubbleTail} />
-            </Pressable>
+            <WorkoutStatusCard coach={coach} name={name} onOpenCoach={() => setShowCoach(true)} />
           ) : null}
 
           {/* ── 메인 ROI 카드 ── */}
@@ -201,9 +180,7 @@ export default function HomeScreen() {
                       </ThemedText>
                     </View>
                   ) : null}
-                  <ThemedText type="display" style={styles.mainAmount}>
-                    {formatNumber(recovered)}원
-                  </ThemedText>
+                  <CountUp value={recovered} format={formatNumber} suffix="원" type="display" style={styles.mainAmount} />
                 </View>
               </View>
 
@@ -262,12 +239,16 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           ) : !isLoading ? (
-            /* 회원권 없을 때 */
+            /* 회원권 없을 때 — 빈 상태 */
             <Pressable
               onPress={() => router.navigate('/membership')}
               style={[styles.mainCard, Elevation.level1, styles.emptyCard]}>
-              <ThemedText type="body" themeColor="textSecondary" style={{ textAlign: 'center' }}>
-                회원권을 등록하면 활용도를 분석해드려요.
+              <Icon icon={TrendingUp} size={28} color={Palette.primary} />
+              <ThemedText type="subtitle" style={{ textAlign: 'center' }}>
+                아직 등록된 회원권이 없어요
+              </ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={{ textAlign: 'center' }}>
+                회원권을 등록하면 본전 회수율을 분석하고{'\n'}오늘 얼마를 되찾는지 보여드려요.
               </ThemedText>
               <View style={styles.utilBtn}>
                 <ThemedText type="subtitle" style={styles.utilBtnText}>
@@ -277,52 +258,13 @@ export default function HomeScreen() {
             </Pressable>
           ) : null}
 
-          {/* ── 등록된 회원권 캐러셀 ── */}
+          {/* ── ② 회원권 상태 — 개수 헤더 + 부피 줄인 미니 리스트 ── */}
           {list.length > 0 ? (
-            <View style={styles.section}>
-              <View style={styles.sectionHead}>
-                <ThemedText type="captionBold">등록된 회원권</ThemedText>
-                <Pressable
-                  onPress={() => router.navigate('/membership')}
-                  style={({ pressed }) => [styles.seeAll, pressed && styles.pressed]}
-                  accessibilityRole="button">
-                  <ThemedText type="label" style={{ color: Palette.gray500 }}>
-                    전체보기
-                  </ThemedText>
-                  <Icon icon={ChevronRight} size={14} color={Palette.gray500} />
-                </Pressable>
-              </View>
-              <ScrollView
-                ref={carouselRef}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                scrollEventThrottle={16}
-                onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}
-                onScroll={(e) => {
-                  if (carouselWidth > 0) {
-                    setActiveCard(Math.round(e.nativeEvent.contentOffset.x / carouselWidth));
-                  }
-                }}>
-                {sortByRisk(withRisk, (x) => x.risk).map(({ m, risk, visits }) => (
-                  <View key={m.id} style={{ width: carouselWidth }}>
-                    <MembershipStatsCard
-                      m={m}
-                      risk={risk}
-                      monthlyVisits={visits}
-                      onPress={() => router.navigate('/membership')}
-                    />
-                  </View>
-                ))}
-              </ScrollView>
-              {withRisk.length > 1 ? (
-                <View style={styles.dots}>
-                  {withRisk.map((_, i) => (
-                    <View key={i} style={[styles.dot, i === activeCard && styles.dotActive]} />
-                  ))}
-                </View>
-              ) : null}
-            </View>
+            <MembershipMiniList
+              items={items}
+              onSeeAll={() => router.navigate('/membership')}
+              onPressItem={() => router.navigate('/membership')}
+            />
           ) : null}
         </ScrollView>
       </SafeAreaView>
@@ -355,21 +297,31 @@ export default function HomeScreen() {
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={styles.alarmBody}>
-              {expiring.length === 0 ? (
+              {!hasAlarm ? (
                 <ThemedText type="caption" themeColor="textSecondary">
                   새로운 알림이 없어요.
                 </ThemedText>
               ) : (
-                expiring.map((m) => (
-                  <Card key={m.id} accentColor={Palette.warning}>
-                    <View style={styles.alarmItem}>
-                      <Icon icon={AlarmClock} size={16} color={Palette.warning} />
-                      <ThemedText type="caption">
-                        {m.name} · 만료 D-{Math.max(0, daysUntil(m.endDate))}
-                      </ThemedText>
-                    </View>
-                  </Card>
-                ))
+                <>
+                  {todayPlans.map((s) => (
+                    <Card key={s.id} accentColor={Palette.primary}>
+                      <View style={styles.alarmItem}>
+                        <Icon icon={Calendar} size={16} color={Palette.primary} />
+                        <ThemedText type="caption">오늘 예정 · {s.title}</ThemedText>
+                      </View>
+                    </Card>
+                  ))}
+                  {expiring.map((m) => (
+                    <Card key={m.id} accentColor={Palette.warning}>
+                      <View style={styles.alarmItem}>
+                        <Icon icon={AlarmClock} size={16} color={Palette.warning} />
+                        <ThemedText type="caption">
+                          {m.name} · 만료 D-{Math.max(0, daysUntil(m.endDate))}
+                        </ThemedText>
+                      </View>
+                    </Card>
+                  ))}
+                </>
               )}
             </ScrollView>
           </SafeAreaView>
