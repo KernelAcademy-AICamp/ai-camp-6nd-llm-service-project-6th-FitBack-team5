@@ -3,14 +3,11 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Dumbbell,
   Flame,
-  MapPin,
   Plus,
   ShieldCheck,
   Target,
   Trash2,
-  Utensils,
   X,
 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
@@ -36,21 +33,31 @@ import {
   type ScheduleType,
 } from '@/features/home/useSchedules';
 
-const CAT = [
-  { key: 'visited', label: '방문', color: Palette.primary },
-  { key: 'workout', label: '운동', color: Palette.profit },
-  { key: 'diet', label: '식단', color: Palette.warning },
-] as const;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-// 일정 타입 메타 (색·아이콘·라벨)
-const PLAN_TYPES: { value: ScheduleType; label: string; color: string }[] = [
-  { value: 'workout', label: '운동', color: Palette.profit },
-  { value: 'diet', label: '식단', color: Palette.warning },
-  { value: 'visit', label: '방문', color: Palette.primary },
-  { value: 'custom', label: '기타', color: Palette.gray500 },
+// 타입 메타 — 기록·일정 공통(동일 색/순서). ScheduleType과 키 동일.
+// 색은 디자인 토큰. 목업의 방문 파랑(#4B8DF8)은 토큰 부재로 success(초록)로 대체.
+type FilterKey = ScheduleType; // 'workout' | 'diet' | 'visit' | 'custom'
+const TYPE_META: { key: FilterKey; label: string; color: string }[] = [
+  { key: 'workout', label: '운동', color: Palette.primary },
+  { key: 'diet', label: '식단', color: Palette.warning },
+  { key: 'visit', label: '방문', color: Palette.success },
+  { key: 'custom', label: '기타', color: Palette.gray400 },
 ];
-const planColor = (t: ScheduleType) => PLAN_TYPES.find((p) => p.value === t)?.color ?? Palette.gray500;
+const typeColor = (k: FilterKey) => TYPE_META.find((t) => t.key === k)?.color ?? Palette.gray400;
+const typeLabel = (k: FilterKey) => TYPE_META.find((t) => t.key === k)?.label ?? '기타';
+
+/** 타입 태그 칩 (기록·일정 항목 앞에 부착). */
+function TagChip({ k }: { k: FilterKey }) {
+  const color = typeColor(k);
+  return (
+    <View style={[styles.tagChip, { backgroundColor: `${color}1A` }]}>
+      <ThemedText type="label" style={{ color }}>
+        {typeLabel(k)}
+      </ThemedText>
+    </View>
+  );
+}
 
 function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -111,20 +118,20 @@ function DayRecordList({ date, onNavigate }: { date: string; onNavigate: () => v
         </ThemedText>
       ) : empty ? (
         <ThemedText type="label" themeColor="textSecondary">
-          이 날은 기록이 없어요.
+          이 날은 기록이 없어요 · 방문하면 자동으로 채워져요
         </ThemedText>
       ) : (
         <View style={styles.recList}>
           {data.visits.map((v) => (
             <View key={v.id} style={styles.recRow}>
-              <Icon icon={MapPin} size={15} color={Palette.primary} />
-              <ThemedText type="caption" style={styles.recText}>
-                방문 · {v.centerName ?? '센터'} {v.time}
+              <TagChip k="visit" />
+              <ThemedText type="caption" style={styles.recText} numberOfLines={1}>
+                {v.centerName ?? '센터'}
               </ThemedText>
               {v.verifyStatus === 'verified' ? (
                 <View style={styles.verifyTag}>
-                  <Icon icon={ShieldCheck} size={12} color={Palette.profit} />
-                  <ThemedText type="label" style={{ color: Palette.profit }}>
+                  <Icon icon={ShieldCheck} size={12} color={Palette.success} />
+                  <ThemedText type="label" style={{ color: Palette.success }}>
                     검증
                   </ThemedText>
                 </View>
@@ -133,13 +140,16 @@ function DayRecordList({ date, onNavigate }: { date: string; onNavigate: () => v
                   자기신고
                 </ThemedText>
               ) : null}
+              <ThemedText type="label" themeColor="textSecondary">
+                {v.time}
+              </ThemedText>
             </View>
           ))}
           {data.workouts.map((w) => (
             <View key={w.id} style={styles.recRow}>
-              <Icon icon={Dumbbell} size={15} color={Palette.profit} />
-              <ThemedText type="caption" style={styles.recText}>
-                운동 · {w.label}
+              <TagChip k="workout" />
+              <ThemedText type="caption" style={styles.recText} numberOfLines={1}>
+                {w.label}
                 {w.durationMin != null ? ` ${w.durationMin}분` : ''}
               </ThemedText>
             </View>
@@ -150,9 +160,9 @@ function DayRecordList({ date, onNavigate }: { date: string; onNavigate: () => v
               onPress={openDiet}
               style={({ pressed }) => [styles.recRow, pressed && styles.pressed]}
               accessibilityRole="button">
-              <Icon icon={Utensils} size={15} color={Palette.warning} />
-              <ThemedText type="caption" style={styles.recText}>
-                식단 · {m.mealType} · 단백질 {m.protein}g
+              <TagChip k="diet" />
+              <ThemedText type="caption" style={styles.recText} numberOfLines={1}>
+                {m.mealType} · 단백질 {m.protein}g
               </ThemedText>
               <Icon icon={ChevronRight} size={16} color={Palette.gray300} />
             </Pressable>
@@ -198,10 +208,10 @@ function ScheduleSection({ date, items }: { date: string; items: Schedule[] }) {
                   hitSlop={6}
                   accessibilityRole="button"
                   accessibilityLabel={done ? '완료 해제' : '완료'}
-                  style={[styles.checkBox, done && { backgroundColor: planColor(s.type), borderColor: planColor(s.type) }]}>
+                  style={[styles.checkBox, done && { backgroundColor: typeColor(s.type), borderColor: typeColor(s.type) }]}>
                   {done ? <Icon icon={Check} size={12} color={Palette.white} /> : null}
                 </Pressable>
-                <View style={[styles.dot, { backgroundColor: planColor(s.type) }]} />
+                <TagChip k={s.type} />
                 <ThemedText
                   type="caption"
                   style={[styles.recText, done && styles.planDone]}
@@ -220,12 +230,12 @@ function ScheduleSection({ date, items }: { date: string; items: Schedule[] }) {
 
       {/* 추가 폼 */}
       <View style={styles.addType}>
-        {PLAN_TYPES.map((p) => {
-          const on = type === p.value;
+        {TYPE_META.map((p) => {
+          const on = type === p.key;
           return (
             <Pressable
-              key={p.value}
-              onPress={() => setType(p.value)}
+              key={p.key}
+              onPress={() => setType(p.key)}
               style={[styles.typeChip, on && { backgroundColor: `${p.color}1A`, borderColor: p.color }]}>
               <ThemedText type="label" style={{ color: on ? p.color : Palette.gray500 }}>
                 {p.label}
@@ -264,6 +274,24 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
   const [month, setMonth] = useState(now.getMonth() + 1); // 1~12
   const [selectedDate, setSelectedDate] = useState<string | null>(ymdLocal(now));
   const [view, setView] = useState<'records' | 'plans'>('records');
+  const [filters, setFilters] = useState<Set<FilterKey>>(new Set(['workout', 'diet', 'visit', 'custom']));
+
+  // 탭 전환 시 선택 일자를 오늘로 리셋(명세 §6)
+  function switchView(v: 'records' | 'plans') {
+    setView(v);
+    const t = new Date();
+    setYear(t.getFullYear());
+    setMonth(t.getMonth() + 1);
+    setSelectedDate(ymdLocal(t));
+  }
+  function toggleFilter(k: FilterKey) {
+    setFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }
 
   const { data, isLoading } = useCalendarMonth(year, month);
   const { data: home } = useHomeActivity();
@@ -301,23 +329,32 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
 
   const leadPad = new Date(year, month - 1, 1).getDay();
   const streak = home?.streakWeeks ?? 0;
+  const maxStreak = home?.maxStreakWeeks ?? 0;
+  const freezeLeft = home?.streakFreezeAvailable ?? true;
   const weekVisits = home?.weekVisits ?? 0;
   const planList = schedules ?? [];
 
-  // 날짜별 일정 점 색
-  const planDotsByDate: Record<string, string[]> = {};
+  // 날짜별 일정 타입 집합
+  const planTypesByDate: Record<string, Set<FilterKey>> = {};
   for (const s of planList) {
-    (planDotsByDate[s.date] ??= []).push(planColor(s.type));
+    (planTypesByDate[s.date] ??= new Set()).add(s.type);
   }
   const daySchedules = selectedDate ? planList.filter((s) => s.date === selectedDate) : [];
 
+  // 캘린더 점 — 필터 적용(꺼진 타입은 숨김)
   function dotsFor(d: { date: string; visited: boolean; workout: boolean; diet: boolean }): string[] {
-    if (view === 'plans') return (planDotsByDate[d.date] ?? []).slice(0, 3);
-    const out: string[] = [];
-    if (d.visited) out.push(Palette.primary);
-    if (d.workout) out.push(Palette.profit);
-    if (d.diet) out.push(Palette.warning);
-    return out;
+    let keys: FilterKey[];
+    if (view === 'plans') {
+      keys = [...(planTypesByDate[d.date] ?? new Set<FilterKey>())];
+    } else {
+      keys = [];
+      if (d.visited) keys.push('visit');
+      if (d.workout) keys.push('workout');
+      if (d.diet) keys.push('diet');
+    }
+    return TYPE_META.filter((t) => keys.includes(t.key) && filters.has(t.key))
+      .map((t) => t.color)
+      .slice(0, 4);
   }
 
   return (
@@ -334,7 +371,7 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
         {(['records', 'plans'] as const).map((v) => {
           const on = view === v;
           return (
-            <Pressable key={v} onPress={() => setView(v)} style={[styles.segBtn, on && styles.segBtnOn]} accessibilityRole="button">
+            <Pressable key={v} onPress={() => switchView(v)} style={[styles.segBtn, on && styles.segBtnOn]} accessibilityRole="button">
               <ThemedText type={on ? 'captionBold' : 'caption'} style={on ? { color: Palette.primary } : undefined}>
                 {v === 'records' ? '기록' : '일정'}
               </ThemedText>
@@ -386,15 +423,24 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
             </View>
           )}
 
+          {/* 태그 필터 칩 (끄면 해당 타입 점 숨김) */}
           <View style={styles.legend}>
-            {(view === 'records' ? CAT : PLAN_TYPES).map((c) => (
-              <View key={c.label} style={styles.legendItem}>
-                <View style={[styles.dot, { backgroundColor: c.color }]} />
-                <ThemedText type="label" themeColor="textSecondary">
-                  {c.label}
-                </ThemedText>
-              </View>
-            ))}
+            {TYPE_META.map((c) => {
+              const on = filters.has(c.key);
+              return (
+                <Pressable
+                  key={c.key}
+                  onPress={() => toggleFilter(c.key)}
+                  style={[styles.filterChip, on ? { borderColor: c.color } : styles.filterChipOff]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}>
+                  <View style={[styles.dot, { backgroundColor: c.color }]} />
+                  <ThemedText type="label" style={{ color: on ? c.color : Palette.gray400 }}>
+                    {c.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </View>
         </Card>
 
@@ -419,10 +465,13 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
                 <View style={styles.statLabelRow}>
                   <Icon icon={Flame} size={13} color={Palette.warning} />
                   <ThemedText type="label" themeColor="textSecondary">
-                    연속
+                    연속 (주)
                   </ThemedText>
                 </View>
                 <ThemedText type="h2">{streak}주</ThemedText>
+                <ThemedText type="label" themeColor="textSecondary">
+                  최고 {maxStreak}주{freezeLeft ? ' · 프리즈 1회 남음' : ' · 프리즈 사용함'}
+                </ThemedText>
               </Card>
             </View>
 
@@ -449,6 +498,12 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
                   </ThemedText>
                 </View>
               </View>
+              {/* 회복 동선 — 스트릭이 끊겼지만 기록이 있을 때 부드러운 재시작(하드 리셋 금지) */}
+              {streak === 0 && maxStreak > 0 ? (
+                <ThemedText type="label" themeColor="textSecondary" style={styles.restartNote}>
+                  최고 {maxStreak}주 기록이 있어요 · 이번 주 {recommendedWeekly}회로 다시 이어가볼까요?
+                </ThemedText>
+              ) : null}
             </Card>
           </>
         ) : null}
@@ -495,14 +550,26 @@ const styles = StyleSheet.create({
   dayNum: { fontSize: 11 },
   dots: { flexDirection: 'row', gap: 2, height: 6, alignItems: 'center' },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  legend: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginTop: Spacing.md, flexWrap: 'wrap' },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legend: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: Spacing.md, flexWrap: 'wrap' },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: Palette.lineDefault,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+  },
+  filterChipOff: { opacity: 0.4 },
+  tagChip: { borderRadius: Radius.small, paddingHorizontal: Spacing.sm, paddingVertical: 2 },
   statRow: { flexDirection: 'row', gap: Spacing.md },
   statCard: { flex: 1, gap: 4 },
   statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   paceRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   paceText: { flex: 1, gap: 2 },
   paceRight: { alignItems: 'flex-end', gap: 2 },
+  restartNote: { marginTop: Spacing.sm },
   recHead: { marginBottom: Spacing.sm },
   recList: { gap: Spacing.sm },
   recRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },

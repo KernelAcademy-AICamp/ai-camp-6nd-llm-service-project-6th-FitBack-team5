@@ -25,13 +25,17 @@ export interface HomeActivity {
   lastWeekVisits: number; // 지난주 방문 일수 (증감 비교용)
   weekWorkouts: number; // 이번 주(월~) 완료/부분 운동 수
   lastRoutine: string | null;
-  streakWeeks: number; // 현재 주부터 연속 활동 주
+  streakWeeks: number; // 현재 연속 주(주 단위, 프리즈 1회 보호 포함)
+  maxStreakWeeks: number; // 최고 연속 주(하드 리셋 방지용 병행 표시)
+  streakFreezeAvailable: boolean; // 스트릭 프리즈 잔여(이번 스트릭에서 미사용 여부)
 }
 
 // 권장 페이스(가이드 상수) — 실제 데이터가 아니라 제품 권장값.
 // TODO[검토]: 회원권 페이스(remaining/주수) 기반으로 개인화할지.
 export const RECOMMENDED_WEEKLY_VISITS = 2;
 export const RECOMMEND_PACE_TEXT = '일주일에 2~3회 방문이 가장 좋아요';
+// 스트릭 충족 기준(주당 방문 횟수). 추천안 A(주 단위).
+export const STREAK_GOAL = 2;
 
 function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -127,19 +131,53 @@ export function useHomeActivity() {
         if (visited.has(ymdLocal(new Date(lastWkStart + i * 86_400_000)))) lastWeekVisits += 1;
       }
 
-      // 연속 주 (현재 주부터, 활동 있는 주만)
-      const allDates = new Set<string>([...visited, ...workout, ...diet]);
-      const allMs = [...allDates].map((ds) => new Date(`${ds}T00:00:00`).getTime());
-      let streakWeeks = 0;
+      // 주 단위 스트릭 (추천안 A) — 권장 페이스(주 STREAK_GOAL회) 충족 주가 연속되면 +1.
+      // 최근 8주 주별 방문 일수.
+      const visitedMs = [...visited].map((ds) => new Date(`${ds}T00:00:00`).getTime());
+      const weekCounts: number[] = []; // w=0 현재 주
       for (let w = 0; w < 8; w++) {
         const ws = wkStart - w * 7 * 86_400_000;
         const we = ws + 7 * 86_400_000;
-        const has = allMs.some((t) => t >= ws && t < we);
-        if (has) streakWeeks += 1;
+        weekCounts.push(visitedMs.filter((t) => t >= ws && t < we).length);
+      }
+      const met = (c: number) => c >= STREAK_GOAL;
+
+      // 현재 스트릭: 진행 중인 이번 주는 미충족이어도 끊지 않음(아직 진행 중).
+      // 과거 한 주 미충족은 프리즈 1회로 보호.
+      let streakWeeks = 0;
+      let freezeUsed = false;
+      const startW = met(weekCounts[0]) ? 0 : 1;
+      for (let w = startW; w < weekCounts.length; w++) {
+        if (met(weekCounts[w])) streakWeeks += 1;
+        else if (!freezeUsed && streakWeeks > 0) freezeUsed = true; // 프리즈로 보호, 끊지 않음
         else break;
       }
+      const streakFreezeAvailable = !freezeUsed;
 
-      return { year, month, days, weekDays, weekVisits, lastWeekVisits, weekWorkouts, lastRoutine, streakWeeks };
+      // 최고 연속(주) — 8주 창에서 가장 긴 충족 연속.
+      let maxStreakWeeks = 0;
+      let run = 0;
+      for (const c of weekCounts) {
+        if (met(c)) {
+          run += 1;
+          if (run > maxStreakWeeks) maxStreakWeeks = run;
+        } else run = 0;
+      }
+      maxStreakWeeks = Math.max(maxStreakWeeks, streakWeeks);
+
+      return {
+        year,
+        month,
+        days,
+        weekDays,
+        weekVisits,
+        lastWeekVisits,
+        weekWorkouts,
+        lastRoutine,
+        streakWeeks,
+        maxStreakWeeks,
+        streakFreezeAvailable,
+      };
     },
   });
 }
