@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 
-import { Check } from 'lucide-react-native';
+import { Check, ChevronLeft } from 'lucide-react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui';
@@ -21,10 +21,10 @@ import { supabase } from '@/lib/supabase';
 const TEST_EMAIL = process.env.EXPO_PUBLIC_DEV_TEST_EMAIL ?? '';
 const TEST_PASSWORD = process.env.EXPO_PUBLIC_DEV_TEST_PASSWORD ?? '';
 
-type Mode = 'login' | 'signup';
+type Mode = 'landing' | 'login' | 'signup';
 
 export function LoginScreen() {
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode] = useState<Mode>('landing');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -87,14 +87,55 @@ export function LoginScreen() {
     setInfoMessage(null);
   }
 
+  // 첫 진입 — 헤드라인 + 시작/로그인 두 갈래
+  if (mode === 'landing') {
+    return (
+      <View style={styles.landingRoot}>
+        <View style={styles.landingTop}>
+          <ThemedText type="display" style={styles.hero}>
+            운동만 하세요,{'\n'}회원권은 FitBack이 챙길게요
+          </ThemedText>
+          <ThemedText type="caption" themeColor="textSecondary" style={styles.landingSub}>
+            회원권 활용도를 분석하고, 다음 행동을 제안해요.
+          </ThemedText>
+        </View>
+        <View style={styles.landingFooter}>
+          <Pressable
+            onPress={() => {
+              setMode('signup');
+              setErrorMessage(null);
+              setInfoMessage(null);
+            }}
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
+            <ThemedText type="subtitle" style={styles.buttonLabel}>
+              이메일로 시작하기
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setMode('login');
+              setErrorMessage(null);
+              setInfoMessage(null);
+            }}
+            style={({ pressed }) => [styles.buttonSecondary, pressed && styles.pressed]}>
+            <ThemedText type="subtitle" style={styles.buttonSecondaryLabel}>
+              기존 계정으로 로그인하기
+            </ThemedText>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ThemedText type="display" style={styles.hero}>
-        운동만 하세요,{'\n'}회원권은 FitBack이 챙길게요
-      </ThemedText>
       <View style={styles.card}>
+        <Pressable onPress={() => setMode('landing')} style={styles.backRow} hitSlop={6}>
+          <Icon icon={ChevronLeft} size={16} color={Palette.gray500} />
+          <ThemedText type="caption" themeColor="textSecondary">처음으로</ThemedText>
+        </Pressable>
         <ThemedText type="h1">{isSignup ? 'FitBack 회원가입' : 'FitBack 로그인'}</ThemedText>
         <ThemedText type="caption" themeColor="textSecondary" style={styles.subtitle}>
           {isSignup
@@ -275,6 +316,21 @@ const styles = StyleSheet.create({
     padding: ScreenPadding,
     backgroundColor: Palette.bgBase,
   },
+  landingRoot: { flex: 1, backgroundColor: Palette.bgBase, padding: ScreenPadding },
+  landingTop: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  landingSub: { textAlign: 'center', marginTop: Spacing.sm },
+  landingFooter: { gap: Spacing.sm, paddingBottom: Spacing.md, width: '100%', maxWidth: 400, alignSelf: 'center' },
+  buttonSecondary: {
+    backgroundColor: Palette.gray100,
+    borderRadius: Radius.button,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  buttonSecondaryLabel: { color: Palette.gray900 },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: Spacing.xs },
+  pressed: { opacity: 0.7 },
   hero: { width: '100%', maxWidth: 400, textAlign: 'center', marginBottom: Spacing.lg, lineHeight: 40 },
   card: {
     width: '100%',
