@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CountUp } from '@/components/count-up';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card, Icon, ProgressBar } from '@/components/ui';
@@ -179,9 +180,7 @@ export default function HomeScreen() {
                       </ThemedText>
                     </View>
                   ) : null}
-                  <ThemedText type="display" style={styles.mainAmount}>
-                    {formatNumber(recovered)}원
-                  </ThemedText>
+                  <CountUp value={recovered} format={formatNumber} suffix="원" type="display" style={styles.mainAmount} />
                 </View>
               </View>
 

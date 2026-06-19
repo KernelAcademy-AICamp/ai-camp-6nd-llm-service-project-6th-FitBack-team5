@@ -1,13 +1,27 @@
 import { ChevronRight, Flame, Sparkles } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
+import { CountUp } from '@/components/count-up';
 import { ThemedText } from '@/components/themed-text';
 import { Card, Icon, ProgressBar } from '@/components/ui';
 import { Palette, Radius, Spacing } from '@/constants/theme';
 import { RECOMMENDED_WEEKLY_VISITS, useHomeActivity } from '@/features/home/useHomeActivity';
 import { useMemberships } from '@/features/membership/useMemberships';
+import { useVisitPattern } from '@/features/membership/useVisitPattern';
 
 const WD = ['월', '화', '수', '목', '금', '토', '일'];
+const WEEKDAY_LABEL = ['일', '월', '화', '수', '목', '금', '토'];
+const BUCKET_LABEL = { morning: '아침', afternoon: '오후', evening: '저녁', night: '밤' } as const;
+
+/** 최근 방문 패턴 1줄 요약(최다 요일 + 시간대). 데이터 없으면 null. */
+function patternInsight(p?: { total: number; byWeekday: number[]; byTimeBucket: Record<string, number> }): string | null {
+  if (!p || p.total === 0) return null;
+  let topW = 0;
+  for (let i = 1; i < p.byWeekday.length; i++) if (p.byWeekday[i] > p.byWeekday[topW]) topW = i;
+  const buckets = Object.entries(p.byTimeBucket).sort((a, b) => b[1] - a[1]);
+  const topB = buckets[0] && buckets[0][1] > 0 ? BUCKET_LABEL[buckets[0][0] as keyof typeof BUCKET_LABEL] : null;
+  return `주로 ${WEEKDAY_LABEL[topW]}요일${topB ? ` ${topB}` : ''}에 운동해요`;
+}
 
 type CoachLike = { isLoading: boolean; data?: { headline: string } | null };
 
@@ -23,10 +37,12 @@ export function WorkoutStatusCard({
 }) {
   const { data: home } = useHomeActivity();
   const { data: memberships } = useMemberships();
+  const { data: pattern } = useVisitPattern();
 
   const weekDays = home?.weekDays ?? [];
   const weekVisits = home?.weekVisits ?? 0;
   const streak = home?.streakWeeks ?? 0;
+  const insight = patternInsight(pattern);
 
   // 이번 주 목표(개인화): 활성 기간권 주당 목표 최댓값, 없으면 기본값
   const goal = (memberships ?? [])
@@ -41,9 +57,12 @@ export function WorkoutStatusCard({
         <ThemedText type="captionBold">내 운동 상태</ThemedText>
         <View style={styles.streak}>
           <Icon icon={Flame} size={14} color={streak > 0 ? Palette.warning : Palette.gray300} />
-          <ThemedText type="captionBold" style={{ color: streak > 0 ? Palette.warning : Palette.gray500 }}>
-            {streak}주 연속
-          </ThemedText>
+          <CountUp
+            value={streak}
+            suffix="주 연속"
+            type="captionBold"
+            style={{ color: streak > 0 ? Palette.warning : Palette.gray500 }}
+          />
         </View>
       </View>
 
@@ -65,15 +84,20 @@ export function WorkoutStatusCard({
         })}
       </View>
 
+      {/* 패턴 인사이트 1줄 (분석되는 느낌) */}
+      {insight ? (
+        <ThemedText type="label" themeColor="textSecondary" style={styles.insight}>
+          {insight}
+        </ThemedText>
+      ) : null}
+
       {/* 이번 주 목표 게이지 */}
       <View style={styles.goalRow}>
         <View style={styles.goalBar}>
           <ProgressBar ratio={ratio} color={Palette.primary} height={8} label={`이번 주 ${weekVisits} / ${target}회`} />
         </View>
         <ThemedText type="captionBold">
-          <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-            {weekVisits}
-          </ThemedText>{' '}
+          <CountUp value={weekVisits} type="captionBold" style={{ color: Palette.primary }} />{' '}
           / {target}회
         </ThemedText>
       </View>
@@ -112,6 +136,7 @@ const styles = StyleSheet.create({
   bar: { width: 12, height: 32, borderRadius: Radius.small, backgroundColor: Palette.gray100 },
   barActive: { backgroundColor: Palette.primary },
   barToday: { borderWidth: 1.5, borderColor: Palette.primary },
+  insight: { textAlign: 'center' },
   goalRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   goalBar: { flex: 1 },
   coach: {
