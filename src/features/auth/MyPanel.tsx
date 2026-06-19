@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, ChevronLeft, ChevronRight, LogOut, Ruler, Settings, Sparkles, Target, Trash2, User, Weight, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -102,13 +102,15 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
     await setNotifySettings(uid, patch);
   }
 
-  function confirmWithdraw() {
-    const ok =
-      Platform.OS === 'web'
-        ? window.confirm('회원 데이터를 삭제할까요? 회원권·기록이 모두 사라지고 처음부터 다시 시작해요. (계정은 유지)')
-        : true;
-    if (!ok) return;
-    del.mutate(undefined, { onSuccess: onClose });
+  // 탈퇴 3단계: 붙잡기 → 경고 → 작별 → 로그아웃(랜딩으로)
+  const [withdrawStep, setWithdrawStep] = useState<'idle' | 'retention' | 'warning' | 'farewell'>('idle');
+
+  function runWithdraw() {
+    del.mutate(undefined, { onSuccess: () => setWithdrawStep('farewell') });
+  }
+  function finishWithdraw() {
+    setWithdrawStep('idle');
+    supabase.auth.signOut(); // 메인 로그인 전(랜딩) 화면으로 강제 이동
   }
 
   const name = profile?.display_name || '회원';
@@ -255,7 +257,7 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
                 <ThemedText type="caption" themeColor="textSecondary">로그아웃</ThemedText>
               </Pressable>
               <Pressable
-                onPress={confirmWithdraw}
+                onPress={() => setWithdrawStep('retention')}
                 disabled={del.isPending}
                 style={({ pressed }) => [styles.withdrawBtn, pressed && styles.pressed]}
                 accessibilityRole="button">
@@ -296,6 +298,62 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
           ) : null}
         </ScrollView>
       </SafeAreaView>
+
+      {/* 탈퇴 1) 붙잡기 */}
+      <Modal visible={withdrawStep === 'retention'} transparent animationType="fade" onRequestClose={() => setWithdrawStep('idle')}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <ThemedText type="h2">정말 탈퇴하시겠어요?</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.dialogText}>
+              그동안 쌓인 회원권·운동 기록이 모두 사라져요. 잠깐 쉬어가도 괜찮아요.
+            </ThemedText>
+            <Pressable onPress={() => setWithdrawStep('idle')} style={[styles.dialogBtn, styles.dialogPrimary]}>
+              <ThemedText type="subtitle" style={{ color: Palette.white }}>더 써볼게요</ThemedText>
+            </Pressable>
+            <Pressable onPress={() => setWithdrawStep('warning')} style={styles.dialogGhost} hitSlop={6}>
+              <ThemedText type="captionBold" themeColor="textSecondary">탈퇴</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 탈퇴 2) 경고 */}
+      <Modal visible={withdrawStep === 'warning'} transparent animationType="fade" onRequestClose={() => setWithdrawStep('idle')}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <ThemedText type="h2">탈퇴 전 확인해주세요</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.dialogText}>
+              회원권·방문·기록 등 모든 데이터가 삭제되고 되돌릴 수 없어요. 다시 로그인하면 처음부터 시작해요.
+            </ThemedText>
+            <Pressable
+              onPress={runWithdraw}
+              disabled={del.isPending}
+              style={[styles.dialogBtn, styles.dialogDanger, del.isPending && styles.pressed]}>
+              <ThemedText type="subtitle" style={{ color: Palette.white }}>
+                {del.isPending ? '처리 중…' : '네, 확인했습니다'}
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={() => setWithdrawStep('idle')} style={styles.dialogGhost} hitSlop={6}>
+              <ThemedText type="captionBold" themeColor="textSecondary">취소</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 탈퇴 3) 작별 → 랜딩 이동 */}
+      <Modal visible={withdrawStep === 'farewell'} transparent animationType="fade" onRequestClose={finishWithdraw}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <ThemedText type="h2">{name}님, 우리 다시 볼 수 있겠죠?</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.dialogText}>
+              그동안 함께해서 고마웠어요. 언제든 다시 돌아오세요.
+            </ThemedText>
+            <Pressable onPress={finishWithdraw} style={[styles.dialogBtn, styles.dialogPrimary]}>
+              <ThemedText type="subtitle" style={{ color: Palette.white }}>확인</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -378,4 +436,24 @@ const styles = StyleSheet.create({
   toggleText: { flex: 1, gap: 2 },
   divider: { height: 0.5, backgroundColor: Palette.lineDefault, marginVertical: Spacing.md },
   pressed: { opacity: 0.6 },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: ScreenPadding,
+  },
+  dialog: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: Palette.bgSurface,
+    borderRadius: Radius.card,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  dialogText: { marginBottom: Spacing.sm },
+  dialogBtn: { borderRadius: Radius.button, paddingVertical: Spacing.md, alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  dialogPrimary: { backgroundColor: Palette.primary },
+  dialogDanger: { backgroundColor: Palette.loss },
+  dialogGhost: { alignItems: 'center', paddingVertical: Spacing.sm },
 });
