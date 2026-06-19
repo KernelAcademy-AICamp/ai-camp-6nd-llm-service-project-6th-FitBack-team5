@@ -53,3 +53,29 @@ EXPO_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com   # (기본값, EU면 eu.i.pos
 
 ## 7. 데이터 거버넌스
 - 이벤트가 외부(PostHog)로 전송됨 → 개인정보 최소화(props에 식별정보 금지, id만). EU/셀프호스팅 옵션 검토.
+
+---
+
+## 8. Supabase 사업지표 뷰 (나) — `analytics` 스키마
+`33_analytics_views.sql` (적용 시):
+- `analytics.v_activation_summary` — 활성화 퍼널 인원수(베타 NSM, n/total)
+- `analytics.v_user_activation` — 사용자별 단계 도달
+- `analytics.v_weekly_verified_checkins` — 출시 NSM(주간 검증 체크인)
+- `analytics.v_membership_utilization` — 회원권 활용도·회수액·회수율
+- `analytics.v_weekly_cohort` — 가입 코호트
+
+전용 스키마라 **PostgREST(클라이언트) 노출 안 됨** → Metabase/SQL 직접 연결로만 조회.
+
+### Metabase 연결 (읽기 전용 롤 권장)
+```sql
+-- Supabase SQL Editor에서 1회 실행(분석 전용 읽기 롤)
+create role analytics_ro login password '<강한_비밀번호>';
+grant usage on schema analytics, public to analytics_ro;
+grant select on all tables in schema analytics to analytics_ro;
+grant select on all tables in schema public to analytics_ro;
+alter default privileges in schema analytics grant select on tables to analytics_ro;
+```
+- Metabase → Add Database(PostgreSQL): Supabase host/port/db + `analytics_ro` 자격. **읽기 전용**이라 쓰기 위험 없음.
+- 베타 대시보드: `v_activation_summary`(퍼널 카드) + `v_weekly_verified_checkins`(NSM 라인) + `v_membership_utilization`(회수율 표).
+
+> ⚠️ 분석 연결은 RLS를 우회(집계 목적이라 정상). 자격증명은 안전 보관, service_role/DB owner로 연결하지 말 것.
