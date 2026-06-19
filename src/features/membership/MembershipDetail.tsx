@@ -10,9 +10,8 @@ import type { Membership, MembershipType } from '@/features/membership/useMember
 import { useMembershipVisits } from '@/features/membership/useMembershipVisits';
 
 const TYPE_LABELS: Record<MembershipType, string> = {
-  free: '자유이용',
   session: 'PT 세션',
-  class: '클래스',
+  period: '기간권',
 };
 
 const PART_LABEL: Record<string, string> = {

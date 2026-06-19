@@ -6,6 +6,13 @@ import { useCurrentUser } from '@/stores/auth';
 export interface NewVisitInput {
   membershipId: string;
   centerName?: string | null;
+  /** 명세 §6: 검증/자기신고 구분 */
+  method?: 'geofence' | 'fallback';
+  verifyStatus?: 'verified' | 'unverified';
+  recoveredAmount?: number; // unverified면 0
+  centerLat?: number | null;
+  centerLng?: number | null;
+  distanceM?: number | null;
 }
 
 /**
@@ -25,6 +32,12 @@ export function useCreateVisit() {
           membership_id: input.membershipId,
           center_name: input.centerName ?? null,
           status: 'checked_in',
+          method: input.method ?? null,
+          verify_status: input.verifyStatus ?? null,
+          recovered_amount: input.recoveredAmount ?? 0,
+          center_lat: input.centerLat ?? null,
+          center_lng: input.centerLng ?? null,
+          distance_m: input.distanceM ?? null,
         })
         .select()
         .single();

@@ -3,9 +3,15 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
-export type MembershipType = 'free' | 'session' | 'class';
+// 명세 v1.1: 2종화 — session(인세권: 정해진 횟수) / period(기간권: 무제한·주당 목표).
+export type MembershipType = 'session' | 'period';
 export type MembershipPeriod = 'month' | '3month' | '6month' | '12month';
-export type MembershipStatus = 'active' | 'expired';
+export type MembershipInputMethod = 'manual' | 'receipt_scan';
+// 명세 §4: ACTIVE / EXPIRING(D-7) / EXPIRED
+export type MembershipStatus = 'active' | 'expiring' | 'expired';
+
+/** 만료 임박 기준 (명세 §4: D-7 고정). */
+export const EXPIRING_DAYS = 7;
 
 /** Raw row from public.memberships (snake_case) + visit-count aggregate. */
 export interface MembershipRow {
@@ -17,7 +23,9 @@ export interface MembershipRow {
   start_date: string; // 'YYYY-MM-DD'
   end_date: string; // 'YYYY-MM-DD'
   type: MembershipType;
-  max_visits: number | null;
+  max_visits: number | null; // 인세권 총 횟수(totalSessions)
+  weekly_goal: number | null; // 기간권 주당 목표 방문
+  input_method: MembershipInputMethod | null;
   created_at: string;
   // PostgREST aggregate over the visits FK → [{ count: N }] (empty-safe).
   visits: { count: number }[];
@@ -32,21 +40,28 @@ export interface Membership {
   period: MembershipPeriod;
   startDate: string;
   endDate: string;
-  maxVisits: number | null;
+  maxVisits: number | null; // 인세권 총 횟수
+  weeklyGoal: number | null; // 기간권 주당 목표
+  inputMethod: MembershipInputMethod | null;
   usedVisits: number;
-  /** max_visits - used, clamped at 0. null when unlimited (free, or no cap). */
+  /** max_visits - used, clamped at 0. null when unlimited (period, or no cap). */
   remainingVisits: number | null;
   status: MembershipStatus;
 }
 
-/**
- * Status is derived, not stored: active while end_date is today-or-later,
- * expired once it's in the past. 'YYYY-MM-DD' strings compare lexically in
- * date order, so no Date parsing is needed for the comparison.
- */
+/** 남은 일수 (오늘 기준, 만료 시 음수). */
+export function daysUntil(endDate: string): number {
+  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00Z`).getTime();
+  return Math.round((end - today) / 86_400_000);
+}
+
+/** 파생 상태: 만료(end<오늘) / 임박(D-7 이내) / 활성. 저장하지 않고 매번 계산. */
 function deriveStatus(endDate: string): MembershipStatus {
-  const today = new Date().toISOString().slice(0, 10);
-  return endDate >= today ? 'active' : 'expired';
+  const d = daysUntil(endDate);
+  if (d < 0) return 'expired';
+  if (d <= EXPIRING_DAYS) return 'expiring';
+  return 'active';
 }
 
 function toMembership(row: MembershipRow): Membership {
@@ -62,6 +77,8 @@ function toMembership(row: MembershipRow): Membership {
     startDate: row.start_date,
     endDate: row.end_date,
     maxVisits: row.max_visits,
+    weeklyGoal: row.weekly_goal ?? null,
+    inputMethod: row.input_method ?? null,
     usedVisits,
     remainingVisits,
     status: deriveStatus(row.end_date),
