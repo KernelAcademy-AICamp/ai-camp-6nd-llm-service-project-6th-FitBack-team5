@@ -1,4 +1,4 @@
-import { Apple, ArrowLeft, ArrowUp, Camera, Dumbbell, Flame, Sparkles, X } from 'lucide-react-native';
+import { Apple, ArrowLeft, ArrowUp, CalendarPlus, Camera, Check, Dumbbell, Flame, Sparkles, X } from 'lucide-react-native';
 import { useMemo, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,6 +27,7 @@ import { useDietSummary } from '@/features/coach/useDietSummary';
 import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
 import { useMemberships } from '@/features/membership/useMemberships';
 import { useHomeActivity } from '@/features/home/useHomeActivity';
+import { useAddSchedule, type ScheduleType } from '@/features/home/useSchedules';
 import { type Routine, type RoutineInput, useGenerateRoutine } from '@/features/workout/useGenerateRoutine';
 import { prepareSessionAudio } from '@/features/workout/start-session';
 import { useWorkoutSession } from '@/stores/workout-session';
@@ -140,6 +141,53 @@ const numStyles = StyleSheet.create({
   },
 });
 
+/** AI 추천(운동/식단)을 오늘 일정에 추가. source='ai'. */
+function AddToScheduleButton({
+  type,
+  title,
+  payload,
+}: {
+  type: ScheduleType;
+  title: string;
+  payload?: Record<string, unknown>;
+}) {
+  const add = useAddSchedule();
+  const [added, setAdded] = useState(false);
+  const now = new Date();
+  const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  return (
+    <Pressable
+      onPress={() => {
+        if (added || add.isPending) return;
+        add.mutate({ date: ymd, type, title, payload, source: 'ai' }, { onSuccess: () => setAdded(true) });
+      }}
+      disabled={added || add.isPending}
+      style={({ pressed }) => [addSchedStyles.btn, pressed && { opacity: 0.6 }, added && addSchedStyles.done]}
+      accessibilityRole="button"
+      accessibilityLabel={added ? '오늘 일정에 추가됨' : '오늘 일정에 추가'}>
+      <Icon icon={added ? Check : CalendarPlus} size={14} color={added ? Palette.profit : Palette.primary} />
+      <ThemedText type="label" style={{ color: added ? Palette.profit : Palette.primary }}>
+        {added ? '오늘 일정에 추가됨' : '오늘 일정에 추가'}
+      </ThemedText>
+    </Pressable>
+  );
+}
+const addSchedStyles = StyleSheet.create({
+  btn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.small,
+    borderWidth: 0.5,
+    borderColor: Palette.primary,
+  },
+  done: { borderColor: Palette.profit },
+});
+
 function ResponseBody({ response }: { response: AppResponse }) {
   if (response.intent === 'general') return null;
 
@@ -164,6 +212,7 @@ function ResponseBody({ response }: { response: AppResponse }) {
             </ThemedText>
           </View>
         ))}
+        <AddToScheduleButton type="workout" title={`${focus_part} 루틴`} payload={{ items, duration_min }} />
       </View>
     );
   }
@@ -198,6 +247,7 @@ function ResponseBody({ response }: { response: AppResponse }) {
             <ThemedText type="label" themeColor="textSecondary">{meal.kcal}</ThemedText>
           </View>
         ))}
+        <AddToScheduleButton type="diet" title={response.summary} payload={{ meals, target_kcal, protein_g }} />
       </View>
     );
   }
@@ -676,6 +726,11 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                     style={({ pressed }) => [styles.wcGhost, { opacity: pressed || routinePending || wcIsStarting ? 0.6 : 1 }]}>
                     <ThemedText type="label" themeColor="textSecondary">더 쉬운 루틴으로 바꾸기</ThemedText>
                   </Pressable>
+                  <AddToScheduleButton
+                    type="workout"
+                    title={m.wcRoutineResult.title}
+                    payload={{ meta: m.wcRoutineResult.meta, exercises: m.wcRoutineResult.exercises }}
+                  />
                 </View>
               )}
 
