@@ -21,7 +21,6 @@ import { Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { useProfile } from '@/features/auth/useProfile';
 import type { AppResponse, ChatbotIntent, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
-import { INTENT_QUESTIONS, IntentQuestion } from '@/features/coach/IntentQuestion';
 import { useAiFeedback } from '@/features/coach/useAiFeedback';
 import { useDietSummary } from '@/features/coach/useDietSummary';
 import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
@@ -31,6 +30,10 @@ import { useAddSchedule, type ScheduleType } from '@/features/home/useSchedules'
 import { type Routine, type RoutineInput, useGenerateRoutine } from '@/features/workout/useGenerateRoutine';
 import { prepareSessionAudio } from '@/features/workout/start-session';
 import { useWorkoutSession } from '@/stores/workout-session';
+import { pickFoodImage } from '@/features/diet/pickFoodImage';
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const ANON = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 // ── Types ────────────────────────────────────────────────
 
@@ -69,7 +72,8 @@ const WELCOME_OPTIONS = [
     desc: '음식 사진으로 칼로리를 분석해요',
     iconColor: Palette.gray500,
     bg: Palette.bgMuted,
-    message: '식단 사진 분석해줘',
+    message: null,
+    photoAction: true as const,
   },
 ];
 
@@ -90,11 +94,6 @@ function buildWcInput(a: Partial<Record<WcStepKey, string>>, easier: boolean): R
 
 // ── Helpers ──────────────────────────────────────────────
 
-function detectIntent(text: string): ChatbotIntent | null {
-  if (/식단|다이어트|먹|칼로리|단백질|탄수|지방|체중/.test(text)) return 'diet';
-  if (/운동|헬스|pt|트레이닝|부위|허벅지|등|어깨|가슴|루틴|근력/.test(text)) return 'plan';
-  return null;
-}
 
 function TypingDot({ delay }: { delay: number }) {
   const [y] = useState(() => new Animated.Value(0));
@@ -297,8 +296,6 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<'welcome' | 'chat'>('welcome');
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
-  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
-  const [pendingIntent, setPendingIntent] = useState<ChatbotIntent | null>(null);
 
   // Workout coach inline flow state
   const [wcMode, setWcMode] = useState(false);
@@ -308,6 +305,10 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   const [wcIsStarting, setWcIsStarting] = useState(false);
   const [wcShowCustom, setWcShowCustom] = useState(false);
   const [wcCustomText, setWcCustomText] = useState('');
+
+  // Photo analysis state
+  const [showPhotoSource, setShowPhotoSource] = useState(false);
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
   const { mutate: generateRoutine, isPending: routinePending } = useGenerateRoutine();
   const setSessionRoutine = useWorkoutSession((s) => s.setRoutine);
 
@@ -398,27 +399,87 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     setInput('');
     if (view === 'welcome') setView('chat');
     setMessages((prev) => [...prev, { role: 'user', text: q }]);
-    const intent = detectIntent(q);
-    if (intent === 'diet' || intent === 'plan') {
-      const question = INTENT_QUESTIONS[intent];
-      if (question) {
-        setMessages((prev) => [...prev, { role: 'coach', text: question.prompt, isQuestion: true }]);
-        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
-      }
-      setPendingMessage(q);
-      setPendingIntent(intent);
-    } else {
-      callAI(q);
-    }
+    callAI(q);
   }
 
-  function onIntentAnswer(answer: string) {
-    if (!pendingMessage) return;
-    const message = pendingMessage;
-    setPendingMessage(null);
-    setPendingIntent(null);
-    if (answer) setMessages((prev) => [...prev, { role: 'user', text: answer }]);
-    callAI(message, answer || undefined);
+  // ── Photo analysis handler ────────────────────────────
+
+  async function handlePhotoSelect(source: 'camera' | 'library') {
+    setShowPhotoSource(false);
+
+    // pickFoodImage는 user gesture가 살아있을 때 먼저 호출해야 권한 요청이 정상 작동
+    let img;
+    try {
+      img = await pickFoodImage(source);
+    } catch (e) {
+      // 권한 거부 등 — 조용히 종료 (diet screen과 동일 처리)
+      return;
+    }
+    if (!img) return; // 취소
+
+    // 이미지 획득 후 chat 상태 전환
+    setView('chat');
+    setMessages([
+      { role: 'user', text: '식단 사진 분석해줘' },
+      { role: 'coach', text: '', isLoading: true },
+    ]);
+    setIsAnalyzingPhoto(true);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+
+    let analyzed;
+    try {
+      if (!SUPABASE_URL || !ANON) throw new Error('서버 설정 없음');
+      const rawBase64 = img.base64.replace(/^data:[^;]+;base64,/, '');
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/food-search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${ANON}`,
+          apikey: ANON,
+        },
+        body: JSON.stringify({ action: 'analyze-image', image: rawBase64, mediaType: img.mediaType }),
+      });
+      const json = await r.json();
+      if (!r.ok || json.error || typeof json.kcal !== 'number') {
+        console.error('[analyze-image] 실패:', r.status, json);
+        throw new Error(json.error ?? '분석 실패');
+      }
+      analyzed = json;
+    } catch (err) {
+      console.error('[analyze-image] catch:', err);
+      setMessages((prev) => {
+        const next = [...prev];
+        const idx = next.findLastIndex((m) => m.isLoading);
+        if (idx !== -1) next[idx] = { role: 'coach', text: 'AI 분석 서비스에 일시적인 문제가 생겼어요. 잠시 후 다시 시도해주세요.' };
+        return next;
+      });
+      setIsAnalyzingPhoto(false);
+      return;
+    }
+
+    aiFeedback.mutate(
+      { userContext: buildContext(), roi: buildRoi(), userMessage: '식단 사진 분석해줘', photoAnalysis: analyzed },
+      {
+        onSuccess: (res) => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findLastIndex((m) => m.isLoading);
+            if (idx !== -1) next[idx] = { role: 'coach', text: res.coach_message, response: res };
+            return next;
+          });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+        },
+        onError: () => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findLastIndex((m) => m.isLoading);
+            if (idx !== -1) next[idx] = { role: 'coach', text: '잠시 후 다시 시도해 주세요.' };
+            return next;
+          });
+        },
+        onSettled: () => setIsAnalyzingPhoto(false),
+      }
+    );
   }
 
   // ── Workout coach inline handlers ──────────────────────
@@ -490,7 +551,6 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     router.push('/workout/session' as never);
   }
 
-  const isWaiting = pendingIntent !== null;
   const isThinking = aiFeedback.isPending;
 
   // ── Shared input bar ─────────────────────────────────
@@ -598,7 +658,11 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
               <Pressable
                 key={opt.label}
                 style={({ pressed }) => [styles.optionCard, pressed && styles.pressed]}
-                onPress={() => 'navigate' in opt ? initWorkoutCoach() : send((opt as { message: string }).message)}
+                onPress={() => {
+                  if ('navigate' in opt) { initWorkoutCoach(); return; }
+                  if ('photoAction' in opt) { setShowPhotoSource(true); return; }
+                  send((opt as { message: string }).message);
+                }}
                 accessibilityRole="button">
                 <View style={[styles.optionIconWrap, { backgroundColor: opt.bg }]}>
                   <Icon icon={opt.icon} size={20} color={opt.iconColor} />
@@ -616,6 +680,32 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
           </ThemedText>
         </ScrollView>
 
+        {/* Photo source picker sheet */}
+        {showPhotoSource && (
+          <View style={styles.photoSheet}>
+            <View style={styles.photoSheetHandle} />
+            <ThemedText type="captionBold" style={{ textAlign: 'center', marginBottom: Spacing.sm }}>
+              사진 선택
+            </ThemedText>
+            <Pressable
+              onPress={() => handlePhotoSelect('camera')}
+              style={({ pressed }) => [styles.photoSheetBtn, pressed && styles.pressed]}>
+              <Icon icon={Camera} size={18} color={Palette.primary} />
+              <ThemedText type="captionBold" style={{ color: Palette.primary }}>카메라로 찍기</ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => handlePhotoSelect('library')}
+              style={({ pressed }) => [styles.photoSheetBtn, pressed && styles.pressed]}>
+              <Icon icon={Camera} size={18} color={Palette.gray700} />
+              <ThemedText type="captionBold">앨범에서 선택</ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowPhotoSource(false)}
+              style={({ pressed }) => [styles.photoSheetCancel, pressed && styles.pressed]}>
+              <ThemedText type="caption" themeColor="textSecondary">취소</ThemedText>
+            </Pressable>
+          </View>
+        )}
         <View style={styles.inputSection}>{inputBar}</View>
       </KeyboardAvoidingView>
     );
@@ -757,7 +847,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
 
                   {/* Followup button — routes by type.
                       followup이 구버전 string으로 올 경우도 방어 처리. */}
-                  {m.response.followup && !isWaiting && !isThinking ? (() => {
+                  {m.response.followup && !isThinking ? (() => {
                     const raw = m.response.followup;
                     const followupObj = typeof raw === 'string'
                       ? { type: 'ask_question' as const, label: raw as string }
@@ -850,11 +940,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
               </View>
             )}
           </View>
-        ) : isWaiting && pendingIntent ? (
-          <View style={styles.intentPanel}>
-            <IntentQuestion intent={pendingIntent} onAnswer={onIntentAnswer} />
-          </View>
-        ) : !isThinking && !wcMode ? (
+        ) : !isThinking && !wcMode && messages.length === 0 ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1015,6 +1101,27 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.primary,
     borderRadius: Radius.button, padding: Spacing.md,
     alignSelf: 'stretch',
+  },
+
+  // Photo source sheet
+  photoSheet: {
+    borderTopWidth: 0.5, borderTopColor: Palette.lineDefault,
+    backgroundColor: Palette.bgSurface,
+    paddingHorizontal: ScreenPadding, paddingTop: Spacing.sm, paddingBottom: Spacing.md,
+    gap: Spacing.xs,
+  },
+  photoSheetHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: Palette.lineStrong,
+    alignSelf: 'center', marginBottom: Spacing.sm,
+  },
+  photoSheetBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.small,
+  },
+  photoSheetCancel: {
+    alignItems: 'center', paddingVertical: Spacing.sm, marginTop: Spacing.xs,
   },
 
   // Workout coach inline styles
