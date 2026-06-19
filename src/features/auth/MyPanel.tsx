@@ -166,10 +166,10 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
             <>
               {/* 회원 정보 */}
               <Card>
-                <ThemedText type="h2">{name}</ThemedText>
-                <ThemedText type="caption" themeColor="textSecondary">{user?.email ?? ''}</ThemedText>
+                <ThemedText type="captionBold">{name}</ThemedText>
+                <ThemedText type="caption" themeColor="textSecondary" style={styles.profileEmail}>{user?.email ?? ''}</ThemedText>
                 {profile?.created_at ? (
-                  <ThemedText type="label" themeColor="textSecondary">{joinedDate(profile.created_at)}</ThemedText>
+                  <ThemedText type="label" themeColor="textSecondary" style={styles.profileJoin}>{joinedDate(profile.created_at)}</ThemedText>
                 ) : null}
               </Card>
 
@@ -425,9 +425,11 @@ const styles = StyleSheet.create({
   aboutHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: 4 },
   navRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   navLabel: { flex: 1 },
-  bottomLinks: { alignItems: 'center', gap: Spacing.md, marginTop: Spacing.lg },
+  profileEmail: { marginTop: Spacing.xs },
+  profileJoin: { marginTop: Spacing.xs },
+  bottomLinks: { alignItems: 'flex-start', gap: Spacing.md, marginTop: Spacing.lg },
   bottomLink: { paddingVertical: 2 },
-  version: { textAlign: 'center', marginTop: Spacing.sm },
+  version: { marginTop: Spacing.sm },
   editWrap: { gap: Spacing.md, marginTop: Spacing.sm },
   field: { gap: Spacing.xs },
   input: {
