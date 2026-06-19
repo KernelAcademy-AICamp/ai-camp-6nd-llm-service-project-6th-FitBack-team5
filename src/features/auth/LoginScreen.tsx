@@ -10,7 +10,10 @@ import {
   View,
 } from 'react-native';
 
+import { Check } from 'lucide-react-native';
+
 import { ThemedText } from '@/components/themed-text';
+import { Icon } from '@/components/ui';
 import { Elevation, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import { supabase } from '@/lib/supabase';
@@ -29,11 +32,16 @@ export function LoginScreen() {
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [showSignupDone, setShowSignupDone] = useState(false);
   const [signupNeedsConfirm, setSignupNeedsConfirm] = useState(false);
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const isSignup = mode === 'signup';
   const passwordOk = password.length >= 6;
   const canSubmit =
-    !submitting && email.length > 0 && password.length > 0 && (!isSignup || passwordOk);
+    !submitting &&
+    email.length > 0 &&
+    password.length > 0 &&
+    (!isSignup || (passwordOk && agreedPrivacy));
 
   async function handleSubmit() {
     setErrorMessage(null);
@@ -83,6 +91,9 @@ export function LoginScreen() {
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ThemedText type="display" style={styles.hero}>
+        운동만 하세요,{'\n'}회원권은 FitBack이 챙길게요
+      </ThemedText>
       <View style={styles.card}>
         <ThemedText type="h1">{isSignup ? 'FitBack 회원가입' : 'FitBack 로그인'}</ThemedText>
         <ThemedText type="caption" themeColor="textSecondary" style={styles.subtitle}>
@@ -133,6 +144,28 @@ export function LoginScreen() {
           <ThemedText type="caption" style={styles.info}>
             {infoMessage}
           </ThemedText>
+        )}
+
+        {/* 개인정보 수집·이용 동의 (가입 필수) */}
+        {isSignup && (
+          <View style={styles.consentRow}>
+            <Pressable
+              onPress={() => setAgreedPrivacy((v) => !v)}
+              style={[styles.checkbox, agreedPrivacy && styles.checkboxOn]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: agreedPrivacy }}
+              hitSlop={6}>
+              {agreedPrivacy ? <Icon icon={Check} size={14} color={Palette.white} /> : null}
+            </Pressable>
+            <ThemedText type="caption" style={styles.consentText}>
+              [필수] 개인정보 수집·이용 동의
+            </ThemedText>
+            <Pressable onPress={() => setShowPrivacy(true)} hitSlop={6}>
+              <ThemedText type="captionBold" style={styles.switchText}>
+                보기
+              </ThemedText>
+            </Pressable>
+          </View>
         )}
 
         <Pressable
@@ -197,6 +230,39 @@ export function LoginScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 개인정보 수집·이용 동의 안내 */}
+      <Modal visible={showPrivacy} transparent animationType="fade" onRequestClose={() => setShowPrivacy(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <ThemedText type="h2">개인정보 수집·이용 동의</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.modalText}>
+              FitBack은 서비스 제공·개선을 위해 최소한의 정보만 모으고, 내부에서 안전하게 보관해요.
+            </ThemedText>
+            <View style={styles.policyList}>
+              <ThemedText type="caption">· 수집 항목: 이메일, 신체 정보(생년월일·성별·키·체중), 운동·회원권·식단 기록</ThemedText>
+              <ThemedText type="caption">· 이용 목적: 회원권 활용도 분석·맞춤 코칭·서비스 개선</ThemedText>
+              <ThemedText type="caption">· 보관·파기: 내부 안전 보관, 회원 탈퇴 시 관련 데이터 삭제</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">· 동의를 거부하면 회원가입이 제한될 수 있어요.</ThemedText>
+            </View>
+            <Pressable
+              onPress={() => {
+                setAgreedPrivacy(true);
+                setShowPrivacy(false);
+              }}
+              style={styles.modalButton}>
+              <ThemedText type="subtitle" style={styles.buttonLabel}>
+                동의하고 닫기
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={() => setShowPrivacy(false)} style={styles.switchRow} hitSlop={6}>
+              <ThemedText type="captionBold" themeColor="textSecondary">
+                닫기
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -209,6 +275,7 @@ const styles = StyleSheet.create({
     padding: ScreenPadding,
     backgroundColor: Palette.bgBase,
   },
+  hero: { width: '100%', maxWidth: 400, textAlign: 'center', marginBottom: Spacing.lg, lineHeight: 40 },
   card: {
     width: '100%',
     maxWidth: 400,
@@ -218,6 +285,19 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     ...Elevation.level1,
   },
+  consentRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
+  consentText: { flex: 1 },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: Radius.small,
+    borderWidth: 1.5,
+    borderColor: Palette.gray300,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: Palette.primary, borderColor: Palette.primary },
+  policyList: { gap: Spacing.xs, marginBottom: Spacing.sm },
   subtitle: { marginBottom: Spacing.sm },
   fieldLabel: { marginTop: Spacing.sm },
   input: {
