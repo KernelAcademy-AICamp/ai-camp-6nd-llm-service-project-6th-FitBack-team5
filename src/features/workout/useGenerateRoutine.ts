@@ -260,7 +260,7 @@ async function generateFixedDevRoutine(): Promise<Routine> {
   );
   if (ordered.length < FIXED_DEV_NAMES.length) {
     throw new Error(
-      '개발용 운동 행이 부족해요. 마이그레이션 26·28 적용을 확인해주세요.',
+      '개발용 운동 행이 부족해요. 마이그레이션 29·31 적용을 확인해주세요.',
     );
   }
   const exercises = ordered.map((row) => buildRoutineExercise(row, 1.0));

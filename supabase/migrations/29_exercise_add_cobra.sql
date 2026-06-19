@@ -1,5 +1,5 @@
 -- ============================================================
--- 26_exercise_add_cobra.sql
+-- 29_exercise_add_cobra.sql
 -- exercises 카탈로그에 "코브라 자세"(Bhujangasana) 1건 추가.
 --
 -- 분류:

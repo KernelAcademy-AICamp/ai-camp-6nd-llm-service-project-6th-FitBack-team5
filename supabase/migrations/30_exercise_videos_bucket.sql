@@ -1,5 +1,5 @@
 -- ============================================================
--- 27_exercise_videos_bucket.sql
+-- 30_exercise_videos_bucket.sql
 -- 운동 시범 영상(MP4) 저장용 Storage 버킷 + exercises.video_url 컬럼.
 --
 -- 사용:

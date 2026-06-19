@@ -1,5 +1,5 @@
 -- ============================================================
--- 28_exercise_videos_link.sql
+-- 31_exercise_videos_link.sql
 -- exercises.video_url 에 Storage 업로드 영상의 public URL 연결.
 --
 -- 매핑:
@@ -7,7 +7,7 @@
 --   코브라 자세  → cobra.mp4
 --   플랭크       → plank.mp4
 --
--- 적용 전 27 마이그레이션으로 video_url 컬럼 + exercise-videos 버킷이 있어야 함.
+-- 적용 전 30 마이그레이션으로 video_url 컬럼 + exercise-videos 버킷이 있어야 함.
 -- 운동 행이 없으면 UPDATE 가 0 rows affected — 무해.
 -- ============================================================
 
