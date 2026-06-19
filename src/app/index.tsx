@@ -19,6 +19,7 @@ import {
 import { useProfile } from '@/features/auth/useProfile';
 import { CoachChat } from '@/features/coach/CoachChat';
 import { MonthCalendar } from '@/features/home/MonthCalendar';
+import { useSchedules } from '@/features/home/useSchedules';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { MembershipStatsCard } from '@/features/membership/MembershipStatsCard';
 import { supabase } from '@/lib/supabase';
@@ -99,6 +100,13 @@ export default function HomeScreen() {
     .sort((a, b) => daysUntil(a.endDate) - daysUntil(b.endDate));
   const bannerItem = expiring[0] ? withRisk.find((x) => x.m.id === expiring[0].id) ?? null : null;
 
+  // 오늘 예정된 일정(planned) — 알림에 노출 (#5 알림 연계)
+  const today = new Date();
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const { data: monthSchedules } = useSchedules(today.getFullYear(), today.getMonth() + 1);
+  const todayPlans = (monthSchedules ?? []).filter((s) => s.date === todayYmd && s.status === 'planned');
+  const hasAlarm = expiring.length > 0 || todayPlans.length > 0;
+
   // AI 코치 훅 (말풍선용)
   const coach = useCoach({ withRisk, summary, monthly: stats, pattern: visitPattern });
 
@@ -131,8 +139,8 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="알림">
                 <View>
-                  <Icon icon={Bell} size={22} color={expiring.length > 0 ? Palette.gray700 : Palette.gray300} />
-                  {expiring.length > 0 ? <View style={styles.alarmDot} /> : null}
+                  <Icon icon={Bell} size={22} color={hasAlarm ? Palette.gray700 : Palette.gray300} />
+                  {hasAlarm ? <View style={styles.alarmDot} /> : null}
                 </View>
               </Pressable>
             </View>
@@ -355,21 +363,31 @@ export default function HomeScreen() {
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={styles.alarmBody}>
-              {expiring.length === 0 ? (
+              {!hasAlarm ? (
                 <ThemedText type="caption" themeColor="textSecondary">
                   새로운 알림이 없어요.
                 </ThemedText>
               ) : (
-                expiring.map((m) => (
-                  <Card key={m.id} accentColor={Palette.warning}>
-                    <View style={styles.alarmItem}>
-                      <Icon icon={AlarmClock} size={16} color={Palette.warning} />
-                      <ThemedText type="caption">
-                        {m.name} · 만료 D-{Math.max(0, daysUntil(m.endDate))}
-                      </ThemedText>
-                    </View>
-                  </Card>
-                ))
+                <>
+                  {todayPlans.map((s) => (
+                    <Card key={s.id} accentColor={Palette.primary}>
+                      <View style={styles.alarmItem}>
+                        <Icon icon={Calendar} size={16} color={Palette.primary} />
+                        <ThemedText type="caption">오늘 예정 · {s.title}</ThemedText>
+                      </View>
+                    </Card>
+                  ))}
+                  {expiring.map((m) => (
+                    <Card key={m.id} accentColor={Palette.warning}>
+                      <View style={styles.alarmItem}>
+                        <Icon icon={AlarmClock} size={16} color={Palette.warning} />
+                        <ThemedText type="caption">
+                          {m.name} · 만료 D-{Math.max(0, daysUntil(m.endDate))}
+                        </ThemedText>
+                      </View>
+                    </Card>
+                  ))}
+                </>
               )}
             </ScrollView>
           </SafeAreaView>

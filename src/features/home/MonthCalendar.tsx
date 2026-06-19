@@ -7,6 +7,7 @@ import {
   Flame,
   MapPin,
   Plus,
+  ShieldCheck,
   Target,
   Trash2,
   Utensils,
@@ -25,6 +26,7 @@ import {
   RECOMMENDED_WEEKLY_VISITS,
   useHomeActivity,
 } from '@/features/home/useHomeActivity';
+import { useMemberships } from '@/features/membership/useMemberships';
 import {
   useAddSchedule,
   useDeleteSchedule,
@@ -119,6 +121,18 @@ function DayRecordList({ date, onNavigate }: { date: string; onNavigate: () => v
               <ThemedText type="caption" style={styles.recText}>
                 방문 · {v.centerName ?? '센터'} {v.time}
               </ThemedText>
+              {v.verifyStatus === 'verified' ? (
+                <View style={styles.verifyTag}>
+                  <Icon icon={ShieldCheck} size={12} color={Palette.profit} />
+                  <ThemedText type="label" style={{ color: Palette.profit }}>
+                    검증
+                  </ThemedText>
+                </View>
+              ) : v.verifyStatus === 'unverified' ? (
+                <ThemedText type="label" themeColor="textSecondary">
+                  자기신고
+                </ThemedText>
+              ) : null}
             </View>
           ))}
           {data.workouts.map((w) => (
@@ -254,6 +268,14 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
   const { data, isLoading } = useCalendarMonth(year, month);
   const { data: home } = useHomeActivity();
   const { data: schedules } = useSchedules(year, month);
+  const { data: memberships } = useMemberships();
+
+  // 권장 페이스 개인화: 활성 기간권의 주당 목표 중 최댓값, 없으면 기본값
+  const goalFromMembership = (memberships ?? [])
+    .filter((m) => m.type === 'period' && m.status !== 'expired' && m.weeklyGoal)
+    .reduce((mx, m) => Math.max(mx, m.weeklyGoal ?? 0), 0);
+  const recommendedWeekly = goalFromMembership > 0 ? goalFromMembership : RECOMMENDED_WEEKLY_VISITS;
+  const paceText = goalFromMembership > 0 ? `회원권 목표: 일주일에 ${recommendedWeekly}회` : RECOMMEND_PACE_TEXT;
 
   function shift(delta: number) {
     const m0 = month - 1 + delta;
@@ -397,7 +419,7 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
                     권장 페이스
                   </ThemedText>
                   <ThemedText type="label" themeColor="textSecondary">
-                    {RECOMMEND_PACE_TEXT}
+                    {paceText}
                   </ThemedText>
                 </View>
                 <View style={styles.paceRight}>
@@ -408,7 +430,7 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
                     <ThemedText type="captionBold" style={{ color: Palette.primary }}>
                       {weekVisits}
                     </ThemedText>{' '}
-                    / {RECOMMENDED_WEEKLY_VISITS}회
+                    / {recommendedWeekly}회
                   </ThemedText>
                 </View>
               </View>
@@ -470,6 +492,7 @@ const styles = StyleSheet.create({
   recList: { gap: Spacing.sm },
   recRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   recText: { flex: 1 },
+  verifyTag: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   pressed: { opacity: 0.6 },
   planRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   planDone: { textDecorationLine: 'line-through', opacity: 0.5 },

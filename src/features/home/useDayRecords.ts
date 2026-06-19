@@ -7,6 +7,7 @@ export interface DayVisit {
   id: string;
   time: string; // HH:MM (local)
   centerName: string | null;
+  verifyStatus: 'verified' | 'unverified' | null; // 지오펜스 검증 여부(null=레거시)
 }
 export interface DayWorkout {
   id: string;
@@ -47,7 +48,7 @@ export function useDayRecords(date: string | null) {
       const [v, w, m] = await Promise.all([
         supabase
           .from('visits')
-          .select('id, check_in_time, center_name')
+          .select('id, check_in_time, center_name, verify_status')
           .eq('user_id', user!.id)
           .gte('check_in_time', startISO)
           .lt('check_in_time', endISO)
@@ -70,9 +71,19 @@ export function useDayRecords(date: string | null) {
       if (w.error) throw w.error;
       if (m.error) throw m.error;
 
-      const visits: DayVisit[] = ((v.data ?? []) as { id: string; check_in_time: string; center_name: string | null }[]).map(
-        (r) => ({ id: r.id, time: hhmm(r.check_in_time), centerName: r.center_name ?? null }),
-      );
+      const visits: DayVisit[] = (
+        (v.data ?? []) as {
+          id: string;
+          check_in_time: string;
+          center_name: string | null;
+          verify_status: 'verified' | 'unverified' | null;
+        }[]
+      ).map((r) => ({
+        id: r.id,
+        time: hhmm(r.check_in_time),
+        centerName: r.center_name ?? null,
+        verifyStatus: r.verify_status ?? null,
+      }));
       const workouts: DayWorkout[] = (
         (w.data ?? []) as {
           id: string;
