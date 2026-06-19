@@ -56,12 +56,6 @@ export function SelectedDayCard({ date }: { date: string }) {
     );
   }
 
-  // 시간 순(오래된 → 최신)으로 정렬 — DB 쿼리는 DESC 라 표시 시 reverse.
-  const feedbackEntries = logs.slice().reverse().map((l) => ({
-    id: l.id,
-    time: formatKstTime(l.createdAt),
-    summary: l.aiFeedback?.summary?.trim() ?? '',
-  }));
   // 선택일 모든 운동의 합 — actualDurationSec 가 null 인 구 기록은 durationMin*60 으로 보정.
   const totalPlannedMin = logs.reduce((a, l) => a + l.durationMin, 0);
   const totalActualMin = logs.reduce(
@@ -75,61 +69,72 @@ export function SelectedDayCard({ date }: { date: string }) {
   const totalCalories = logs.reduce((a, l) => a + l.calories, 0);
 
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.statsRow}>
-        <ThemedView
-          type="backgroundElement"
-          style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-          <Clock color={Palette.primary} size={20} />
-          <ThemedText type="small" themeColor="textSecondary">
-            총 운동 시간
-          </ThemedText>
-          <View style={styles.timeRow}>
-            <ThemedText type="title" style={{ color: Palette.primary }}>
-              {totalActualMin}
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              / {totalPlannedMin}분
-            </ThemedText>
-          </View>
-        </ThemedView>
-        <ThemedView
-          type="backgroundElement"
-          style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-          <Flame color={Palette.warning} size={20} />
-          <ThemedText type="small" themeColor="textSecondary">
-            총 칼로리
-          </ThemedText>
-          <ThemedText type="subtitle">{totalCalories} kcal</ThemedText>
-        </ThemedView>
-      </View>
-
+    <View style={styles.statsRow}>
       <ThemedView
         type="backgroundElement"
-        style={[styles.feedbackCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-        <View style={[styles.feedbackBadge, { backgroundColor: Palette.primaryLight }]}>
-          <ThemedText type="smallBold" style={{ color: Palette.primary }}>
-            💬 AI 피드백 ({formatDateKo(date)})
+        style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+        <Clock color={Palette.primary} size={20} />
+        <ThemedText type="small" themeColor="textSecondary">
+          총 운동 시간
+        </ThemedText>
+        <View style={styles.timeRow}>
+          <ThemedText type="title" style={{ color: Palette.primary }}>
+            {totalActualMin}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            / {totalPlannedMin}분
           </ThemedText>
         </View>
-        {/* <ThemedText type="subtitle">{data.routineTitle}</ThemedText>
+      </ThemedView>
+      <ThemedView
+        type="backgroundElement"
+        style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+        <Flame color={Palette.warning} size={20} />
         <ThemedText type="small" themeColor="textSecondary">
-          {data.routineMeta}
-        </ThemedText> */}
-        {feedbackEntries.map((e) => (
-          <ThemedText
-            key={e.id}
-            type="default"
-            themeColor={e.summary ? 'text' : 'textSecondary'}>
-            <ThemedText type="default" style={{ color: Palette.primary }}>
-              {e.time}
-            </ThemedText>
-            {' : '}
-            {e.summary || '피드백 없음'}
-          </ThemedText>
-        ))}
+          총 칼로리
+        </ThemedText>
+        <ThemedText type="subtitle">{totalCalories} kcal</ThemedText>
       </ThemedView>
     </View>
+  );
+}
+
+/**
+ * 선택일 AI 피드백 카드 — DayWorkoutList 아래에 단독 배치되도록 분리됨.
+ * 같은 useDayWorkoutLogs 훅을 공유하므로 추가 네트워크 비용 없음.
+ */
+export function SelectedDayFeedback({ date }: { date: string }) {
+  const { data: logs, isLoading } = useDayWorkoutLogs(date);
+  if (isLoading || !logs || logs.length === 0) return null;
+
+  const feedbackEntries = logs.slice().reverse().map((l) => ({
+    id: l.id,
+    time: formatKstTime(l.createdAt),
+    summary: l.aiFeedback?.summary?.trim() ?? '',
+  }));
+
+  return (
+    <ThemedView
+      type="backgroundElement"
+      style={[styles.feedbackCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+      <View style={[styles.feedbackBadge, { backgroundColor: Palette.primaryLight }]}>
+        <ThemedText type="smallBold" style={{ color: Palette.primary }}>
+          💬 AI 피드백 ({formatDateKo(date)})
+        </ThemedText>
+      </View>
+      {feedbackEntries.map((e) => (
+        <ThemedText
+          key={e.id}
+          type="default"
+          themeColor={e.summary ? 'text' : 'textSecondary'}>
+          <ThemedText type="default" style={{ color: Palette.primary }}>
+            {e.time}
+          </ThemedText>
+          {' : '}
+          {e.summary || '피드백 없음'}
+        </ThemedText>
+      ))}
+    </ThemedView>
   );
 }
 

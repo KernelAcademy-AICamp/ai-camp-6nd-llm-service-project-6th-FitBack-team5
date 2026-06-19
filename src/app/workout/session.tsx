@@ -1,5 +1,6 @@
-import { X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { Headphones, Pause, Play, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -70,37 +71,6 @@ type Phase =
   | { kind: 'exercise-finish' }
   | { kind: 'finish' };
 
-function nextPreviewText(args: {
-  phase: Phase;
-  parsed: ParsedDetail | null;
-  nextExerciseName: string | null;
-}): string | null {
-  const { phase, parsed, nextExerciseName } = args;
-  // 운동이 다 끝났을 때 vs 다음 운동이 있을 때 — 두 케이스 모두 자체적으로 "다음:" prefix 미포함
-  const afterAll = nextExerciseName ? `다음 운동: ${nextExerciseName}` : '오늘 운동 완료';
-
-  switch (phase.kind) {
-    case 'intro':
-    case 'caution':
-      return parsed?.type === 'time' ? '다음: 운동 시작' : '다음: 1세트 시작';
-    case 'set-start':
-      return `다음: ${phase.set}세트 진행`;
-    case 'rep':
-      if (parsed?.type !== 'reps') return null;
-      if (phase.rep < parsed.reps) return null;
-      return phase.set < parsed.sets
-        ? `다음: ${REST_SECONDS}초 휴식 → ${phase.set + 1}세트`
-        : afterAll;
-    case 'rest':
-      return `다음: ${phase.set + 1}세트 시작`;
-    case 'time':
-      return afterAll;
-    case 'exercise-finish':
-      return afterAll;
-    case 'finish':
-      return null;
-  }
-}
 
 const RATE_OPTIONS = [1.0, 1.25, 1.5] as const;
 
@@ -181,6 +151,22 @@ export default function SessionScreen() {
   useEffect(() => {
     setTtsMode(current?.isStretch ? 'stretch' : 'main');
   }, [current?.isStretch]);
+
+  // 시범 영상 플레이어 — videoUrl 없으면 빈 소스. 무음·루프 자동 재생 (TTS 코칭과 겹치지 않게).
+  const videoUrl = current?.videoUrl ?? null;
+  const player = useVideoPlayer(videoUrl, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
+  // 일시정지 또는 휴식(rest) 단계 → 영상 정지. 그 외엔 자동 재생.
+  // 오디오 코칭은 휴식 멘트 그대로 흘러나오고, 영상만 멈춰서 사용자가 쉬는 느낌을 살림.
+  useEffect(() => {
+    if (!videoUrl) return;
+    const shouldPause = isPaused || phase.kind === 'rest';
+    if (shouldPause) player.pause();
+    else player.play();
+  }, [isPaused, phase.kind, videoUrl, player]);
 
   // 운동 종료 멘트 phase로 우회 (exercise-finish → 다음 운동의 intro 또는 finish)
   function advanceExercise() {
@@ -526,8 +512,6 @@ export default function SessionScreen() {
     return <ThemedView style={styles.container} />;
   }
 
-  const nextExerciseName = routine.exercises[exerciseIdx + 1]?.name ?? null;
-  const nextPreview = nextPreviewText({ phase, parsed, nextExerciseName });
   const overallProgress = (exerciseIdx + exerciseFraction(phase, parsed)) / total;
 
   // phase.kind === 'finish' 도달 시점에 위의 useEffect 가 router.replace 로 이동.
@@ -553,7 +537,7 @@ export default function SessionScreen() {
           </ThemedText>
         </View>
 
-        <View style={[styles.progressTrack, { backgroundColor: Palette.bgMuted }]}>
+        {/* <View style={[styles.progressTrack, { backgroundColor: Palette.bgMuted }]}>
           <View
             style={[
               styles.progressFill,
@@ -563,73 +547,133 @@ export default function SessionScreen() {
               },
             ]}
           />
-        </View>
+        </View> */}
 
         <ScrollView
           style={styles.mainScroll}
           contentContainerStyle={styles.main}
           showsVerticalScrollIndicator={false}>
-          <ThemedText type="title" style={styles.center}>
-            {current.name}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {current.detail}
-          </ThemedText>
-          {phase.kind === 'rep' && parsed?.type === 'reps' ? (
-            <ThemedText type="smallBold" style={{ color: Palette.primary }}>
-              {phase.set}세트 / {parsed.sets}세트  ·  현재 {phase.rep}/{parsed.reps}회
-            </ThemedText>
+          {/* 상단 헤더 — 운동명(25px) + 디테일(small/gray) 베이스라인 정렬. */}
+          <View style={styles.headerInfo}>
+            <View style={styles.headerTitleRow}>
+              <ThemedText type="title" style={{ fontSize: 25, lineHeight: 31 }}>
+                {current.name}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                ({current.detail})
+              </ThemedText>
+            </View>
+          </View>
+
+          {/* 운동명 바로 아래에 영상 (60% 폭, 가운데 정렬). */}
+          {current.videoUrl ? (
+            <Pressable
+              onPress={handlePauseToggle}
+              style={({ pressed }) => [
+                styles.topCardVideo,
+                { backgroundColor: Palette.bgMuted, opacity: pressed ? 0.85 : 1 },
+              ]}>
+              <VideoView
+                player={player}
+                style={styles.video}
+                contentFit="cover"
+                nativeControls={false}
+              />
+            </Pressable>
           ) : null}
 
+          {/* 영상 아래 타이머/세트/회차 — 가운데 정렬. */}
+          <View style={styles.phaseBlock}>
+            <PhaseDisplay phase={phase} parsed={parsed} current={current} />
+          </View>
+
+          {/* 오디오 코칭 카드 — 진행바 + 재생/정지 버튼 + AI 말풍선. */}
           <View
             style={[
-              styles.phaseCard,
+              styles.audioCard,
               { borderColor: Palette.lineDefault },
               Elevation.level1,
             ]}>
-            <PhaseDisplay phase={phase} parsed={parsed} current={current} />
-            {isPaused ? (
-              <ThemedText type="smallBold" style={{ color: Palette.warning }}>
-                일시정지
-              </ThemedText>
-            ) : null}
-          </View>
+            <View style={styles.audioHeaderRow}>
+              <View style={styles.audioBadge}>
+                <Headphones color={Palette.primary} size={16} />
+                <ThemedText type="smallBold" style={{ color: Palette.primary }}>
+                  {isPaused ? '오디오 코칭 정지됨' : '오디오 코칭 재생 중'}
+                </ThemedText>
+              </View>
+              <Pressable
+                onPress={handlePauseToggle}
+                style={({ pressed }) => [
+                  styles.audioToggle,
+                  { backgroundColor: Palette.primaryLight, opacity: pressed ? 0.7 : 1 },
+                ]}>
+                {isPaused ? (
+                  <Play color={Palette.primary} size={18} fill={Palette.primary} />
+                ) : (
+                  <Pause color={Palette.primary} size={18} fill={Palette.primary} />
+                )}
+              </Pressable>
+            </View>
 
-          {current.caution?.trim() ? (
-            <View
-              style={[
-                styles.cautionCard,
-                {
-                  backgroundColor: theme.backgroundElement,
-                  borderColor: Palette.warning,
-                },
-              ]}>
-              <ThemedText type="smallBold" style={{ color: Palette.warning }}>
-                주의할 점
+            {/* 진행 바 — 시각 표시용 데코레이션. 실제 오디오 동기는 추후 연결. */}
+            <View style={styles.audioProgressRow}>
+              <ThemedText type="label" themeColor="textSecondary">
+                00:00
               </ThemedText>
-              <ThemedText type="small">
-                {current.caution}
+              <View style={[styles.audioProgressTrack, { backgroundColor: Palette.bgMuted }]}>
+                <View
+                  style={[
+                    styles.audioProgressFill,
+                    { backgroundColor: Palette.primary, width: '40%' },
+                  ]}
+                />
+              </View>
+              <ThemedText type="label" themeColor="textSecondary">
+                {formatTime((parsed?.type === 'time' ? parsed.totalSeconds : 0))}
               </ThemedText>
             </View>
-          ) : null}
 
-          {nextPreview ? (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-              {nextPreview}
-            </ThemedText>
-          ) : null}
+            {/* AI 아바타 + 말풍선 — 항상 표시. description + (caution 있으면 한 줄 띄고 '주의' 칩). */}
+            <View style={styles.bubbleRow}>
+              <View style={[styles.bubbleAvatar, { backgroundColor: Palette.primaryLight }]}>
+                <ThemedText type="label" style={{ color: Palette.primary }}>
+                  AI
+                </ThemedText>
+              </View>
+              <View style={[styles.coachBubble, { backgroundColor: Palette.bgMuted }]}>
+                {/* intro: 설명만 / caution: 주의만 / 그 외: 둘 다 (한 줄 띄고). */}
+                {phase.kind !== 'caution' ? (
+                  <ThemedText type="default">{current.description}</ThemedText>
+                ) : null}
+                {phase.kind !== 'caution' &&
+                phase.kind !== 'intro' &&
+                current.caution?.trim() ? (
+                  <View style={styles.bubbleGap} />
+                ) : null}
+                {phase.kind !== 'intro' && current.caution?.trim() ? (
+                  <View style={styles.cautionRow}>
+                    <View
+                      style={[
+                        styles.cautionChip,
+                        { backgroundColor: `${Palette.warning}33` },
+                      ]}>
+                      <ThemedText
+                        type="label"
+                        style={{ color: Palette.warning }}>
+                        주의
+                      </ThemedText>
+                    </View>
+                    <ThemedText type="default" style={styles.cautionText}>
+                      {current.caution}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </View>
 
           <View style={styles.controls}>
-          <Pressable
-            onPress={handlePauseToggle}
-            style={({ pressed }) => [
-              styles.primaryCta,
-              { backgroundColor: pressed ? Palette.primaryPressed : Palette.primary },
-            ]}>
-            <ThemedText type="subtitle" style={{ color: Palette.white }}>
-              {isPaused ? '재개' : '일시정지'}
-            </ThemedText>
-          </Pressable>
+          {/* 재생/일시정지는 오디오 카드의 동그란 버튼으로 통합됨 — 이 자리는 보조 컨트롤만. */}
 
           <View style={styles.subRow}>
             <Pressable
@@ -687,33 +731,24 @@ function PhaseDisplay({
   parsed: ParsedDetail | null;
   current: { name: string; description: string; caution: string };
 }) {
-  if (phase.kind === 'intro') {
-    return (
-      <>
-        <View style={[styles.badge, { backgroundColor: Palette.primaryLight }]}>
-          <ThemedText type="smallBold" style={{ color: Palette.primary }}>
-            오디오 코칭 재생 중
-          </ThemedText>
-        </View>
-        <ThemedText type="default" style={styles.center}>
-          {current.description}
-        </ThemedText>
-      </>
-    );
+  // intro/caution 단계에서는 상단 카드에 아무 라벨도 표시하지 않음 (텍스트는 오디오 말풍선으로 이동).
+  if (phase.kind === 'intro' || phase.kind === 'caution') {
+    return null;
   }
 
-  if (phase.kind === 'caution') {
+  // "[진행중] {label}" 라벨 — set-start/rep/rest/time 진행 단계에 공통 사용.
+  function PhaseLabel({ text }: { text: string }) {
     return (
-      <>
-        <View style={[styles.badge, { backgroundColor: Palette.primaryLight }]}>
-          <ThemedText type="smallBold" style={{ color: Palette.warning }}>
-            주의사항 안내 중
+      <View style={styles.phaseLabelRow}>
+        <View style={[styles.progressChip, { backgroundColor: Palette.primaryLight }]}>
+          <ThemedText type="label" style={{ color: Palette.primary }}>
+            진행중
           </ThemedText>
         </View>
-        <ThemedText type="default" style={styles.center}>
-          {current.caution}
+        <ThemedText type="small" themeColor="textSecondary">
+          {text}
         </ThemedText>
-      </>
+      </View>
     );
   }
 
@@ -733,9 +768,7 @@ function PhaseDisplay({
   if (phase.kind === 'set-start') {
     return (
       <>
-        <ThemedText type="small" themeColor="textSecondary">
-          세트 시작
-        </ThemedText>
+        <PhaseLabel text="세트 시작" />
         <ThemedText type="display" style={styles.center}>
           {phase.set}세트
         </ThemedText>
@@ -746,9 +779,7 @@ function PhaseDisplay({
   if (phase.kind === 'rep' && parsed?.type === 'reps') {
     return (
       <>
-        <ThemedText type="small" themeColor="textSecondary">
-          {phase.set}세트 / {parsed.sets}세트
-        </ThemedText>
+        <PhaseLabel text={`${phase.set}세트 / ${parsed.sets}세트`} />
         <ThemedText type="display" style={styles.center}>
           {phase.rep} / {parsed.reps}회
         </ThemedText>
@@ -759,9 +790,7 @@ function PhaseDisplay({
   if (phase.kind === 'rest') {
     return (
       <>
-        <ThemedText type="small" themeColor="textSecondary">
-          휴식
-        </ThemedText>
+        <PhaseLabel text="휴식" />
         <ThemedText type="display" style={styles.center}>
           {phase.secondsLeft}초
         </ThemedText>
@@ -772,9 +801,7 @@ function PhaseDisplay({
   if (phase.kind === 'time') {
     return (
       <>
-        <ThemedText type="small" themeColor="textSecondary">
-          남은 시간
-        </ThemedText>
+        <PhaseLabel text="남은 시간" />
         <ThemedText type="display" style={styles.center}>
           {formatTime(phase.secondsLeft)}
         </ThemedText>
@@ -833,6 +860,132 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
   },
   center: { textAlign: 'center' },
+  // 상단 헤더 — 운동명 + (디테일) 베이스라인 정렬.
+  headerInfo: {
+    gap: Spacing.xs,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+  },
+  // 오디오 코칭 카드 — 진행바 + 재생 버튼 + AI 말풍선.
+  audioCard: {
+    width: '100%',
+    padding: Spacing.md,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
+  },
+  audioHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  audioBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  audioToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  audioProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  audioProgressTrack: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  audioProgressFill: {
+    height: '100%',
+  },
+  bubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  bubbleAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coachBubble: {
+    flex: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderTopLeftRadius: Radius.small,
+    borderTopRightRadius: Radius.card,
+    borderBottomRightRadius: Radius.card,
+    borderBottomLeftRadius: Radius.card,
+  },
+  // description 과 caution 사이 한 칸 여백.
+  bubbleGap: { height: Spacing.sm },
+  // 주의 칩 + caution 텍스트를 한 줄에 정렬.
+  cautionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.xs,
+  },
+  cautionChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.small,
+  },
+  cautionText: { flex: 1 },
+  // 상단 카드 — 상: 타이머/세트, 하: 영상 (세로 적층).
+  topCard: {
+    width: '100%',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+  },
+  topCardLeft: {
+    width: '100%',
+    gap: Spacing.sm,
+    alignItems: 'center',
+  },
+  // 영상 아래 타이머/세트 — 가운데 정렬 블록.
+  phaseBlock: {
+    width: '100%',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  // "[진행중] {label}" 한 줄 정렬.
+  phaseLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  progressChip: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.small,
+  },
+  // 영상 — 60% 폭, 4:5 세로 비율, 가운데 정렬.
+  topCardVideo: {
+    width: '60%',
+    alignSelf: 'center',
+    aspectRatio: 856 / 1072,
+    borderRadius: Radius.card,
+    overflow: 'hidden',
+  },
+  video: { width: '100%', height: '100%' },
   phaseCard: {
     width: '100%',
     padding: Spacing.lg,
