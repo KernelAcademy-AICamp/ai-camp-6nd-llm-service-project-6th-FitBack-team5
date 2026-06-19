@@ -247,15 +247,6 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
                 )}
               </Card>
 
-              {/* About */}
-              <Card accentColor={Palette.primary}>
-                <View style={styles.aboutHead}>
-                  <Icon icon={Sparkles} size={16} color={Palette.primary} />
-                  <ThemedText type="captionBold" style={{ color: Palette.primary }}>FitBack은 이렇게 일해요</ThemedText>
-                </View>
-                <ThemedText type="caption" themeColor="textSecondary">평가하지 않아요. 데이터를 보여주고, 다음 행동을 제안해요.</ThemedText>
-              </Card>
-
               {/* 알림 설정 진입 */}
               <Card>
                 <Pressable onPress={() => setView('notify')} style={styles.navRow} accessibilityRole="button">
@@ -263,6 +254,15 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
                   <ThemedText type="caption" style={styles.navLabel}>알림 설정</ThemedText>
                   <Icon icon={ChevronRight} size={16} color={Palette.gray300} />
                 </Pressable>
+              </Card>
+
+              {/* About */}
+              <Card accentColor={Palette.primary}>
+                <View style={styles.aboutHead}>
+                  <Icon icon={Sparkles} size={16} color={Palette.primary} />
+                  <ThemedText type="captionBold" style={{ color: Palette.primary }}>FitBack은 이렇게 일해요</ThemedText>
+                </View>
+                <ThemedText type="caption" themeColor="textSecondary">평가하지 않아요. 데이터를 보여주고, 다음 행동을 제안해요.</ThemedText>
               </Card>
 
               {/* 하단 회색 링크 */}
