@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -26,6 +27,8 @@ export function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [showSignupDone, setShowSignupDone] = useState(false);
+  const [signupNeedsConfirm, setSignupNeedsConfirm] = useState(false);
 
   const isSignup = mode === 'signup';
   const passwordOk = password.length >= 6;
@@ -40,16 +43,27 @@ export function LoginScreen() {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
         setErrorMessage(error.message);
-      } else if (!data.session) {
-        setInfoMessage('확인 메일을 보냈어요. 메일의 링크를 누른 뒤 로그인해 주세요.');
       } else {
         logEvent(EVENTS.signup);
+        // 자동 로그인 세션이 생겼으면 해제 → 로그인 페이지에서 직접 로그인하도록.
+        setSignupNeedsConfirm(!data.session);
+        if (data.session) await supabase.auth.signOut();
+        setShowSignupDone(true);
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setErrorMessage(error.message);
     }
     setSubmitting(false);
+  }
+
+  // 가입 완료 팝업 닫기 → 로그인 모드로 전환(이메일 유지, 비번 비움)
+  function closeSignupDone() {
+    setShowSignupDone(false);
+    setMode('login');
+    setPassword('');
+    setErrorMessage(null);
+    setInfoMessage(null);
   }
 
   function toggleMode() {
@@ -144,29 +158,45 @@ export function LoginScreen() {
           </ThemedText>
         </Pressable>
 
-        <View style={styles.devBox}>
-          <ThemedText type="label" style={styles.devTitle}>
-            테스트 계정 (개발용)
-          </ThemedText>
-          <ThemedText type="label" themeColor="textSecondary">
-            이메일: {TEST_EMAIL || '(.env 미설정)'}
-          </ThemedText>
-          <ThemedText type="label" themeColor="textSecondary">
-            비밀번호: {TEST_PASSWORD || '(.env 미설정)'}
-          </ThemedText>
-          {TEST_EMAIL && TEST_PASSWORD ? (
+        {/* 테스트 계정 — 개발 빌드에서만 노출(배포/프로덕션 숨김) */}
+        {__DEV__ && TEST_EMAIL && TEST_PASSWORD ? (
+          <View style={styles.devBox}>
+            <ThemedText type="label" style={styles.devTitle}>
+              테스트 계정 (개발용)
+            </ThemedText>
+            <ThemedText type="label" themeColor="textSecondary">
+              이메일: {TEST_EMAIL}
+            </ThemedText>
+            <ThemedText type="label" themeColor="textSecondary">
+              비밀번호: {TEST_PASSWORD}
+            </ThemedText>
             <Pressable onPress={fillTestCredentials} style={styles.devButton}>
               <ThemedText type="label" style={styles.devButtonLabel}>
                 입력란에 자동으로 채우기
               </ThemedText>
             </Pressable>
-          ) : (
-            <ThemedText type="label" themeColor="textSecondary" style={styles.devHint}>
-              .env에 EXPO_PUBLIC_DEV_TEST_EMAIL / EXPO_PUBLIC_DEV_TEST_PASSWORD를 채우세요.
-            </ThemedText>
-          )}
-        </View>
+          </View>
+        ) : null}
       </View>
+
+      {/* 가입 완료 팝업 → 로그인 페이지로 전환 */}
+      <Modal visible={showSignupDone} transparent animationType="fade" onRequestClose={closeSignupDone}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <ThemedText type="h2">가입 완료</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.modalText}>
+              {signupNeedsConfirm
+                ? '확인 메일을 보냈어요. 메일 인증 후 로그인해 주세요.'
+                : '회원가입이 완료됐어요. 방금 만든 계정으로 로그인해 주세요.'}
+            </ThemedText>
+            <Pressable onPress={closeSignupDone} style={styles.modalButton}>
+              <ThemedText type="subtitle" style={styles.buttonLabel}>
+                로그인하러 가기
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -237,4 +267,29 @@ const styles = StyleSheet.create({
   },
   devButtonLabel: { color: Palette.primary },
   devHint: { marginTop: Spacing.xs },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: ScreenPadding,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: Palette.bgSurface,
+    borderRadius: Radius.card,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+    ...Elevation.level2,
+  },
+  modalText: { marginBottom: Spacing.sm },
+  modalButton: {
+    backgroundColor: Palette.primary,
+    borderRadius: Radius.button,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
 });
