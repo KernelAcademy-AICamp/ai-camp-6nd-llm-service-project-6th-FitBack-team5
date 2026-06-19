@@ -26,6 +26,7 @@ import { useDietSummary } from '@/features/coach/useDietSummary';
 import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
 import { useMemberships } from '@/features/membership/useMemberships';
 import { useHomeActivity } from '@/features/home/useHomeActivity';
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import { useAddSchedule, type ScheduleType } from '@/features/home/useSchedules';
 import { type Routine, type RoutineInput, useGenerateRoutine } from '@/features/workout/useGenerateRoutine';
 import { prepareSessionAudio } from '@/features/workout/start-session';
@@ -159,6 +160,7 @@ function AddToScheduleButton({
     <Pressable
       onPress={() => {
         if (added || add.isPending) return;
+        logEvent(EVENTS.recommendClick, { type, title });
         add.mutate({ date: ymd, type, title, payload, source: 'ai' }, { onSuccess: () => setAdded(true) });
       }}
       disabled={added || add.isPending}
@@ -296,6 +298,11 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<'welcome' | 'chat'>('welcome');
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
+
+  // 코치 진입 이벤트(1회)
+  useEffect(() => {
+    logEvent(EVENTS.coachOpen);
+  }, []);
 
   // Workout coach inline flow state
   const [wcMode, setWcMode] = useState(false);

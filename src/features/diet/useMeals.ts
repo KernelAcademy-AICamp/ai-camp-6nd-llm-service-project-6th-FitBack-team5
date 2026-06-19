@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
@@ -125,7 +126,8 @@ export function useAddMeal(date: string = todayISO()) {
       if (error) throw error;
       return fromRow(data as MealRow);
     },
-    onSuccess: () => {
+    onSuccess: (meal) => {
+      logEvent(EVENTS.dietLogged, { mealType: meal.mealType, inputMethod: meal.inputMethod });
       qc.invalidateQueries({ queryKey: mealsKey(user?.id, date) });
     },
   });
