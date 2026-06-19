@@ -13,7 +13,7 @@ import {
   Utensils,
   X,
 } from 'lucide-react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -269,6 +269,21 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
   const { data: home } = useHomeActivity();
   const { data: schedules } = useSchedules(year, month);
   const { data: memberships } = useMemberships();
+  const autoComplete = useUpdateSchedule();
+
+  // 자동 완료: 같은 날짜에 해당 타입 실제 기록이 있으면 예정→완료.
+  // 오매칭 방지 — 타입이 명확히 매핑되는 visit/workout/diet만, custom 제외.
+  useEffect(() => {
+    if (!data?.days || !schedules) return;
+    const present: Record<string, { visit: boolean; workout: boolean; diet: boolean }> = {};
+    for (const d of data.days) present[d.date] = { visit: d.visited, workout: d.workout, diet: d.diet };
+    for (const s of schedules) {
+      if (s.status !== 'planned' || s.type === 'custom') continue;
+      const p = present[s.date];
+      if (p && p[s.type]) autoComplete.mutate({ id: s.id, status: 'done' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, schedules]);
 
   // 권장 페이스 개인화: 활성 기간권의 주당 목표 중 최댓값, 없으면 기본값
   const goalFromMembership = (memberships ?? [])
