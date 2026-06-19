@@ -49,3 +49,4 @@ supabase/.temp/
 
 # 테스트 결과물
 test-results/
+.vercel

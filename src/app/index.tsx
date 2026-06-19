@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { AlarmClock, Bell, Calendar, ChevronRight, LogOut, Menu, Ruler, Sparkles, TrendingUp, Weight, X } from 'lucide-react-native';
+import { AlarmClock, Bell, Calendar, ChevronRight, Menu, TrendingUp, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,11 +20,13 @@ import {
 import { useProfile } from '@/features/auth/useProfile';
 import { CoachChat } from '@/features/coach/CoachChat';
 import { MonthCalendar } from '@/features/home/MonthCalendar';
+import { PermissionGate } from '@/features/home/PermissionGate';
 import { MembershipMiniList } from '@/features/home/MembershipMiniList';
 import { WorkoutStatusCard } from '@/features/home/WorkoutStatusCard';
 import { useSchedules } from '@/features/home/useSchedules';
+import { MyPanel } from '@/features/auth/MyPanel';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
-import { supabase } from '@/lib/supabase';
+import { MembershipForm } from '@/features/membership/MembershipForm';
 import { useCurrentUser } from '@/stores/auth';
 import {
   computeRisk,
@@ -65,6 +67,13 @@ export default function HomeScreen() {
   const [showCoach, setShowCoach] = useState(false);
   const [showMyDrawer, setShowMyDrawer] = useState(false);
   const [showAlarm, setShowAlarm] = useState(false);
+  const [showMembershipForm, setShowMembershipForm] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
+  }
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -117,7 +126,6 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="메뉴 열기">
               <Icon icon={Menu} size={22} color={Palette.gray700} />
-              <ThemedText type="h1">마이</ThemedText>
             </Pressable>
             <View style={styles.headerActions}>
               <Pressable
@@ -241,14 +249,14 @@ export default function HomeScreen() {
           ) : !isLoading ? (
             /* 회원권 없을 때 — 빈 상태 */
             <Pressable
-              onPress={() => router.navigate('/membership')}
+              onPress={() => setShowMembershipForm(true)}
               style={[styles.mainCard, Elevation.level1, styles.emptyCard]}>
               <Icon icon={TrendingUp} size={28} color={Palette.primary} />
               <ThemedText type="subtitle" style={{ textAlign: 'center' }}>
                 아직 등록된 회원권이 없어요
               </ThemedText>
               <ThemedText type="caption" themeColor="textSecondary" style={{ textAlign: 'center' }}>
-                회원권을 등록하면 본전 회수율을 분석하고{'\n'}오늘 얼마를 되찾는지 보여드려요.
+                회원권을 등록하면 활용도를 분석하고{'\n'}오늘 얼마를 되찾는지 보여드려요.
               </ThemedText>
               <View style={styles.utilBtn}>
                 <ThemedText type="subtitle" style={styles.utilBtnText}>
@@ -354,77 +362,42 @@ export default function HomeScreen() {
         </ThemedView>
       </Modal>
 
-      {/* 마이 드로어 */}
+      {/* 마이 — 전체 페이지 모달 */}
       <Modal
         visible={showMyDrawer}
-        transparent
-        animationType="fade"
+        animationType="slide"
+        presentationStyle="pageSheet"
         onRequestClose={() => setShowMyDrawer(false)}>
-        <Pressable style={styles.drawerOverlay} onPress={() => setShowMyDrawer(false)}>
-          <Pressable style={styles.drawerPanel} onPress={() => {}}>
-            <SafeAreaView edges={['top', 'bottom']} style={styles.drawerSafe}>
-              <ScrollView contentContainerStyle={styles.drawerBody} showsVerticalScrollIndicator={false}>
-                <ThemedText type="h1" style={styles.drawerTitle}>마이</ThemedText>
-
-                {/* 프로필 */}
-                <Card>
-                  <ThemedText type="h2">{name}</ThemedText>
-                  <ThemedText type="caption" themeColor="textSecondary">
-                    {user?.email ?? ''}
-                  </ThemedText>
-                </Card>
-
-                {/* 신체 정보 */}
-                <Card>
-                  <ThemedText type="captionBold">내 정보</ThemedText>
-                  <View style={styles.infoRows}>
-                    <View style={styles.infoRow}>
-                      <View style={styles.infoRowLeft}>
-                        <Icon icon={Ruler} size={16} color={Palette.gray500} />
-                        <ThemedText type="caption" themeColor="textSecondary">키</ThemedText>
-                      </View>
-                      <ThemedText type="captionBold">
-                        {profile?.height != null ? `${profile.height} cm` : '-'}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <View style={styles.infoRowLeft}>
-                        <Icon icon={Weight} size={16} color={Palette.gray500} />
-                        <ThemedText type="caption" themeColor="textSecondary">몸무게</ThemedText>
-                      </View>
-                      <ThemedText type="captionBold">
-                        {profile?.weight != null ? `${profile.weight} kg` : '-'}
-                      </ThemedText>
-                    </View>
-                  </View>
-                </Card>
-
-                {/* About */}
-                <Card accentColor={Palette.primary}>
-                  <View style={styles.aboutHead}>
-                    <Icon icon={Sparkles} size={16} color={Palette.primary} />
-                    <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                      FitBack은 이렇게 일해요
-                    </ThemedText>
-                  </View>
-                  <ThemedText type="caption" themeColor="textSecondary">
-                    평가하지 않아요. 데이터를 보여주고, 다음 행동을 제안해요.
-                  </ThemedText>
-                </Card>
-
-                {/* 로그아웃 */}
-                <Pressable
-                  onPress={() => supabase.auth.signOut()}
-                  style={({ pressed }) => [styles.logoutBtn, pressed && styles.pressed]}
-                  accessibilityRole="button">
-                  <Icon icon={LogOut} size={16} color={Palette.gray500} />
-                  <ThemedText type="caption" themeColor="textSecondary">로그아웃</ThemedText>
-                </Pressable>
-              </ScrollView>
-            </SafeAreaView>
-          </Pressable>
-        </Pressable>
+        <MyPanel onClose={() => setShowMyDrawer(false)} />
       </Modal>
+
+      {/* 회원권 등록 모달 (#4a) */}
+      <Modal
+        visible={showMembershipForm}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowMembershipForm(false)}>
+        <ThemedView style={styles.modalRoot}>
+          <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+            <MembershipForm
+              onClose={() => setShowMembershipForm(false)}
+              onSuccess={() => showToast('등록완료')}
+            />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
+
+      {/* 진입 권한 안내 (#2, 위치 → 알림, 최초 1회) */}
+      {user ? <PermissionGate userId={user.id} /> : null}
+
+      {/* 토스트 */}
+      {toast ? (
+        <View style={styles.toastWrap} pointerEvents="none">
+          <View style={styles.toast}>
+            <ThemedText type="captionBold" style={{ color: Palette.white }}>{toast}</ThemedText>
+          </View>
+        </View>
+      ) : null}
     </ThemedView>
   );
 }
@@ -641,5 +614,16 @@ const styles = StyleSheet.create({
     borderRadius: Radius.button,
     borderWidth: 1,
     borderColor: Palette.lineStrong,
+  },
+  settingRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
+  settingLabel: { flex: 1 },
+  withdrawBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: Spacing.md },
+  toastWrap: { position: 'absolute', left: 0, right: 0, bottom: BottomTabInset + Spacing.xl, alignItems: 'center' },
+  toast: {
+    backgroundColor: Palette.gray900,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    ...Elevation.level2,
   },
 });

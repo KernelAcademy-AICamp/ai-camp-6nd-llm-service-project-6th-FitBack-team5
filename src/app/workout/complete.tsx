@@ -24,6 +24,7 @@ import {
   ScreenPadding,
   Spacing,
 } from '@/constants/theme';
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import type { Routine } from '@/features/workout/useGenerateRoutine';
 import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/lib/supabase';
@@ -212,6 +213,7 @@ export default function CompleteScreen() {
         return;
       }
       setLogId(log.id);
+      logEvent(EVENTS.workoutCompleted, { completionStatus, exerciseCount: total, calories: cal });
 
       try {
         const fb = await fetchAiFeedback({

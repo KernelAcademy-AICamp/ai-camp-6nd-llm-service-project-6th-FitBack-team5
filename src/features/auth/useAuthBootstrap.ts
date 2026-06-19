@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 
+import { identifyUser, initAnalytics, resetAnalytics } from '@/features/analytics/posthog';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
 
 export function useAuthBootstrap() {
   useEffect(() => {
     let cancelled = false;
+    initAnalytics();
 
     async function bootstrap() {
       const {
@@ -29,6 +31,8 @@ export function useAuthBootstrap() {
         session,
         status: session ? 'authenticated' : 'unauthenticated',
       });
+      if (session?.user?.id) identifyUser(session.user.id);
+      else resetAnalytics();
     });
 
     return () => {

@@ -18,6 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import { won } from '@/features/membership/dashboard';
 import { perVisitValue, weeksBetween } from '@/features/membership/portfolio';
 import { ExerciseRecordForm } from '@/features/membership/ExerciseRecordForm';
@@ -374,6 +375,10 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
       {
         onSuccess: (data) => {
           setVisitId((data as { id: string }).id);
+          logEvent(verified ? EVENTS.checkinVerified : EVENTS.checkinFallback, {
+            membershipId: selected.id,
+            recoveredAmount: verified ? perVisit : 0,
+          });
           setStep(asExercise ? 'exercise' : 'done');
         },
       },

@@ -75,7 +75,7 @@ function Field({
   );
 }
 
-export function MembershipForm({ onClose }: { onClose: () => void }) {
+export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; onSuccess?: () => void }) {
   const [name, setName] = useState('');
   const [cost, setCost] = useState('');
   const [period, setPeriod] = useState<MembershipPeriod>('month');
@@ -217,7 +217,12 @@ export function MembershipForm({ onClose }: { onClose: () => void }) {
         centerLat: centerCoord?.lat ?? null,
         centerLng: centerCoord?.lng ?? null,
       },
-      { onSuccess: onClose },
+      {
+        onSuccess: () => {
+          onSuccess?.();
+          onClose();
+        },
+      },
     );
   }
 

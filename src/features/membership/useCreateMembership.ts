@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
 
@@ -85,7 +86,8 @@ export function useCreateMembership() {
       }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      logEvent(EVENTS.membershipAdded, { type: (data as { type?: string })?.type });
       queryClient.invalidateQueries({ queryKey: ['memberships', user?.id] });
     },
   });
