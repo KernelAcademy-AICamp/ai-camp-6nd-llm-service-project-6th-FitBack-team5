@@ -22,6 +22,7 @@ export interface HomeActivity {
   days: ActivityDay[];
   weekDays: WeekDay[]; // 이번 주 월~일 7일
   weekVisits: number; // 이번 주 방문 일수
+  lastWeekVisits: number; // 지난주 방문 일수 (증감 비교용)
   weekWorkouts: number; // 이번 주(월~) 완료/부분 운동 수
   lastRoutine: string | null;
   streakWeeks: number; // 현재 주부터 연속 활동 주
@@ -119,6 +120,13 @@ export function useHomeActivity() {
       }
       const weekVisits = weekDays.filter((d) => d.visited).length;
 
+      // 지난주 방문 일수 (증감 비교용)
+      const lastWkStart = wkStart - 7 * 86_400_000;
+      let lastWeekVisits = 0;
+      for (let i = 0; i < 7; i++) {
+        if (visited.has(ymdLocal(new Date(lastWkStart + i * 86_400_000)))) lastWeekVisits += 1;
+      }
+
       // 연속 주 (현재 주부터, 활동 있는 주만)
       const allDates = new Set<string>([...visited, ...workout, ...diet]);
       const allMs = [...allDates].map((ds) => new Date(`${ds}T00:00:00`).getTime());
@@ -131,7 +139,7 @@ export function useHomeActivity() {
         else break;
       }
 
-      return { year, month, days, weekDays, weekVisits, weekWorkouts, lastRoutine, streakWeeks };
+      return { year, month, days, weekDays, weekVisits, lastWeekVisits, weekWorkouts, lastRoutine, streakWeeks };
     },
   });
 }

@@ -1,4 +1,4 @@
-import { ChevronRight, Flame, Sparkles } from 'lucide-react-native';
+import { ChevronRight, Flame, Sparkles, TrendingDown, TrendingUp } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { CountUp } from '@/components/count-up';
@@ -43,6 +43,7 @@ export function WorkoutStatusCard({
   const weekVisits = home?.weekVisits ?? 0;
   const streak = home?.streakWeeks ?? 0;
   const insight = patternInsight(pattern);
+  const delta = home ? weekVisits - home.lastWeekVisits : 0;
 
   // 이번 주 목표(개인화): 활성 기간권 주당 목표 최댓값, 없으면 기본값
   const goal = (memberships ?? [])
@@ -102,6 +103,20 @@ export function WorkoutStatusCard({
         </ThemedText>
       </View>
 
+      {/* 지난주 대비 증감 (활동 — 손익 컬러 미사용) */}
+      {home ? (
+        <View style={styles.delta}>
+          <Icon
+            icon={delta < 0 ? TrendingDown : TrendingUp}
+            size={12}
+            color={delta > 0 ? Palette.primary : Palette.gray500}
+          />
+          <ThemedText type="label" themeColor="textSecondary">
+            지난주 대비 {delta > 0 ? `+${delta}회` : delta < 0 ? `${delta}회` : '변화 없음'}
+          </ThemedText>
+        </View>
+      ) : null}
+
       {/* 코치 한마디 (말풍선 통합 — 분석 해설) */}
       <Pressable
         onPress={onOpenCoach}
@@ -137,6 +152,7 @@ const styles = StyleSheet.create({
   barActive: { backgroundColor: Palette.primary },
   barToday: { borderWidth: 1.5, borderColor: Palette.primary },
   insight: { textAlign: 'center' },
+  delta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   goalRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   goalBar: { flex: 1 },
   coach: {
