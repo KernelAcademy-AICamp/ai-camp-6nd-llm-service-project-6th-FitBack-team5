@@ -1,11 +1,11 @@
 /**
  * 운동 홈에서 선택한 일자의 운동 데이터 카드.
  * 운동시간(MM:SS) / 칼로리(kcal) / 완료여부 / AI 피드백 — 운동 완료 페이지와 동일한 시각 패턴.
- * 기록이 없으면 빈 상태 메시지.
+ * 기록이 없어도 빈 메시지 대신 0 kcal / 0 분으로 노출.
  */
 
-import { Clock, Flame } from 'lucide-react-native';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ChevronRight, Clock, Flame } from 'lucide-react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -27,38 +27,51 @@ function formatKstTime(iso: string): string {
   return `${h}시 ${m}분`;
 }
 
-export function SelectedDayCard({ date }: { date: string }) {
+export function SelectedDayCard({
+  date,
+  onPressMore,
+}: {
+  date: string;
+  onPressMore?: () => void;
+}) {
   const { data: logs, isLoading } = useDayWorkoutLogs(date);
-  // AI 피드백은 가장 최근 1건 기준. 시간/칼로리 합계는 모든 로그에서 산출.
-  const latest = logs?.[0] ?? null;
+
+  const header = (
+    <View style={styles.summaryHeader}>
+      <ThemedText type="subtitle">오늘의 홈트 요약</ThemedText>
+      {onPressMore ? (
+        <Pressable
+          onPress={onPressMore}
+          hitSlop={8}
+          style={({ pressed }) => [styles.moreBtn, { opacity: pressed ? 0.6 : 1 }]}>
+          <ThemedText type="small" themeColor="textSecondary">
+            더보기
+          </ThemedText>
+          <ChevronRight color={Palette.gray500} size={16} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
 
   if (isLoading) {
     return (
-      <ThemedView
-        type="backgroundElement"
-        style={[styles.card, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-        <View style={styles.center}>
-          <ActivityIndicator color={Palette.primary} />
-        </View>
-      </ThemedView>
-    );
-  }
-
-  if (!logs || logs.length === 0 || !latest) {
-    return (
-      <ThemedView
-        type="backgroundElement"
-        style={[styles.card, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-        <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-          이 날짜에는 운동 기록이 없어요.
-        </ThemedText>
-      </ThemedView>
+      <View style={styles.summaryWrap}>
+        {header}
+        <ThemedView
+          type="backgroundElement"
+          style={[styles.card, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+          <View style={styles.center}>
+            <ActivityIndicator color={Palette.primary} />
+          </View>
+        </ThemedView>
+      </View>
     );
   }
 
   // 선택일 모든 운동의 합 — actualDurationSec 가 null 인 구 기록은 durationMin*60 으로 보정.
-  const totalPlannedMin = logs.reduce((a, l) => a + l.durationMin, 0);
-  const totalActualMin = logs.reduce(
+  // 기록이 없으면 두 값 모두 0 으로 표시 (빈 메시지 대신).
+  const totalPlannedMin = (logs ?? []).reduce((a, l) => a + l.durationMin, 0);
+  const totalActualMin = (logs ?? []).reduce(
     (a, l) =>
       a +
       (l.actualDurationSec !== null
@@ -66,35 +79,44 @@ export function SelectedDayCard({ date }: { date: string }) {
         : l.durationMin),
     0,
   );
-  const totalCalories = logs.reduce((a, l) => a + l.calories, 0);
+  const totalCalories = (logs ?? []).reduce((a, l) => a + l.calories, 0);
 
   return (
-    <View style={styles.statsRow}>
-      <ThemedView
-        type="backgroundElement"
-        style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-        <Clock color={Palette.primary} size={20} />
-        <ThemedText type="small" themeColor="textSecondary">
-          총 운동 시간
-        </ThemedText>
-        <View style={styles.timeRow}>
-          <ThemedText type="title" style={{ color: Palette.primary }}>
-            {totalActualMin}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            / {totalPlannedMin}분
-          </ThemedText>
-        </View>
-      </ThemedView>
-      <ThemedView
-        type="backgroundElement"
-        style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-        <Flame color={Palette.warning} size={20} />
-        <ThemedText type="small" themeColor="textSecondary">
-          총 칼로리
-        </ThemedText>
-        <ThemedText type="subtitle">{totalCalories} kcal</ThemedText>
-      </ThemedView>
+    <View style={styles.summaryWrap}>
+      {header}
+      <View style={styles.statsRow}>
+        <ThemedView
+          type="backgroundElement"
+          style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+          <View style={[styles.statIconWrap, { backgroundColor: Palette.primaryLight }]}>
+            <Clock color={Palette.primary} size={20} />
+          </View>
+          <View style={styles.statTexts}>
+            <ThemedText type="small" themeColor="textSecondary">
+              총 운동시간
+            </ThemedText>
+            <ThemedText type="title" style={{ color: Palette.primary }}>
+              {totalActualMin}
+              <ThemedText type="small" themeColor="textSecondary">
+                {' '}/ {totalPlannedMin}분
+              </ThemedText>
+            </ThemedText>
+          </View>
+        </ThemedView>
+        <ThemedView
+          type="backgroundElement"
+          style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+          <View style={[styles.statIconWrap, { backgroundColor: Palette.primaryLight }]}>
+            <Flame color={Palette.warning} size={20} />
+          </View>
+          <View style={styles.statTexts}>
+            <ThemedText type="small" themeColor="textSecondary">
+              총 소모 칼로리
+            </ThemedText>
+            <ThemedText type="subtitle">{totalCalories} kcal</ThemedText>
+          </View>
+        </ThemedView>
+      </View>
     </View>
   );
 }
@@ -139,8 +161,19 @@ export function SelectedDayFeedback({ date }: { date: string }) {
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    gap: Spacing.sm,
+  summaryWrap: {
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  moreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   card: {
     padding: Spacing.md,
@@ -157,17 +190,23 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm + 2,
     padding: Spacing.sm,
     borderRadius: Radius.card,
     borderWidth: StyleSheet.hairlineWidth,
-    gap: Spacing.xs,
-    alignItems: 'center',
   },
-  // 실제분(큰 보라) + "/ 계획분" (작은 회색) 베이스라인 정렬.
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
+  statIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statTexts: {
+    flex: 1,
+    gap: 2,
   },
   feedbackCard: {
     padding: Spacing.md,

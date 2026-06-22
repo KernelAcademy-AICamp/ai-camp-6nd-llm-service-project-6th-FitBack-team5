@@ -12,6 +12,7 @@ export default function WorkoutLayout() {
         }}
       />
       <Stack.Screen name="complete" />
+      <Stack.Screen name="summary" />
     </Stack>
   );
 }

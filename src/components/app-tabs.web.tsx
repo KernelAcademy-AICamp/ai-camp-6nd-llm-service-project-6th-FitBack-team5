@@ -33,9 +33,9 @@ export default function AppTabs() {
           <TabTrigger name="diet" href="/diet" asChild>
             <TabButton icon={Utensils}>식단</TabButton>
           </TabTrigger>
-          {/* 운동 탭은 챗봇 코치(/workout/coach)를 기본 진입점으로 사용. 어디 있어도 항상 코치로 리셋. */}
-          <TabTrigger name="workout" href="/workout/coach" asChild>
-            <TabButton icon={Dumbbell} onPress={() => router.replace('/workout/coach')}>
+          {/* 운동 탭은 홈(/workout)을 기본 진입점으로 사용. 어디 있어도 항상 홈으로 리셋. */}
+          <TabTrigger name="workout" href="/workout" asChild>
+            <TabButton icon={Dumbbell} onPress={() => router.replace('/workout')}>
               운동
             </TabButton>
           </TabTrigger>
