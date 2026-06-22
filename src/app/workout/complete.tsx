@@ -18,11 +18,13 @@ import { ThemedView } from '@/components/themed-view';
 import {
   BottomTabInset,
   Elevation,
+  FontFamily,
   MaxContentWidth,
   Palette,
   Radius,
   ScreenPadding,
   Spacing,
+  Typography,
 } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import type { Routine } from '@/features/workout/useGenerateRoutine';
@@ -522,6 +524,7 @@ export default function CompleteScreen() {
               styles.toastContainer,
               {
                 // 8자리 hex 의 끝 E6 = 약 90% alpha — 살짝 비치는 느낌.
+                // no token for error+alpha
                 backgroundColor:
                   toast.kind === 'error' ? `${Palette.error}E6` : `${Palette.gray900}E6`,
               },
@@ -620,7 +623,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    fontSize: 16,
+    ...Typography.body,
     textAlignVertical: 'top',
   },
   memoCounter: {

@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card, Icon } from '@/components/ui';
-import { BottomTabInset, MaxContentWidth, Palette, ScreenPadding, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { useProfile } from '@/features/auth/useProfile';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser } from '@/stores/auth';
@@ -36,11 +36,18 @@ export default function MyScreen() {
           <ThemedText type="h1">마이</ThemedText>
 
           {/* 프로필 */}
-          <Card>
-            <ThemedText type="h2">{name}</ThemedText>
-            <ThemedText type="caption" themeColor="textSecondary">
-              {user?.email ?? '(no session)'}
-            </ThemedText>
+          <Card style={styles.profileCard}>
+            <View style={styles.avatar}>
+              <ThemedText type="h2" style={{ color: Palette.primary }}>
+                {name.charAt(0)}
+              </ThemedText>
+            </View>
+            <View>
+              <ThemedText type="h2">{name}</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">
+                {user?.email ?? '(no session)'}
+              </ThemedText>
+            </View>
           </Card>
 
           {/* 신체 정보 */}
@@ -97,17 +104,26 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   body: { gap: Spacing.md, paddingBottom: Spacing.lg },
+  profileCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   rows: { gap: Spacing.sm, marginTop: Spacing.sm },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  aboutHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: 4 },
+  aboutHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.xs },
   logout: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.xs,
     paddingVertical: Spacing.md,
-    borderRadius: 12,
+    borderRadius: Radius.button,
     borderWidth: 1,
     borderColor: Palette.lineStrong,
     marginTop: Spacing.sm,

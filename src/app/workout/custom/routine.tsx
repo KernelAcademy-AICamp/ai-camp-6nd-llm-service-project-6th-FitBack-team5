@@ -95,7 +95,7 @@ export default function RoutineScreen() {
               <ThemedText type="caption" themeColor="textSecondary">
                 총 운동 시간
               </ThemedText>
-              <ThemedText type="display" style={{ marginTop: 4 }}>
+              <ThemedText type="display" style={{ marginTop: Spacing.xs }}>
                 {TOTAL_MIN}분
               </ThemedText>
               <ThemedText
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   },
   minBadge: {
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
     borderRadius: Radius.full,
     backgroundColor: Palette.primaryLight,
   },
