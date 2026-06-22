@@ -174,6 +174,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
   const [etaText, setEtaText] = useState('');
   const [arrived, setArrived] = useState(false);
   const [usingSim, setUsingSim] = useState(false);
+  const [forcedStop, setForcedStop] = useState(false); // 60분 정지 → 강제 종료
 
   // 출발 단계: 출발지 설정 시 '어떻게 가시나요?' 영역으로 스크롤.
   const scrollRef = useRef<ScrollView>(null);
@@ -225,10 +226,10 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
     if (step !== 'going' || !origin || !dest) return;
     const total = Math.max(0.001, distanceKm(origin, dest));
     const durMin = modeMinutes(mode) ?? Math.round((total / 30) * 60);
-    // 예상 도착 시각(고정): 지금 + 소요시간.
-    const eta = new Date(Date.now() + durMin * 60_000);
-    setEtaText(`${pad2(eta.getHours())}:${pad2(eta.getMinutes())}`);
+    const eta0 = new Date(Date.now() + durMin * 60_000);
+    setEtaText(`${pad2(eta0.getHours())}:${pad2(eta0.getMinutes())}`);
     setArrived(false);
+    setForcedStop(false);
     setCurrent(origin);
     setRemainKm(total);
     setRemainMin(durMin);
@@ -238,13 +239,48 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
     let fixed = false;
     let simStarted = false;
 
-    const update = (cur: Pt) => {
-      const rem = distanceKm(cur, dest);
+    const STEP_KM = 0.1; // 표시 갱신 간격(100m) — 너무 잦은 업데이트 방지
+    const MOVE_KM = 0.05; // 이동으로 인정하는 최소 변화(50m)
+    const STOP_MS = 60 * 60 * 1000; // 정지 판정(60분)
+    let lastShownRem = total; // 마지막으로 화면에 반영한 남은 거리
+    let lastMovePos: Pt = origin; // 마지막 이동 기준 위치
+    let lastMoveAt = Date.now(); // 마지막 이동 시각
+
+    // 남은 거리 기준으로 ETA·잔여시간 재계산 후 화면 반영.
+    const commitDisplay = (cur: Pt, rem: number) => {
       setCurrent(cur);
       setRemainKm(rem);
-      setRemainMin(Math.max(0, Math.round(durMin * (rem / total))));
-      if (rem * 1000 < 80) setArrived(true);
+      const rm = Math.max(0, Math.round(durMin * (rem / total)));
+      setRemainMin(rm);
+      const eta = new Date(Date.now() + rm * 60_000);
+      setEtaText(`${pad2(eta.getHours())}:${pad2(eta.getMinutes())}`);
+      lastShownRem = rem;
     };
+
+    const update = (cur: Pt) => {
+      const rem = distanceKm(cur, dest);
+      // 이동 감지(정지 타이머 리셋)
+      if (distanceKm(cur, lastMovePos) >= MOVE_KM) {
+        lastMovePos = cur;
+        lastMoveAt = Date.now();
+      }
+      // 도착은 즉시 반영
+      if (rem * 1000 < 80) {
+        setArrived(true);
+        commitDisplay(cur, rem);
+        return;
+      }
+      // 표시는 100m 이동마다만 갱신
+      if (Math.abs(rem - lastShownRem) >= STEP_KM) commitDisplay(cur, rem);
+    };
+
+    // 60분 이상 정지 → 강제 종료(도착 단계로 점프, 출석 불가 안내)
+    const stopTimer = setInterval(() => {
+      if (Date.now() - lastMoveAt >= STOP_MS) {
+        setForcedStop(true);
+        setStep('arrive');
+      }
+    }, 60_000);
 
     const startSim = () => {
       if (simStarted) return;
@@ -285,6 +321,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
       if (watchId != null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
       if (simTimer) clearInterval(simTimer);
       if (fallbackTimer) clearTimeout(fallbackTimer);
+      clearInterval(stopTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
@@ -631,6 +668,19 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         {step === 'arrive' ? (
           <>
             <StepLabel>STEP 4 · 도착</StepLabel>
+            {forcedStop ? (
+              <View style={styles.popup}>
+                <ThemedText type="h2">이동이 멈춘 것 같아요</ThemedText>
+                <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
+                  이동 시간이 불분명하여 출석 체크가 안 됐어요. 다시 해 주세요.
+                </ThemedText>
+                <Button label="다시 하기" onPress={() => setStep('depart')} style={styles.action} />
+                <Pressable onPress={onClose} style={styles.skip} hitSlop={8}>
+                  <ThemedText type="caption" themeColor="textSecondary">닫기</ThemedText>
+                </Pressable>
+              </View>
+            ) : (
+              <>
             <ThemedText type="h2">센터에 도착했어요</ThemedText>
             {gps.phase === 'checking' ? (
               <View style={styles.infoRow}>
@@ -695,6 +745,8 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
                 />
               </>
             ) : null}
+              </>
+            )}
           </>
         ) : null}
 
