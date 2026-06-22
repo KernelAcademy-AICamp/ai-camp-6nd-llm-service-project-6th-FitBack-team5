@@ -2,7 +2,6 @@ import {
   Car,
   Check,
   ChevronRight,
-  CloudSun,
   Footprints,
   MapPin,
   Navigation,
@@ -29,10 +28,9 @@ import { useCenter } from '@/features/membership/useCenter';
 import { useCreateVisit } from '@/features/membership/useCreateVisit';
 import { useRoute } from '@/features/membership/useRoute';
 import { useTransit } from '@/features/membership/useTransit';
-import { useWeather } from '@/features/membership/useWeather';
 import type { Membership } from '@/features/membership/useMemberships';
 
-type Step = 'select' | 'prepare' | 'depart' | 'going' | 'arrive' | 'done' | 'exercise' | 'logged';
+type Step = 'select' | 'prepare' | 'depart' | 'going' | 'arrive' | 'done' | 'exercise' | 'logged' | 'visitDone';
 type GpsPhase = 'idle' | 'checking' | 'near' | 'far' | 'unavailable';
 type Mode = 'walk' | 'transit' | 'car';
 type Pt = { lat: number; lng: number };
@@ -156,6 +154,8 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
   const [visitId, setVisitId] = useState<string | null>(null);
   const [phone, setPhone] = useState(false);
   const [clothes, setClothes] = useState(false);
+  const [towel, setTowel] = useState(false);
+  const [water, setWater] = useState(false);
   const [mode, setMode] = useState<Mode | null>(null);
   const [gps, setGps] = useState<{ phase: GpsPhase; km?: number }>({ phase: 'idle' });
 
@@ -181,7 +181,6 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
 
   const { mutate, isPending, error } = useCreateVisit();
   const { data: center } = useCenter(selectedId);
-  const { data: weather } = useWeather(center?.latitude, center?.longitude);
   const { data: route, isLoading: routeLoading } = useRoute(
     origin?.lat,
     origin?.lng,
@@ -379,7 +378,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             membershipId: selected.id,
             recoveredAmount: verified ? perVisit : 0,
           });
-          setStep(asExercise ? 'exercise' : 'done');
+          setStep(asExercise ? 'visitDone' : 'done');
         },
       },
     );
@@ -416,20 +415,16 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
 
         {step === 'prepare' ? (
           <>
-            <StepLabel>STEP 1 · 준비</StepLabel>
-            <ThemedText type="h2">짐 챙기셨나요?</ThemedText>
+            <StepLabel>STEP 1 · 준비물 체크리스트</StepLabel>
             {selected ? (
               <ThemedText type="caption" themeColor="textSecondary">
                 {selected.name}
               </ThemedText>
             ) : null}
-            {perVisit > 0 ? (
-              <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                오늘 다녀오면 +{won(perVisit)} 되찾아요
-              </ThemedText>
-            ) : null}
             <CheckItem label="휴대폰" checked={phone} onToggle={() => setPhone((v) => !v)} />
             <CheckItem label="운동복" checked={clothes} onToggle={() => setClothes((v) => !v)} />
+            <CheckItem label="수건" checked={towel} onToggle={() => setTowel((v) => !v)} />
+            <CheckItem label="물" checked={water} onToggle={() => setWater((v) => !v)} />
             <Button label="다음 (길 안내)" onPress={() => setStep('depart')} style={styles.action} />
           </>
         ) : null}
@@ -448,7 +443,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             </View>
 
             {dest ? (
-              <KakaoMap lat={dest.lat} lng={dest.lng} label={center?.name ?? undefined} height={180} />
+              <KakaoMap lat={dest.lat} lng={dest.lng} label={center?.name ?? undefined} height={120} />
             ) : (
               <Card>
                 <ThemedText type="caption" themeColor="textSecondary">
@@ -456,15 +451,6 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
                 </ThemedText>
               </Card>
             )}
-
-            {weather ? (
-              <View style={styles.infoRow}>
-                <Icon icon={CloudSun} size={16} color={Palette.gray500} />
-                <ThemedText type="caption" themeColor="textSecondary">
-                  {`${center?.name ?? '센터'} · ${weather.desc} ${weather.temp}°C`}
-                </ThemedText>
-              </View>
-            ) : null}
 
             {/* ② 출발지 — "어디에서 출발하시나요?" */}
             <Card>
@@ -580,7 +566,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
                 origin={origin}
                 current={current}
                 showLine
-                height={220}
+                height={140}
               />
             ) : null}
 
@@ -692,12 +678,12 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             {gps.phase !== 'near' ? (
               <>
                 <ThemedText type="label" themeColor="textSecondary" style={styles.center}>
-                  체크인은 센터 {Math.round(CHECK_IN_RADIUS_KM * 1000)}m 이내에서만 됩니다.
+                  자동 출석은 센터 {Math.round(CHECK_IN_RADIUS_KM * 1000)}m 이내에서만 됩니다.
                   실제로 왔는데 위치가 안 잡히면 아래로 출석을 남기세요.
-                  (GPS 미검증으로 기록되고, 회수 금액엔 반영되지 않아요.)
+                  (GPS 미검증 — 방문으로만 기록되고 회수 금액엔 반영되지 않아요.)
                 </ThemedText>
                 <Button
-                  label="운동 기록으로 출석하기"
+                  label="수동 출석하기"
                   variant="secondary"
                   onPress={() => checkIn(true)}
                   loading={isPending}
@@ -741,6 +727,26 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             onDone={() => setStep('logged')}
             onSkip={onClose}
           />
+        ) : null}
+
+        {step === 'visitDone' ? (
+          <View style={styles.popup}>
+            <View style={styles.celebrate}>
+              <Icon icon={Check} size={32} color={Palette.profit} />
+            </View>
+            <ThemedText type="h1">오늘 출석 완료!</ThemedText>
+            <View style={[styles.infoRow, { marginTop: Spacing.xs }]}>
+              <Icon icon={MapPin} size={15} color={Palette.primary} />
+              <ThemedText type="caption">
+                {center?.name ?? selected?.name ?? '센터'} ·{' '}
+                {`${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`}
+              </ThemedText>
+            </View>
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
+              방문으로 기록됐어요.
+            </ThemedText>
+            <Button label="닫기" onPress={onClose} style={styles.popupBtn} />
+          </View>
         ) : null}
 
         {step === 'logged' ? (
