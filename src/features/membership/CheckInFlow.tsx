@@ -571,25 +571,30 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             ) : null}
 
             <Card>
-              <View style={styles.timeRow}>
-                <View style={styles.timeLeft}>
-                  <View style={styles.timeIcon}>
-                    <Icon icon={mode ? MODE_META[mode].icon : Navigation} size={18} color={Palette.primary} />
-                  </View>
-                  <ThemedText type="captionBold">{mode ? MODE_META[mode].label : '이동'}</ThemedText>
+              {/* 거리·도착 강조 (지도는 약하게, 정보는 크게) */}
+              <View style={styles.navHero}>
+                <View style={styles.navMetric}>
+                  <ThemedText type="label" themeColor="textSecondary">남은 거리</ThemedText>
+                  <ThemedText type="display" style={styles.navValue}>
+                    {remainKm != null ? remainKm.toFixed(2) : '-'}
+                    <ThemedText type="h2" themeColor="textSecondary"> km</ThemedText>
+                  </ThemedText>
                 </View>
-                <ThemedText type="captionBold">
-                  남은 거리 {remainKm != null ? `${remainKm.toFixed(2)}km` : '-'}
-                </ThemedText>
+                <View style={styles.navMetric}>
+                  <ThemedText type="label" themeColor="textSecondary">도착까지</ThemedText>
+                  <ThemedText type="display" style={[styles.navValue, { color: Palette.primary }]}>
+                    {remainMin != null ? (remainMin > 0 ? remainMin : 0) : '-'}
+                    <ThemedText type="h2" style={{ color: Palette.primary }}> 분</ThemedText>
+                  </ThemedText>
+                </View>
               </View>
               <View style={styles.divider} />
               <View style={styles.timeRow}>
-                <ThemedText type="caption" themeColor="textSecondary">
-                  도착 예정 {etaText}
-                </ThemedText>
-                <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                  {remainMin != null ? (remainMin > 0 ? `${remainMin}분 남음` : '거의 도착') : '-'}
-                </ThemedText>
+                <View style={styles.timeLeft}>
+                  <Icon icon={mode ? MODE_META[mode].icon : Navigation} size={15} color={Palette.gray500} />
+                  <ThemedText type="caption" themeColor="textSecondary">{mode ? MODE_META[mode].label : '이동'}</ThemedText>
+                </View>
+                <ThemedText type="captionBold">도착 예정 {etaText}</ThemedText>
               </View>
             </Card>
 
@@ -812,6 +817,9 @@ const styles = StyleSheet.create({
   resultText: { flex: 1, gap: 2 },
 
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  navHero: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.md },
+  navMetric: { flex: 1, gap: 2 },
+  navValue: { lineHeight: 38 },
   timeLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   timeIcon: {
     width: 32,
