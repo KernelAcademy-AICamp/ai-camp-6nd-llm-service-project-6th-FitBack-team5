@@ -1,5 +1,6 @@
+import { useRouter } from 'expo-router';
 import { Apple, ArrowLeft, ArrowUp, CalendarPlus, Camera, Check, Dumbbell, Flame, Sparkles, X } from 'lucide-react-native';
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -12,26 +13,25 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 
 const CHARACTER = require('../../../assets/images/character_chat.png') as number;
 
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import { useProfile } from '@/features/auth/useProfile';
-import type { AppResponse, ChatbotIntent, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
+import type { AppResponse, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
 import { useAiFeedback } from '@/features/coach/useAiFeedback';
 import { useDietSummary } from '@/features/coach/useDietSummary';
+import { pickFoodImage } from '@/features/diet/pickFoodImage';
+import { useHomeActivity } from '@/features/home/useHomeActivity';
+import { useAddSchedule, type ScheduleType } from '@/features/home/useSchedules';
 import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
 import { useMemberships } from '@/features/membership/useMemberships';
-import { useHomeActivity } from '@/features/home/useHomeActivity';
-import { EVENTS, logEvent } from '@/features/analytics/events';
-import { useAddSchedule, type ScheduleType } from '@/features/home/useSchedules';
-import { type Routine, type RoutineInput, useGenerateRoutine } from '@/features/workout/useGenerateRoutine';
 import { prepareSessionAudio } from '@/features/workout/start-session';
+import { useGenerateRoutine, type Routine, type RoutineInput } from '@/features/workout/useGenerateRoutine';
 import { useWorkoutSession } from '@/stores/workout-session';
-import { pickFoodImage } from '@/features/diet/pickFoodImage';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const ANON = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -493,7 +493,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
 
   function initWorkoutCoach() {
     setMessages([
-      { role: 'coach', text: '안녕하세요! 오늘 운동을 함께 만들어볼게요. 몇 가지 여쭤볼게요.' },
+      { role: 'coach', text: '안녕하세요! 오늘 운동을 함께 만들어봐요. 몇 가지 여쭤볼게요.' },
       { role: 'coach', text: WC_STEPS[0].question },
     ]);
     setWcStepIdx(0);

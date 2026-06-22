@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { ChevronRight, Zap } from 'lucide-react-native';
+import { ChevronRight, Dumbbell, Sliders, Wrench } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,9 +15,8 @@ import {
   ScreenPadding,
   Spacing,
 } from '@/constants/theme';
-import { DayWorkoutList } from '@/features/workout/DayWorkoutList';
-import { SelectedDayCard, SelectedDayFeedback } from '@/features/workout/SelectedDayCard';
-import { WeekStatusCard } from '@/features/workout/WeekStatusCard';
+import { routeToCustom } from '@/features/workout/route-to-custom';
+import { SelectedDayCard } from '@/features/workout/SelectedDayCard';
 import { WorkoutDateStrip } from '@/features/workout/WorkoutDateStrip';
 
 function todayIso(): string {
@@ -47,43 +46,80 @@ export default function WorkoutScreen() {
           {/* 가로 날짜 스트립 — 오늘 ±7일. 선택 시 아래 카드 갱신. */}
           <WorkoutDateStrip selected={selectedDate} onSelect={setSelectedDate} />
 
-          {/* 선택한 일자의 운동 데이터 (운동시간 / 칼로리 / 완료여부 + AI 피드백). */}
-          <SelectedDayCard date={selectedDate} />
+          {/* 운동 시작 진입 카드 3종 — 일일달력 바로 밑. AI 추천이 맨 위(강조).
+              각 카드는 coach 모드 선택을 건너뛰고 곧장 해당 흐름으로 진입. */}
+          <View style={styles.modeCardCol}>
+            {/* AI 추천 — 기존 entryCard 스타일(primaryLight 배경 + 강조), 아이콘만 Dumbbell. */}
+            <Pressable
+              onPress={() => router.push('/workout/coach?mode=preset')}
+              style={({ pressed }) => [
+                styles.entryCard,
+                {
+                  backgroundColor: Palette.primaryLight,
+                  borderColor: Palette.lineDefault,
+                  opacity: pressed ? 0.85 : 1,
+                },
+                Elevation.level1,
+              ]}>
+              <View style={[styles.entryIconWrap, { backgroundColor: Palette.primary }]}>
+                <Dumbbell color={Palette.white} size={20} />
+              </View>
+              <View style={styles.entryTexts}>
+                <ThemedText type="subtitle" style={{ color: Palette.primary }}>
+                  AI 추천 홈트 루틴
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  내 상황에 맞는 루틴을 추천해드려요
+                </ThemedText>
+              </View>
+              <ChevronRight color={Palette.primary} size={20} />
+            </Pressable>
 
-          {/* 이번 주 월~일 운동 현황 — 선택일이 속한 주의 데이터. 전부완료(보라) · 일부완료(주황). */}
-          <WeekStatusCard selectedDate={selectedDate} />
+            <Pressable
+              onPress={() => void routeToCustom(router)}
+              style={({ pressed }) => [
+                styles.modeCard,
+                { borderColor: Palette.lineDefault, opacity: pressed ? 0.85 : 1 },
+              ]}>
+              <View style={[styles.modeIcon, { backgroundColor: Palette.bgMuted }]}>
+                <Sliders color={Palette.gray500} size={24} />
+              </View>
+              <View style={styles.modeText}>
+                <ThemedText type="subtitle">오늘 운동 커스텀</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  운동을 직접 선택해서 만들어요
+                </ThemedText>
+              </View>
+              <ChevronRight color={Palette.gray500} size={20} />
+            </Pressable>
 
-          {/* 선택일에 한 모든 운동 컴팩트 목록 — 클릭 액션 없음. */}
-          <DayWorkoutList date={selectedDate} />
+            {/* ── dev: 영상 시범 테스트용. 제거 시 이 Pressable 블록만 삭제. ── */}
+            <Pressable
+              onPress={() => router.push('/workout/coach?mode=dev')}
+              style={({ pressed }) => [
+                styles.modeCard,
+                { borderColor: Palette.lineDefault, opacity: pressed ? 0.85 : 1 },
+              ]}>
+              <View style={[styles.modeIcon, { backgroundColor: Palette.bgMuted }]}>
+                <Wrench color={Palette.gray500} size={24} />
+              </View>
+              <View style={styles.modeText}>
+                <ThemedText type="subtitle">개발용 (3운동 고정)</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  코브라 → 플랭크 → 스쿼트, 영상 테스트 전용
+                </ThemedText>
+              </View>
+              <ChevronRight color={Palette.gray500} size={20} />
+            </Pressable>
+          </View>
 
-          {/* 선택일 AI 피드백 — 홈트했어요 카드 바로 아래. 기록 없으면 미노출. */}
-          <SelectedDayFeedback date={selectedDate} />
-
-          {/* AI 추천 루틴 받기 입구 카드 — 탭하면 챗봇이 6가지 항목을 차례로 물어봄. */}
-          <Pressable
-            onPress={() => router.push('/workout/coach')}
-            style={({ pressed }) => [
-              styles.entryCard,
-              {
-                backgroundColor: Palette.primaryLight,
-                borderColor: Palette.lineDefault,
-                opacity: pressed ? 0.85 : 1,
-              },
-              Elevation.level1,
-            ]}>
-            <View style={[styles.entryIconWrap, { backgroundColor: Palette.primary }]}>
-              <Zap color={Palette.white} size={20} fill={Palette.white} />
-            </View>
-            <View style={styles.entryTexts}>
-              <ThemedText type="subtitle" style={{ color: Palette.primary }}>
-                AI 추천 홈트 루틴
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                내 상황에 맞는 루틴을 추천해드려요
-              </ThemedText>
-            </View>
-            <ChevronRight color={Palette.primary} size={20} />
-          </Pressable>
+          {/* 오늘의 홈트 요약 — 총 소모 칼로리/총 운동시간. 더보기는 주차/일일/피드백 상세 페이지로. */}
+          <SelectedDayCard
+            date={selectedDate}
+            onPressMore={() =>
+              router.push({ pathname: '/workout/summary', params: { date: selectedDate } })
+            }
+          />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -105,6 +141,10 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   header: { gap: Spacing.xs },
+  modeCardCol: {
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
   entryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -121,6 +161,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   entryTexts: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  modeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: Palette.bgSurface,
+  },
+  modeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeText: {
     flex: 1,
     gap: Spacing.xs,
   },
