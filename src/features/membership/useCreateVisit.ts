@@ -6,7 +6,7 @@ import { useCurrentUser } from '@/stores/auth';
 export interface NewVisitInput {
   membershipId: string;
   centerName?: string | null;
-  /** 명세 §6: 검증/자기신고 구분 */
+  /** 검증/수동 출석 구분 */
   method?: 'geofence' | 'fallback';
   verifyStatus?: 'verified' | 'unverified';
   recoveredAmount?: number; // unverified면 0

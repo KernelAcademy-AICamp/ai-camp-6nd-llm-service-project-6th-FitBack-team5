@@ -356,7 +356,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
       })
     : 0;
 
-  // asExercise=true: 위치 보정(자기신고) — GPS 미검증으로 기록, 회수액 미반영(명세 §4.2).
+  // asExercise=true: 수동 출석 — 위치 미검증으로 기록하되 회수액은 반영(타깃 유저 기준 의도적 상향은 특이케이스).
   function checkIn(asExercise = false) {
     if (!selected) return;
     const verified = !asExercise;
@@ -366,7 +366,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         centerName: center?.name ?? selected.name,
         method: verified ? 'geofence' : 'fallback',
         verifyStatus: verified ? 'verified' : 'unverified',
-        recoveredAmount: verified ? perVisit : 0,
+        recoveredAmount: perVisit,
         centerLat: dest?.lat ?? null,
         centerLng: dest?.lng ?? null,
         distanceM: verified && gps.km != null ? Math.round(gps.km * 1000) : null,
@@ -376,7 +376,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
           setVisitId((data as { id: string }).id);
           logEvent(verified ? EVENTS.checkinVerified : EVENTS.checkinFallback, {
             membershipId: selected.id,
-            recoveredAmount: verified ? perVisit : 0,
+            recoveredAmount: perVisit,
           });
           setStep(asExercise ? 'visitDone' : 'done');
         },
@@ -685,7 +685,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
                 <ThemedText type="label" themeColor="textSecondary" style={styles.center}>
                   자동 출석은 센터 {Math.round(CHECK_IN_RADIUS_KM * 1000)}m 이내에서만 됩니다.
                   실제로 왔는데 위치가 안 잡히면 아래로 출석을 남기세요.
-                  (GPS 미검증 — 방문으로만 기록되고 회수 금액엔 반영되지 않아요.)
+                  (위치 미검증 수동 출석으로 기록되고, 회수 금액에도 반영돼요.)
                 </ThemedText>
                 <Button
                   label="수동 출석하기"
@@ -740,6 +740,11 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
               <Icon icon={Check} size={32} color={Palette.profit} />
             </View>
             <ThemedText type="h1">오늘 출석 완료!</ThemedText>
+            {perVisit > 0 ? (
+              <ThemedText type="h2" style={{ color: Palette.primary }}>
+                +{won(perVisit)} 되찾았어요
+              </ThemedText>
+            ) : null}
             <View style={[styles.infoRow, { marginTop: Spacing.xs }]}>
               <Icon icon={MapPin} size={15} color={Palette.primary} />
               <ThemedText type="caption">
@@ -748,7 +753,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
               </ThemedText>
             </View>
             <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
-              방문으로 기록됐어요.
+              수동 출석으로 기록됐어요.
             </ThemedText>
             <Button label="닫기" onPress={onClose} style={styles.popupBtn} />
           </View>

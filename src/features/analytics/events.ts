@@ -10,7 +10,7 @@ export const EVENTS = {
   membershipAdded: 'membership_added',
   checkinStarted: 'checkin_started',
   checkinVerified: 'checkin_verified', // NSM: 주간 검증 체크인
-  checkinFallback: 'checkin_fallback', // 자기신고(미검증)
+  checkinFallback: 'checkin_fallback', // 수동 출석(미검증)
   coachOpen: 'coach_open',
   recommendClick: 'recommend_click',
   scheduleAdded: 'schedule_added',
