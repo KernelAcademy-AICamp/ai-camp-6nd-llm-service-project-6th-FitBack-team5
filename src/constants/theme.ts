@@ -9,14 +9,15 @@ import { Platform, type TextStyle, type ViewStyle } from 'react-native';
 
 // ── 4. 컬러 시스템 (raw palette) ──────────────────────────
 export const Palette = {
-  // Primary (인디고)
+  // Primary & Secondary (인디고)
   primary: '#6675FF',
   primaryHover: '#5566F7',
   primaryPressed: '#4957D8',
   primaryLight: '#EEF1FF',
+  secondary: '#6892FF',
 
   // Background
-  bgBase: '#FAF9F7',
+  bgBase: '#F2F2F7',
   bgSurface: '#FFFFFF',
   bgMuted: '#F3F4F6',
 
@@ -27,26 +28,34 @@ export const Palette = {
   error: '#EF4444',
   errorLight: '#FEE2E2',
 
-  // Semantic — 손익 상태 (흑자=Primary, 적자=Error — design-system §5)
+  // Semantic — 손익 상태 (흑자=Primary, 적자=Gray900 — design-system §5)
+  // loss는 빨강 아닌 다크 네이비: "Encourage, Not Pressure" — 압박이 아닌 사실 전달
   profit: '#6675FF',
   profitLight: '#EEF1FF',
-  loss: '#EF4444',
-  lossLight: '#FEE2E2',
+  loss: '#222C43',
+  lossLight: '#F2F2F7',
 
   // Neutral
-  gray900: '#111827',
-  gray700: '#374151',
+  gray900: '#222C43',
+  gray700: '#374151', // Figma 미포함 — 하위 호환용
   gray500: '#6B7280',
   gray400: '#999999',
   gray300: '#D1D5DB',
   gray100: '#F3F4F6',
-  gray50: '#F9FAFB',
+  gray50: '#F2F2F7',
   white: '#FFFFFF',
+
+  // Diet — 매크로·끼니 구분 틴트 (diet.tsx 전용)
+  tintOrange: '#F5A623',   // 단백질·아침·간식
+  tintYellow: '#F2B807',   // 탄수화물·점심
+  tintPurple: '#7C6CF0',   // 저녁
+  tintIndigo: '#8E9BFF',   // 칼로리 그래프 그라디언트
 
   // Line / Border
   lineDefault: 'rgba(0, 0, 0, 0.07)',
   lineStrong: 'rgba(0, 0, 0, 0.15)',
   linePrimary: '#6675FF',
+  borderStrong: '#6B7280', // Figma border/strong — 아이콘 stroke, 강조 라인
 } as const;
 
 // 기존 ThemedText/ThemedView 호환용 시맨틱 키 (라이트 전용).
@@ -85,9 +94,9 @@ export const Typography = {
   h1: { fontSize: 24, lineHeight: 30, fontFamily: FontFamily.bold, letterSpacing: -0.6, fontWeight: '700' },
   h2: { fontSize: 20, lineHeight: 25, fontFamily: FontFamily.semibold, letterSpacing: -0.5, fontWeight: '600' },
   subtitle: { fontSize: 18, lineHeight: 23, fontFamily: FontFamily.semibold, letterSpacing: -0.45, fontWeight: '600' },
-  body: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.regular, letterSpacing: -0.4, fontWeight: '400' },
-  bodyMedium: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.medium, letterSpacing: -0.4, fontWeight: '500' },
-  caption: { fontSize: 14, lineHeight: 21, fontFamily: FontFamily.regular, letterSpacing: -0.35, fontWeight: '400' },
+  body: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.medium, letterSpacing: -0.4, fontWeight: '500' },
+  bodyMedium: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.medium, letterSpacing: -0.4, fontWeight: '500' }, // body와 동일 — alias
+  caption: { fontSize: 14, lineHeight: 21, fontFamily: FontFamily.medium, letterSpacing: -0.35, fontWeight: '500' },
   captionBold: { fontSize: 14, lineHeight: 21, fontFamily: FontFamily.semibold, letterSpacing: -0.35, fontWeight: '600' },
   label: { fontSize: 12, lineHeight: 18, fontFamily: FontFamily.medium, letterSpacing: -0.3, fontWeight: '500' },
 } as const satisfies Record<string, TypeToken>;
@@ -131,25 +140,38 @@ export const Radius = {
 
 // ── 8. Elevation ──────────────────────────────────────────
 // 네이티브 shadow* + web boxShadow 동시 제공.
-export const Elevation: Record<'level1' | 'level2', ViewStyle> = {
+export const Elevation: Record<'level1' | 'level2' | 'sticky', ViewStyle> = {
+  // Level 1 · Card — 회원권·기록·추천 카드
   level1: Platform.select({
-    web: { boxShadow: '0 2px 8px rgba(15,23,42,0.06)' } as ViewStyle,
+    web: { boxShadow: '0 2px 12px rgba(17,24,39,0.04)' } as ViewStyle,
     default: {
-      shadowColor: '#0F172A',
+      shadowColor: '#111827',
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
+      shadowOpacity: 0.04,
+      shadowRadius: 12,
       elevation: 2,
     },
   }) as ViewStyle,
+  // Level 2 · Tab Bar — 바텀 탭바
   level2: Platform.select({
-    web: { boxShadow: '0 8px 24px rgba(15,23,42,0.08)' } as ViewStyle,
+    web: { boxShadow: '0 2px 12px rgba(34,44,67,0.08)' } as ViewStyle,
     default: {
-      shadowColor: '#0F172A',
-      shadowOffset: { width: 0, height: 8 },
+      shadowColor: '#222C43',
+      shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.08,
-      shadowRadius: 24,
-      elevation: 8,
+      shadowRadius: 12,
+      elevation: 4,
+    },
+  }) as ViewStyle,
+  // Sticky — 스티키 바·시트 상단 경계 (위 방향)
+  sticky: Platform.select({
+    web: { boxShadow: '0 -2px 12px rgba(17,24,39,0.08)' } as ViewStyle,
+    default: {
+      shadowColor: '#111827',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 4,
     },
   }) as ViewStyle,
 };

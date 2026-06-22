@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
+import { LinearGradient } from 'expo-linear-gradient';
 import { DefaultTheme, ThemeProvider } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
@@ -53,7 +54,14 @@ function AppShell() {
   return (
     <ThemeProvider value={FitBackTheme}>
       <AnimatedSplashOverlay />
-      <AppTabs />
+      <LinearGradient
+        colors={[`${Palette.primary}14`, Palette.bgBase]}
+        style={{ flex: 1 }}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      >
+        <AppTabs />
+      </LinearGradient>
     </ThemeProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -35,6 +35,24 @@ export function LoginScreen() {
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
+  // 이메일 인증 링크 결과 처리(웹): 만료·무효면 안내 후 URL 정리.
+  // 정상 토큰은 supabase가 detectSessionInUrl로 자동 처리해 로그인됨.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash || '';
+    if (!hash.includes('error')) return;
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const code = params.get('error_code');
+    const msg =
+      code === 'otp_expired'
+        ? '이메일 링크가 만료되었거나 이미 사용됐어요. 가입한 계정으로 로그인해 주세요.'
+        : '이메일 인증 링크에 문제가 있어요. 가입한 계정으로 로그인해 주세요.';
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMode('login');
+    setInfoMessage(msg);
+    window.history.replaceState(null, '', window.location.pathname);
+  }, []);
+
   const isSignup = mode === 'signup';
   const passwordOk = password.length >= 6;
   const canSubmit =
@@ -48,7 +66,9 @@ export function LoginScreen() {
     setInfoMessage(null);
     setSubmitting(true);
     if (isSignup) {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      // 확인 메일 링크가 우리 앱(현재 도메인)으로 돌아오게 지정. 웹만 origin 사용.
+      const emailRedirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
       if (error) {
         setErrorMessage(error.message);
       } else {

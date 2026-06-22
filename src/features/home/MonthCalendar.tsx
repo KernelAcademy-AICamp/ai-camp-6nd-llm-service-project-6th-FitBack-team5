@@ -137,7 +137,7 @@ function DayRecordList({ date, onNavigate }: { date: string; onNavigate: () => v
                 </View>
               ) : v.verifyStatus === 'unverified' ? (
                 <ThemedText type="label" themeColor="textSecondary">
-                  자기신고
+                  수동 출석
                 </ThemedText>
               ) : null}
               <ThemedText type="label" themeColor="textSecondary">

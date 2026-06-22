@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { sheetPresentation } from '@/components/modal-presentation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card, Icon } from '@/components/ui';
@@ -124,7 +125,7 @@ export default function MembershipScreen() {
       <Modal
         visible={showForm}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={sheetPresentation}
         onRequestClose={() => setShowForm(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
@@ -136,7 +137,7 @@ export default function MembershipScreen() {
       <Modal
         visible={!!detail}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={sheetPresentation}
         onRequestClose={() => setDetail(null)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
