@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 
-const CHARACTER = require('../../../assets/images/character_chat.png') as number;
+const CHARACTER = require('../../../assets/images/Chat.png') as number;
 
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui';

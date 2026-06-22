@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   modeIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },

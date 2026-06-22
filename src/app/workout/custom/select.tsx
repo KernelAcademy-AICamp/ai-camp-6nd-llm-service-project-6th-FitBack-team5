@@ -17,12 +17,12 @@ import { ThemedView } from '@/components/themed-view';
 import { Button, Icon } from '@/components/ui';
 import {
   BottomTabInset,
-  FontFamily,
   MaxContentWidth,
   Palette,
   Radius,
   ScreenPadding,
   Spacing,
+  Typography,
 } from '@/constants/theme';
 import { useCatalog } from '@/features/workout-custom/useCatalog';
 import type { BodyPart, CatalogItem, ExerciseType } from '@/features/workout-custom/types';
@@ -65,7 +65,7 @@ export default function SelectScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <ThemedText type="h2" style={{ marginBottom: 4 }}>
+          <ThemedText type="h2" style={{ marginBottom: Spacing.xs }}>
             어떤 운동을 할까요?
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -114,7 +114,7 @@ export default function SelectScreen() {
         {/* 내 선택 트레이 — 부위/유형 필터를 바꿔도 무엇을 골랐는지 항상 보인다. */}
         {count > 0 ? (
           <View style={styles.tray}>
-            <ThemedText type="label" themeColor="textSecondary" style={{ marginBottom: 6 }}>
+            <ThemedText type="label" themeColor="textSecondary" style={{ marginBottom: Spacing.sm }}>
               내 선택 ({count})
             </ThemedText>
             <ScrollView
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
   checkCircle: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: Radius.full,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
@@ -350,16 +350,14 @@ const styles = StyleSheet.create({
   trayChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: Spacing.sm,
     borderRadius: Radius.full,
     backgroundColor: Palette.primaryLight,
   },
   trayChipText: {
-    fontFamily: FontFamily.bold,
-    fontWeight: '700',
-    fontSize: 13,
+    ...Typography.caption,
     color: Palette.primary,
   },
 
