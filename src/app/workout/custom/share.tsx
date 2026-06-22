@@ -18,6 +18,7 @@ import {
   Radius,
   ScreenPadding,
   Spacing,
+  Typography,
 } from '@/constants/theme';
 import { ExerciseThumb } from '@/features/workout-custom/ExerciseThumb';
 import { saveCardImage, shareCardImage } from '@/features/workout-custom/captureShare';
@@ -92,7 +93,7 @@ export default function ShareScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           <ThemedText type="h2">오늘의 운동을 공유해보세요!</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary" style={{ marginTop: 4 }}>
+          <ThemedText type="small" themeColor="textSecondary" style={{ marginTop: Spacing.xs }}>
             멋진 기록을 함께 나눠요.
           </ThemedText>
 
@@ -118,7 +119,7 @@ export default function ShareScreen() {
                 </ThemedText>
                 <ThemedText
                   type="display"
-                  style={{ color: Palette.primary, marginTop: 4 }}
+                  style={{ color: Palette.primary, marginTop: Spacing.xs }}
                   numberOfLines={1}>
                   {total}분
                 </ThemedText>
@@ -220,7 +221,7 @@ const styles = StyleSheet.create({
   badge: {
     backgroundColor: Palette.primary,
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
     borderRadius: Radius.full,
   },
 
@@ -263,17 +264,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: Spacing.sm,
   },
   routineThumb: {
     width: 28,
     height: 28,
-    borderRadius: 6,
+    borderRadius: Radius.small,
     backgroundColor: Palette.bgMuted,
   },
   routineMeta: {
     // #오운완 태그(gray500)보다 더 연한 회색. duration 왼쪽에 오른쪽 정렬로 붙음.
-    fontSize: 12,
+    ...Typography.label,
     color: Palette.gray400,
     textAlign: 'right',
     marginRight: Spacing.sm,

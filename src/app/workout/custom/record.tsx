@@ -21,6 +21,7 @@ import {
   Radius,
   ScreenPadding,
   Spacing,
+  Typography,
 } from '@/constants/theme';
 import type { DraftItem } from '@/features/workout-custom/types';
 import { useActiveSession, useCompleteSession } from '@/features/workout-custom/useSession';
@@ -425,7 +426,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: Spacing.xs,
   },
   stepNumber: {
     minWidth: 24,
@@ -442,9 +443,7 @@ const styles = StyleSheet.create({
     padding: 0,
     margin: 0,
     textAlign: 'center',
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '600',
+    ...Typography.captionBold,
     color: Palette.gray900,
     backgroundColor: 'transparent',
     borderWidth: 0,
@@ -472,7 +471,7 @@ const styles = StyleSheet.create({
   memoInput: {
     minHeight: 60,
     color: Palette.gray900,
-    fontSize: 14,
+    ...Typography.caption,
     textAlignVertical: 'top',
   },
 

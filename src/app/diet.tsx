@@ -190,8 +190,8 @@ const MACRO_META = [
 
 // 매크로별 아이콘·색 (다음 식사 추천 표시용)
 const MACRO_ICON: Record<'protein' | 'carb' | 'fat', { icon: IconName; color: string }> = {
-  protein: { icon: 'local-fire-department', color: '#F5A623' },
-  carb: { icon: 'bolt', color: '#F2B807' },
+  protein: { icon: 'local-fire-department', color: Palette.tintOrange },
+  carb: { icon: 'bolt', color: Palette.tintYellow },
   fat: { icon: 'water-drop', color: '#6675FF' },
 };
 
@@ -355,7 +355,7 @@ function CalorieBar({ consumed, goal, burned }: { consumed: number; goal: number
           <Svg width="100%" height="100%">
             <Defs>
               <LinearGradient id="calGrad" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0" stopColor="#8E9BFF" />
+                <Stop offset="0" stopColor={Palette.tintIndigo} />
                 <Stop offset="1" stopColor="#6675FF" />
               </LinearGradient>
             </Defs>
@@ -367,11 +367,11 @@ function CalorieBar({ consumed, goal, burned }: { consumed: number; goal: number
       </View>
       <View style={styles.calLabels}>
         <View style={[styles.calLabelAnchor, { left: `${(beforePos * 100).toFixed(1)}%` as DimensionValue }]}>
-          <Txt variant="label" color="#999999" style={styles.calLabelCentered}>
+          <Txt variant="label" color={Palette.gray400} style={styles.calLabelCentered}>
             활동 전
           </Txt>
         </View>
-        <Txt variant="label" color="#999999" style={styles.calLabelRight}>
+        <Txt variant="label" color={Palette.gray400} style={styles.calLabelRight}>
           활동 후
         </Txt>
       </View>
@@ -405,10 +405,10 @@ function PrimaryButton({
 
 // 끼니별 아이콘·색 (배경 없이 아이콘 틴트만)
 const MEAL_VISUAL: Record<MealType, { icon: IconName; tint: string }> = {
-  아침: { icon: 'wb-twilight', tint: '#F5A623' },
-  점심: { icon: 'wb-sunny', tint: '#F2B807' },
-  저녁: { icon: 'bedtime', tint: '#7C6CF0' },
-  간식: { icon: 'egg', tint: '#F5A623' },
+  아침: { icon: 'wb-twilight', tint: Palette.tintOrange },
+  점심: { icon: 'wb-sunny', tint: Palette.tintYellow },
+  저녁: { icon: 'bedtime', tint: Palette.tintPurple },
+  간식: { icon: 'egg', tint: Palette.tintOrange },
 };
 
 // 끼니 슬롯 카드 — 2×2 그리드. 탭하면 그 끼니로 기록 추가/상세 진입.
@@ -2310,7 +2310,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Palette.bgMuted,
     borderRadius: Radius.button,
-    paddingVertical: 6,
+    paddingVertical: Spacing.sm,
   },
   workoutLead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingHorizontal: Spacing.md },
   workoutCell: { flex: 1, alignItems: 'center' },
@@ -2344,7 +2344,7 @@ const styles = StyleSheet.create({
   calWeekCell: { width: `${100 / 7}%`, textAlign: 'center' },
   calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   calCell: { width: `${100 / 7}%`, alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.xs },
-  calDay: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  calDay: { width: 36, height: 36, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
   // paddingTop = FadeTop 높이(Spacing.md) → 첫 콘텐츠가 그라데이션 아래에서 시작(가림 방지)
   scroll: { paddingHorizontal: ScreenPadding, paddingTop: Spacing.md, paddingBottom: NAV_HEIGHT + Spacing.xxl + Spacing.md, gap: Spacing.md },
   flex1: { flex: 1 },
@@ -2421,7 +2421,7 @@ const styles = StyleSheet.create({
   // 메모 남기기 (결과 화면)
   memoSection: { gap: Spacing.xs },
   memoBox: { backgroundColor: Palette.bgMuted, borderRadius: Radius.card, padding: Spacing.md, minHeight: 110 },
-  memoInput: { flex: 1, minHeight: 64, fontSize: 16, lineHeight: 24, color: Palette.gray900, textAlignVertical: 'top' },
+  memoInput: { flex: 1, minHeight: 64, ...Typography.body, color: Palette.gray900, textAlignVertical: 'top' },
   memoCounter: { alignSelf: 'flex-end', marginTop: Spacing.xs },
 
   // 저장 후 결과 화면 — 운동 효과 점수 상승 (카드 + 그래프)
@@ -2551,10 +2551,10 @@ const styles = StyleSheet.create({
   addBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F172A',
+    shadowColor: Palette.gray900,
     shadowOpacity: 0.08,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 8 },
@@ -2630,7 +2630,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    backgroundColor: '#EAF8EF',
+    backgroundColor: Palette.successLight,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
@@ -2696,7 +2696,7 @@ const styles = StyleSheet.create({
   photoAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.sm,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     borderRadius: Radius.button,

@@ -891,7 +891,7 @@ const styles = StyleSheet.create({
   audioToggle: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -918,7 +918,7 @@ const styles = StyleSheet.create({
   bubbleAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -30,6 +30,7 @@ import {
   Radius,
   ScreenPadding,
   Spacing,
+  Typography,
 } from '@/constants/theme';
 import { routeToCustom } from '@/features/workout/route-to-custom';
 import { prepareSessionAudio } from '@/features/workout/start-session';
@@ -341,7 +342,7 @@ export default function CoachScreen() {
                   type="default"
                   style={[
                     { color: m.role === 'user' ? Palette.white : Palette.primary },
-                    m.role === 'user' && { fontSize: 15, lineHeight: 22 },
+                    m.role === 'user' && Typography.body,
                   ]}>
                   {m.text}
                 </ThemedText>
