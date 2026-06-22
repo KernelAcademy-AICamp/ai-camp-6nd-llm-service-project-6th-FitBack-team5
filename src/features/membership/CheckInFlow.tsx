@@ -2,7 +2,6 @@ import {
   Car,
   Check,
   ChevronRight,
-  CloudSun,
   Footprints,
   MapPin,
   Navigation,
@@ -29,10 +28,9 @@ import { useCenter } from '@/features/membership/useCenter';
 import { useCreateVisit } from '@/features/membership/useCreateVisit';
 import { useRoute } from '@/features/membership/useRoute';
 import { useTransit } from '@/features/membership/useTransit';
-import { useWeather } from '@/features/membership/useWeather';
 import type { Membership } from '@/features/membership/useMemberships';
 
-type Step = 'select' | 'prepare' | 'depart' | 'going' | 'arrive' | 'done' | 'exercise' | 'logged';
+type Step = 'select' | 'prepare' | 'depart' | 'going' | 'arrive' | 'done' | 'exercise' | 'logged' | 'visitDone';
 type GpsPhase = 'idle' | 'checking' | 'near' | 'far' | 'unavailable';
 type Mode = 'walk' | 'transit' | 'car';
 type Pt = { lat: number; lng: number };
@@ -156,6 +154,8 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
   const [visitId, setVisitId] = useState<string | null>(null);
   const [phone, setPhone] = useState(false);
   const [clothes, setClothes] = useState(false);
+  const [towel, setTowel] = useState(false);
+  const [water, setWater] = useState(false);
   const [mode, setMode] = useState<Mode | null>(null);
   const [gps, setGps] = useState<{ phase: GpsPhase; km?: number }>({ phase: 'idle' });
 
@@ -174,6 +174,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
   const [etaText, setEtaText] = useState('');
   const [arrived, setArrived] = useState(false);
   const [usingSim, setUsingSim] = useState(false);
+  const [forcedStop, setForcedStop] = useState(false); // 60분 정지 → 강제 종료
 
   // 출발 단계: 출발지 설정 시 '어떻게 가시나요?' 영역으로 스크롤.
   const scrollRef = useRef<ScrollView>(null);
@@ -181,7 +182,6 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
 
   const { mutate, isPending, error } = useCreateVisit();
   const { data: center } = useCenter(selectedId);
-  const { data: weather } = useWeather(center?.latitude, center?.longitude);
   const { data: route, isLoading: routeLoading } = useRoute(
     origin?.lat,
     origin?.lng,
@@ -226,10 +226,10 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
     if (step !== 'going' || !origin || !dest) return;
     const total = Math.max(0.001, distanceKm(origin, dest));
     const durMin = modeMinutes(mode) ?? Math.round((total / 30) * 60);
-    // 예상 도착 시각(고정): 지금 + 소요시간.
-    const eta = new Date(Date.now() + durMin * 60_000);
-    setEtaText(`${pad2(eta.getHours())}:${pad2(eta.getMinutes())}`);
+    const eta0 = new Date(Date.now() + durMin * 60_000);
+    setEtaText(`${pad2(eta0.getHours())}:${pad2(eta0.getMinutes())}`);
     setArrived(false);
+    setForcedStop(false);
     setCurrent(origin);
     setRemainKm(total);
     setRemainMin(durMin);
@@ -239,13 +239,48 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
     let fixed = false;
     let simStarted = false;
 
-    const update = (cur: Pt) => {
-      const rem = distanceKm(cur, dest);
+    const STEP_KM = 0.1; // 표시 갱신 간격(100m) — 너무 잦은 업데이트 방지
+    const MOVE_KM = 0.05; // 이동으로 인정하는 최소 변화(50m)
+    const STOP_MS = 60 * 60 * 1000; // 정지 판정(60분)
+    let lastShownRem = total; // 마지막으로 화면에 반영한 남은 거리
+    let lastMovePos: Pt = origin; // 마지막 이동 기준 위치
+    let lastMoveAt = Date.now(); // 마지막 이동 시각
+
+    // 남은 거리 기준으로 ETA·잔여시간 재계산 후 화면 반영.
+    const commitDisplay = (cur: Pt, rem: number) => {
       setCurrent(cur);
       setRemainKm(rem);
-      setRemainMin(Math.max(0, Math.round(durMin * (rem / total))));
-      if (rem * 1000 < 80) setArrived(true);
+      const rm = Math.max(0, Math.round(durMin * (rem / total)));
+      setRemainMin(rm);
+      const eta = new Date(Date.now() + rm * 60_000);
+      setEtaText(`${pad2(eta.getHours())}:${pad2(eta.getMinutes())}`);
+      lastShownRem = rem;
     };
+
+    const update = (cur: Pt) => {
+      const rem = distanceKm(cur, dest);
+      // 이동 감지(정지 타이머 리셋)
+      if (distanceKm(cur, lastMovePos) >= MOVE_KM) {
+        lastMovePos = cur;
+        lastMoveAt = Date.now();
+      }
+      // 도착은 즉시 반영
+      if (rem * 1000 < 80) {
+        setArrived(true);
+        commitDisplay(cur, rem);
+        return;
+      }
+      // 표시는 100m 이동마다만 갱신
+      if (Math.abs(rem - lastShownRem) >= STEP_KM) commitDisplay(cur, rem);
+    };
+
+    // 60분 이상 정지 → 강제 종료(도착 단계로 점프, 출석 불가 안내)
+    const stopTimer = setInterval(() => {
+      if (Date.now() - lastMoveAt >= STOP_MS) {
+        setForcedStop(true);
+        setStep('arrive');
+      }
+    }, 60_000);
 
     const startSim = () => {
       if (simStarted) return;
@@ -286,6 +321,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
       if (watchId != null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
       if (simTimer) clearInterval(simTimer);
       if (fallbackTimer) clearTimeout(fallbackTimer);
+      clearInterval(stopTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
@@ -357,7 +393,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
       })
     : 0;
 
-  // asExercise=true: 위치 보정(자기신고) — GPS 미검증으로 기록, 회수액 미반영(명세 §4.2).
+  // asExercise=true: 수동 출석 — 위치 미검증으로 기록하되 회수액은 반영(타깃 유저 기준 의도적 상향은 특이케이스).
   function checkIn(asExercise = false) {
     if (!selected) return;
     const verified = !asExercise;
@@ -367,7 +403,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         centerName: center?.name ?? selected.name,
         method: verified ? 'geofence' : 'fallback',
         verifyStatus: verified ? 'verified' : 'unverified',
-        recoveredAmount: verified ? perVisit : 0,
+        recoveredAmount: perVisit,
         centerLat: dest?.lat ?? null,
         centerLng: dest?.lng ?? null,
         distanceM: verified && gps.km != null ? Math.round(gps.km * 1000) : null,
@@ -377,9 +413,9 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
           setVisitId((data as { id: string }).id);
           logEvent(verified ? EVENTS.checkinVerified : EVENTS.checkinFallback, {
             membershipId: selected.id,
-            recoveredAmount: verified ? perVisit : 0,
+            recoveredAmount: perVisit,
           });
-          setStep(asExercise ? 'exercise' : 'done');
+          setStep(asExercise ? 'visitDone' : 'done');
         },
       },
     );
@@ -416,20 +452,16 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
 
         {step === 'prepare' ? (
           <>
-            <StepLabel>STEP 1 · 준비</StepLabel>
-            <ThemedText type="h2">짐 챙기셨나요?</ThemedText>
+            <StepLabel>STEP 1 · 준비물 체크리스트</StepLabel>
             {selected ? (
               <ThemedText type="caption" themeColor="textSecondary">
                 {selected.name}
               </ThemedText>
             ) : null}
-            {perVisit > 0 ? (
-              <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                오늘 다녀오면 +{won(perVisit)} 되찾아요
-              </ThemedText>
-            ) : null}
             <CheckItem label="휴대폰" checked={phone} onToggle={() => setPhone((v) => !v)} />
             <CheckItem label="운동복" checked={clothes} onToggle={() => setClothes((v) => !v)} />
+            <CheckItem label="수건" checked={towel} onToggle={() => setTowel((v) => !v)} />
+            <CheckItem label="물" checked={water} onToggle={() => setWater((v) => !v)} />
             <Button label="다음 (길 안내)" onPress={() => setStep('depart')} style={styles.action} />
           </>
         ) : null}
@@ -448,7 +480,7 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             </View>
 
             {dest ? (
-              <KakaoMap lat={dest.lat} lng={dest.lng} label={center?.name ?? undefined} height={180} />
+              <KakaoMap lat={dest.lat} lng={dest.lng} label={center?.name ?? undefined} height={120} />
             ) : (
               <Card>
                 <ThemedText type="caption" themeColor="textSecondary">
@@ -456,15 +488,6 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
                 </ThemedText>
               </Card>
             )}
-
-            {weather ? (
-              <View style={styles.infoRow}>
-                <Icon icon={CloudSun} size={16} color={Palette.gray500} />
-                <ThemedText type="caption" themeColor="textSecondary">
-                  {`${center?.name ?? '센터'} · ${weather.desc} ${weather.temp}°C`}
-                </ThemedText>
-              </View>
-            ) : null}
 
             {/* ② 출발지 — "어디에서 출발하시나요?" */}
             <Card>
@@ -580,30 +603,35 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
                 origin={origin}
                 current={current}
                 showLine
-                height={220}
+                height={140}
               />
             ) : null}
 
             <Card>
-              <View style={styles.timeRow}>
-                <View style={styles.timeLeft}>
-                  <View style={styles.timeIcon}>
-                    <Icon icon={mode ? MODE_META[mode].icon : Navigation} size={18} color={Palette.primary} />
-                  </View>
-                  <ThemedText type="captionBold">{mode ? MODE_META[mode].label : '이동'}</ThemedText>
+              {/* 거리·도착 강조 (지도는 약하게, 정보는 크게) */}
+              <View style={styles.navHero}>
+                <View style={styles.navMetric}>
+                  <ThemedText type="label" themeColor="textSecondary">남은 거리</ThemedText>
+                  <ThemedText type="display" style={styles.navValue}>
+                    {remainKm != null ? remainKm.toFixed(2) : '-'}
+                    <ThemedText type="h2" themeColor="textSecondary"> km</ThemedText>
+                  </ThemedText>
                 </View>
-                <ThemedText type="captionBold">
-                  남은 거리 {remainKm != null ? `${remainKm.toFixed(2)}km` : '-'}
-                </ThemedText>
+                <View style={styles.navMetric}>
+                  <ThemedText type="label" themeColor="textSecondary">도착까지</ThemedText>
+                  <ThemedText type="display" style={[styles.navValue, { color: Palette.primary }]}>
+                    {remainMin != null ? (remainMin > 0 ? remainMin : 0) : '-'}
+                    <ThemedText type="h2" style={{ color: Palette.primary }}> 분</ThemedText>
+                  </ThemedText>
+                </View>
               </View>
               <View style={styles.divider} />
               <View style={styles.timeRow}>
-                <ThemedText type="caption" themeColor="textSecondary">
-                  도착 예정 {etaText}
-                </ThemedText>
-                <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                  {remainMin != null ? (remainMin > 0 ? `${remainMin}분 남음` : '거의 도착') : '-'}
-                </ThemedText>
+                <View style={styles.timeLeft}>
+                  <Icon icon={mode ? MODE_META[mode].icon : Navigation} size={15} color={Palette.gray500} />
+                  <ThemedText type="caption" themeColor="textSecondary">{mode ? MODE_META[mode].label : '이동'}</ThemedText>
+                </View>
+                <ThemedText type="captionBold">도착 예정 {etaText}</ThemedText>
               </View>
             </Card>
 
@@ -640,6 +668,19 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         {step === 'arrive' ? (
           <>
             <StepLabel>STEP 4 · 도착</StepLabel>
+            {forcedStop ? (
+              <View style={styles.popup}>
+                <ThemedText type="h2">이동이 멈춘 것 같아요</ThemedText>
+                <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
+                  이동 시간이 불분명하여 출석 체크가 안 됐어요. 다시 해 주세요.
+                </ThemedText>
+                <Button label="다시 하기" onPress={() => setStep('depart')} style={styles.action} />
+                <Pressable onPress={onClose} style={styles.skip} hitSlop={8}>
+                  <ThemedText type="caption" themeColor="textSecondary">닫기</ThemedText>
+                </Pressable>
+              </View>
+            ) : (
+              <>
             <ThemedText type="h2">센터에 도착했어요</ThemedText>
             {gps.phase === 'checking' ? (
               <View style={styles.infoRow}>
@@ -692,18 +733,20 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             {gps.phase !== 'near' ? (
               <>
                 <ThemedText type="label" themeColor="textSecondary" style={styles.center}>
-                  체크인은 센터 {Math.round(CHECK_IN_RADIUS_KM * 1000)}m 이내에서만 됩니다.
+                  자동 출석은 센터 {Math.round(CHECK_IN_RADIUS_KM * 1000)}m 이내에서만 됩니다.
                   실제로 왔는데 위치가 안 잡히면 아래로 출석을 남기세요.
-                  (GPS 미검증으로 기록되고, 회수 금액엔 반영되지 않아요.)
+                  (위치 미검증 수동 출석으로 기록되고, 회수 금액에도 반영돼요.)
                 </ThemedText>
                 <Button
-                  label="운동 기록으로 출석하기"
+                  label="수동 출석하기"
                   variant="secondary"
                   onPress={() => checkIn(true)}
                   loading={isPending}
                 />
               </>
             ) : null}
+              </>
+            )}
           </>
         ) : null}
 
@@ -741,6 +784,31 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             onDone={() => setStep('logged')}
             onSkip={onClose}
           />
+        ) : null}
+
+        {step === 'visitDone' ? (
+          <View style={styles.popup}>
+            <View style={styles.celebrate}>
+              <Icon icon={Check} size={32} color={Palette.profit} />
+            </View>
+            <ThemedText type="h1">오늘 출석 완료!</ThemedText>
+            {perVisit > 0 ? (
+              <ThemedText type="h2" style={{ color: Palette.primary }}>
+                +{won(perVisit)} 되찾았어요
+              </ThemedText>
+            ) : null}
+            <View style={[styles.infoRow, { marginTop: Spacing.xs }]}>
+              <Icon icon={MapPin} size={15} color={Palette.primary} />
+              <ThemedText type="caption">
+                {center?.name ?? selected?.name ?? '센터'} ·{' '}
+                {`${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`}
+              </ThemedText>
+            </View>
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
+              수동 출석으로 기록됐어요.
+            </ThemedText>
+            <Button label="닫기" onPress={onClose} style={styles.popupBtn} />
+          </View>
         ) : null}
 
         {step === 'logged' ? (
@@ -806,6 +874,9 @@ const styles = StyleSheet.create({
   resultText: { flex: 1, gap: 2 },
 
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  navHero: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.md },
+  navMetric: { flex: 1, gap: 2 },
+  navValue: { lineHeight: 38 },
   timeLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   timeIcon: {
     width: 32,

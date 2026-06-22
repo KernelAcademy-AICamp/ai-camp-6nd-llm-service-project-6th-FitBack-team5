@@ -9,6 +9,7 @@ import Svg, { Circle, Polyline } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CountUp } from '@/components/count-up';
+import { sheetPresentation } from '@/components/modal-presentation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card, Icon } from '@/components/ui';
@@ -408,7 +409,7 @@ export default function HomeScreen() {
       <Modal
         visible={showCheckIn}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={sheetPresentation}
         onRequestClose={() => setShowCheckIn(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
@@ -421,7 +422,7 @@ export default function HomeScreen() {
       <Modal
         visible={showAlarm}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={sheetPresentation}
         onRequestClose={() => setShowAlarm(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
@@ -467,7 +468,7 @@ export default function HomeScreen() {
       <Modal
         visible={showCalendar}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={sheetPresentation}
         onRequestClose={() => setShowCalendar(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
@@ -480,7 +481,7 @@ export default function HomeScreen() {
       <Modal
         visible={showCoach}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={sheetPresentation}
         onRequestClose={() => setShowCoach(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
@@ -493,7 +494,7 @@ export default function HomeScreen() {
       <Modal
         visible={showMyDrawer}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={sheetPresentation}
         onRequestClose={() => setShowMyDrawer(false)}>
         <MyPanel onClose={() => setShowMyDrawer(false)} />
       </Modal>
@@ -502,7 +503,7 @@ export default function HomeScreen() {
       <Modal
         visible={showMembershipForm}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle={sheetPresentation}
         onRequestClose={() => setShowMembershipForm(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
