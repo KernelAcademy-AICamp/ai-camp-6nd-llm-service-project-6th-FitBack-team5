@@ -67,6 +67,10 @@ interface SpeakOptions {
 export interface Tts {
   speak(text: string, opts?: SpeakOptions): void;
   stop(): void;
+  /** 진짜 일시정지 — 오디오 객체를 파괴하지 않고 currentTime 보존. */
+  pause(): void;
+  /** pause() 된 오디오를 그 위치에서 이어 재생. */
+  resume(): void;
 }
 
 // 글로벌 TTS rate (사용자가 속도 조절 시 변경됨)
@@ -146,6 +150,9 @@ function webStop(): void {
 // 보관 안 하면 건너뛰기·일시정지 시 SpeechSynthesis 만 끊고 mp3 는 계속 흐름 → 다음 cue 와 겹침.
 let activeWebAudio: HTMLAudioElement | null = null;
 let activeNativePlayerStopper: (() => void) | null = null;
+// 일시정지(currentTime 보존) / 재개용. 네이티브는 playCue 가 등록.
+let activeNativePlayerPauser: (() => void) | null = null;
+let activeNativePlayerResumer: (() => void) | null = null;
 
 function stopActiveAudio(): void {
   if (activeWebAudio) {
@@ -165,8 +172,45 @@ function stopActiveAudio(): void {
   if (activeNativePlayerStopper) {
     const stopper = activeNativePlayerStopper;
     activeNativePlayerStopper = null;
+    activeNativePlayerPauser = null;
+    activeNativePlayerResumer = null;
     try {
       stopper();
+    } catch {
+      // 무시
+    }
+  }
+}
+
+// 파괴하지 않고 일시정지만 — currentTime 보존, resume 으로 이어 재생 가능.
+function pauseActiveAudio(): void {
+  if (activeWebAudio) {
+    try {
+      activeWebAudio.pause();
+    } catch {
+      // 무시
+    }
+  }
+  if (activeNativePlayerPauser) {
+    try {
+      activeNativePlayerPauser();
+    } catch {
+      // 무시
+    }
+  }
+}
+
+function resumeActiveAudio(): void {
+  if (activeWebAudio) {
+    try {
+      void activeWebAudio.play();
+    } catch {
+      // 무시 — 사용자 제스처 외 자동 재생 차단 등은 호출자가 다음 클릭으로 회복
+    }
+  }
+  if (activeNativePlayerResumer) {
+    try {
+      activeNativePlayerResumer();
     } catch {
       // 무시
     }
@@ -198,6 +242,44 @@ export const tts: Tts = {
       return;
     }
     Speech.stop();
+  },
+  pause() {
+    pauseActiveAudio();
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.pause();
+        } catch {
+          // 무시
+        }
+      }
+      return;
+    }
+    // expo-speech: 일부 안드로이드에서 resume 미지원. 안전한 폴백으로 stop 후 처음부터 재발화는
+    // 호출자가 결정. 일단 표준 pause 만 호출.
+    try {
+      Speech.pause();
+    } catch {
+      // 무시
+    }
+  },
+  resume() {
+    resumeActiveAudio();
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.resume();
+        } catch {
+          // 무시
+        }
+      }
+      return;
+    }
+    try {
+      Speech.resume();
+    } catch {
+      // 무시
+    }
   },
 };
 
@@ -300,10 +382,27 @@ function nativePlayAudioUrl(
     }
     finish();
   };
+  // tts.pause() — currentTime 보존, resume 으로 이어 재생.
+  const pauseThisPlayer = () => {
+    try {
+      player?.pause();
+    } catch {
+      // 무시
+    }
+  };
+  const resumeThisPlayer = () => {
+    try {
+      player?.play();
+    } catch {
+      // 무시
+    }
+  };
 
   try {
     player = createAudioPlayer({ uri: url });
     activeNativePlayerStopper = stopThisPlayer;
+    activeNativePlayerPauser = pauseThisPlayer;
+    activeNativePlayerResumer = resumeThisPlayer;
     player.playbackRate = rate;
     player.addListener('playbackStatusUpdate', (status) => {
       if (status.didJustFinish) finish(onDone);

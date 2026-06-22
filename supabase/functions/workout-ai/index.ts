@@ -207,6 +207,14 @@ function isCompletion(v: unknown): v is CompletionStatus {
   return v === 'completed' || v === 'partial' || v === 'missed';
 }
 
+// 상태별로 피드백 톤·요점을 분명히 잡아주기 위한 라벨.
+// 'missed' = 운동 세션에 진입했지만 모든 운동을 건너뛰고 종료한 상태(운동하지 않음).
+const COMPLETION_LABEL: Record<CompletionStatus, string> = {
+  completed: '모든 운동을 완료했어요.',
+  partial: '운동을 일부만 완료했어요.',
+  missed: '운동을 한 개도 하지 않고 모두 건너뛰었어요(운동하지 않음).',
+};
+
 async function handleWorkoutFeedback(payload: Record<string, unknown>): Promise<Response> {
   const { difficulty, painAreas, completionStatus, memo, routineTitle, exerciseCount, calories } = payload;
 
@@ -225,11 +233,16 @@ async function handleWorkoutFeedback(payload: Record<string, unknown>): Promise<
 
   const userPrompt = `운동 루틴: ${titleStr}
 운동 개수: ${countStr}
-완료 여부: ${completionStatus}
+완료 여부: ${completionStatus} (${COMPLETION_LABEL[completionStatus]})
 추정 칼로리: ${calStr}
 난이도: ${difficultyLabel}
 통증 부위: ${pains.join(', ') || '없음'}
-메모: ${memoStr.trim() || '없음'}`;
+메모: ${memoStr.trim() || '없음'}
+
+피드백 작성 규칙:
+- 'missed' 상태면 summary 는 "오늘은 운동을 건너뛰었어요." 처럼 운동을 하지 않았다는 사실을 명확히 적어주세요. 칭찬 금지.
+- 'partial' 상태면 summary 에 "일부만 완료" 라는 점을 자연스럽게 녹여주세요.
+- 'completed' 상태면 끝까지 해낸 부분을 짧게 인정해주세요.`;
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',

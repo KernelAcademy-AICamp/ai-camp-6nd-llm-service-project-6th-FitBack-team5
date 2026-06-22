@@ -17,10 +17,11 @@ import {
   useDayWorkoutLogs,
 } from './useDayWorkoutLog';
 
+// 'missed' 는 useDayWorkoutLogs 에서 이미 제외되므로 목록 렌더에서는 사실상 마주칠 일이 없다.
 const COMPLETION_LABEL: Record<CompletionStatus, string> = {
   completed: '전부 완료',
   partial: '일부 완료',
-  missed: '미운동',
+  missed: '모두 건너뜀',
 };
 
 // 이번 주 홈트 현황 카드의 셀 색상과 1:1 매칭 (completed=primary, partial=warning).

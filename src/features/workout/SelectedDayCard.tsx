@@ -70,15 +70,14 @@ export function SelectedDayCard({
 
   // 선택일 모든 운동의 합 — actualDurationSec 가 null 인 구 기록은 durationMin*60 으로 보정.
   // 기록이 없으면 두 값 모두 0 으로 표시 (빈 메시지 대신).
+  // 실제 운동시간은 MM:SS 포맷으로 표시(예: 00:20 / 15분).
   const totalPlannedMin = (logs ?? []).reduce((a, l) => a + l.durationMin, 0);
-  const totalActualMin = (logs ?? []).reduce(
-    (a, l) =>
-      a +
-      (l.actualDurationSec !== null
-        ? Math.max(0, Math.round(l.actualDurationSec / 60))
-        : l.durationMin),
+  const totalActualSec = (logs ?? []).reduce(
+    (a, l) => a + (l.actualDurationSec !== null ? Math.max(0, l.actualDurationSec) : l.durationMin * 60),
     0,
   );
+  const actualMM = Math.floor(totalActualSec / 60).toString().padStart(2, '0');
+  const actualSS = (totalActualSec % 60).toString().padStart(2, '0');
   const totalCalories = (logs ?? []).reduce((a, l) => a + l.calories, 0);
 
   return (
@@ -88,15 +87,13 @@ export function SelectedDayCard({
         <ThemedView
           type="backgroundElement"
           style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-          <View style={[styles.statIconWrap, { backgroundColor: Palette.primaryLight }]}>
-            <Clock color={Palette.primary} size={20} />
-          </View>
+          <Clock color={Palette.primary} size={20} />
           <View style={styles.statTexts}>
             <ThemedText type="small" themeColor="textSecondary">
               총 운동시간
             </ThemedText>
             <ThemedText type="title" style={{ color: Palette.primary }}>
-              {totalActualMin}
+              {actualMM}:{actualSS}
               <ThemedText type="small" themeColor="textSecondary">
                 {' '}/ {totalPlannedMin}분
               </ThemedText>
@@ -106,9 +103,7 @@ export function SelectedDayCard({
         <ThemedView
           type="backgroundElement"
           style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
-          <View style={[styles.statIconWrap, { backgroundColor: Palette.primaryLight }]}>
-            <Flame color={Palette.warning} size={20} />
-          </View>
+          <Flame color={Palette.warning} size={20} />
           <View style={styles.statTexts}>
             <ThemedText type="small" themeColor="textSecondary">
               총 소모 칼로리
@@ -190,22 +185,14 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm + 2,
+    gap: Spacing.xs,
     padding: Spacing.sm,
     borderRadius: Radius.card,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  statIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   statTexts: {
-    flex: 1,
+    alignItems: 'center',
     gap: 2,
   },
   feedbackCard: {

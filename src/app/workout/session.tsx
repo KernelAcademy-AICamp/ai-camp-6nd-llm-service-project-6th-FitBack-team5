@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Icon } from '@/components/ui';
 import {
+  BottomTabInset,
   Elevation,
   MaxContentWidth,
   Palette,
@@ -37,8 +38,14 @@ type ParsedDetail =
   | { type: 'reps'; reps: number; sets: number };
 
 function parseDetail(detail: string): ParsedDetail {
-  const time = detail.match(/(\d+)\s*분/);
-  if (time) return { type: 'time', totalSeconds: parseInt(time[1], 10) * 60 };
+  // "N분 M초", "N분", "M초" 순으로 매칭 (분/초 혼합 표기 지원).
+  const minMatch = detail.match(/(\d+)\s*분/);
+  const secMatch = detail.match(/(\d+)\s*초/);
+  if (minMatch || secMatch) {
+    const minutes = minMatch ? parseInt(minMatch[1], 10) : 0;
+    const seconds = secMatch ? parseInt(secMatch[1], 10) : 0;
+    return { type: 'time', totalSeconds: minutes * 60 + seconds };
+  }
   const reps = detail.match(/(\d+)\s*회\s*[×x*]\s*(\d+)\s*세트/);
   if (reps) {
     return {
@@ -77,6 +84,19 @@ const RATE_OPTIONS = [1.0, 1.25, 1.5] as const;
 /** 시간 기반 마지막 5초 카운트다운 — 한자어 (영화 카운트다운 톤) */
 const SINO_COUNTDOWN_5 = ['오', '사', '삼', '이', '일'] as const;
 
+/**
+ * 오디오 파형(waveform) 막대 — 결정론적 의사 랜덤 높이(px).
+ * RN/Web 의 % 높이 렌더링이 부모 flex 안에서 안정적이지 않아 절대 픽셀로 고정한다.
+ */
+const WAVEFORM_BAR_COUNT = 80;
+const WAVEFORM_MIN_HEIGHT = 6;
+const WAVEFORM_MAX_HEIGHT = 24;
+const WAVEFORM_BARS: readonly number[] = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, i) => {
+  const n = Math.abs(Math.sin(i * 12.9898 + 78.233) * 43758.5453);
+  const frac = n - Math.floor(n);
+  return WAVEFORM_MIN_HEIGHT + frac * (WAVEFORM_MAX_HEIGHT - WAVEFORM_MIN_HEIGHT);
+});
+
 /** 현재 운동 안에서의 진행률 (0~1). 전체 progress bar 계산에 사용. */
 function exerciseFraction(phase: Phase, parsed: ParsedDetail | null): number {
   if (phase.kind === 'intro' || phase.kind === 'caution') return 0;
@@ -91,6 +111,30 @@ function exerciseFraction(phase: Phase, parsed: ParsedDetail | null): number {
     if (phase.kind === 'rest') return (phase.set * parsed.reps) / totalReps;
   }
   return 0;
+}
+
+/** 오디오 진행바 좌/우 라벨. time 운동은 MM:SS, reps 운동은 "N회". */
+function audioProgressLabels(
+  phase: Phase,
+  parsed: ParsedDetail | null,
+): { left: string; right: string } {
+  if (parsed?.type === 'time') {
+    const total = parsed.totalSeconds;
+    let elapsed = 0;
+    if (phase.kind === 'time') elapsed = total - phase.secondsLeft;
+    else if (phase.kind === 'exercise-finish' || phase.kind === 'finish') elapsed = total;
+    return { left: formatTime(elapsed), right: formatTime(total) };
+  }
+  if (parsed?.type === 'reps') {
+    const totalReps = parsed.reps * parsed.sets;
+    let done = 0;
+    if (phase.kind === 'set-start') done = (phase.set - 1) * parsed.reps;
+    else if (phase.kind === 'rep') done = (phase.set - 1) * parsed.reps + phase.rep;
+    else if (phase.kind === 'rest') done = phase.set * parsed.reps;
+    else if (phase.kind === 'exercise-finish' || phase.kind === 'finish') done = totalReps;
+    return { left: `${done}회`, right: `${totalReps}회` };
+  }
+  return { left: '00:00', right: '00:00' };
 }
 
 // ────────────────────────────────────────────────────────────
@@ -116,8 +160,20 @@ export default function SessionScreen() {
 
   const [exerciseIdx, setExerciseIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>({ kind: 'intro' });
+  // 다시 듣기 카운터 — intro effect 의 deps 에 들어가서, 같은 intro phase 라도 강제 재실행 유도.
+  const [replayKey, setReplayKey] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  // isPaused 를 audio-playing effect 의 dep 에서 빼서 cleanup(tts.stop)이 일시정지에 안 걸리게.
+  // 대신 effect 내부의 early-return 은 ref 로 최신값 검사.
+  const isPausedRef = useRef(false);
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
   const [rate, setRate] = useState(1.0);
+  // intro/caution 진행률 (0~1) — 텍스트 길이 기반 추정 시간으로 0→1 보간. 실제 오디오 종료 시 phase 가 바뀌면 리셋.
+  const [introProgress, setIntroProgress] = useState(0);
+  // 현재 rep cue 진행률 (0~1) — "하나/둘…" 발화 동안 진행바가 한 회씩 점프하지 않고 부드럽게 차오르도록.
+  const [repProgress, setRepProgress] = useState(0);
 
   // rate 변경 시 발화 중인 멘트를 끊지 않고, 다음 발화부터 새 rate 적용.
   const rateRef = useRef(rate);
@@ -178,7 +234,11 @@ export default function SessionScreen() {
     tts.stop();
     nextCueIdxRef.current = 0;
     halfwayPlayedRef.current = false;
+    // 일시정지 상태에서 replay 누르면 자동 unpause. (replay 는 "처음부터 다시" 의도라 paused 인 채로
+    // 정지 후 재생을 두 번 눌러야 들리는 UX 는 부자연스러움.)
+    setIsPaused(false);
     setPhase({ kind: 'intro' });
+    setReplayKey((k) => k + 1);
   }
 
   function handleSkip() {
@@ -198,7 +258,9 @@ export default function SessionScreen() {
   function handlePauseToggle() {
     setIsPaused((p) => {
       const next = !p;
-      if (next) tts.stop();
+      // 진짜 일시정지/재개 — 오디오 객체는 유지하고 currentTime 보존.
+      if (next) tts.pause();
+      else tts.resume();
       return next;
     });
   }
@@ -224,9 +286,64 @@ export default function SessionScreen() {
     };
   }, []);
 
+  // ── intro/caution 진행률 보간 — 텍스트 길이 기반 추정 시간으로 0→1.
+  //    audio 가 실제로는 더 빨리 끝날 수도 있어 1.0 도달 전 phase 가 바뀌면 reset.
+  useEffect(() => {
+    if (!current || (phase.kind !== 'intro' && phase.kind !== 'caution')) {
+      setIntroProgress(0);
+      return;
+    }
+    const text =
+      phase.kind === 'intro'
+        ? `${current.name}을(를) 시작할게요. ${current.description}`.trim()
+        : (current.caution ?? '').trim();
+    // tts.ts 의 추정과 동일: 글자당 ~140ms, 최소 2.5초 + 2s 여유. rate 비례.
+    const estimatedMs = Math.max(2500, (text.length * 140) / rateRef.current + 2000);
+    let elapsedMs = 0;
+    let lastTick = Date.now();
+    setIntroProgress(0);
+    const id = setInterval(() => {
+      const now = Date.now();
+      if (isPausedRef.current) {
+        lastTick = now; // 일시정지 동안은 누적하지 않음
+        return;
+      }
+      elapsedMs += now - lastTick;
+      lastTick = now;
+      setIntroProgress(Math.min(1, elapsedMs / estimatedMs));
+    }, 100);
+    return () => clearInterval(id);
+  }, [phase.kind, current, replayKey]);
+
+  // ── rep 진행률 보간 — 현재 rep cue 추정 발화 시간 동안 0→1.
+  //    phase 가 rep 가 아니거나 rep 이 바뀌면 0 으로 리셋.
+  useEffect(() => {
+    if (phase.kind !== 'rep' || !current || !parsed || parsed.type !== 'reps') {
+      setRepProgress(0);
+      return;
+    }
+    const text = current.repScripts?.[phase.rep - 1] ?? koreanCount(phase.rep);
+    // 한국어 발화: 글자당 ~140ms, 최소 0.8s + 0.4s 여유, rate 비례.
+    const estimatedMs = Math.max(800, (text.length * 140) / rateRef.current + 400);
+    let elapsedMs = 0;
+    let lastTick = Date.now();
+    setRepProgress(0);
+    const id = setInterval(() => {
+      const now = Date.now();
+      if (isPausedRef.current) {
+        lastTick = now;
+        return;
+      }
+      elapsedMs += now - lastTick;
+      lastTick = now;
+      setRepProgress(Math.min(1, elapsedMs / estimatedMs));
+    }, 80);
+    return () => clearInterval(id);
+  }, [phase, current, parsed]);
+
   // ── phase: intro ─ "{name}을(를) 시작할게요. {description}" 발화 ──
   useEffect(() => {
-    if (!current || phase.kind !== 'intro' || isPaused) return;
+    if (!current || phase.kind !== 'intro' || isPausedRef.current) return;
     const text = `${current.name}을(를) 시작할게요. ${current.description}`.trim();
     const hasCaution = !!current.caution?.trim();
 
@@ -254,11 +371,11 @@ export default function SessionScreen() {
       cancelled = true;
       tts.stop();
     };
-  }, [current, phase.kind, isPaused, parsed]);
+  }, [current, phase.kind, parsed, replayKey]);
 
   // ── phase: caution ─ 주의사항 별도 발화 ──
   useEffect(() => {
-    if (!current || phase.kind !== 'caution' || isPaused) return;
+    if (!current || phase.kind !== 'caution' || isPausedRef.current) return;
     let cancelled = false;
     playCue({ rate: rateRef.current,
       text: current.caution,
@@ -281,11 +398,11 @@ export default function SessionScreen() {
       cancelled = true;
       tts.stop();
     };
-  }, [current, phase.kind, isPaused, parsed]);
+  }, [current, phase.kind, parsed]);
 
   // ── phase: set-start ─ "N세트를 시작합니다. 총 M회예요. 준비, 시작." ──
   useEffect(() => {
-    if (phase.kind !== 'set-start' || isPaused) return;
+    if (phase.kind !== 'set-start' || isPausedRef.current) return;
     if (!parsed || parsed.type !== 'reps') return;
     const setNum = phase.set;
     const text = `${setNum}세트를 시작합니다. 총 ${parsed.reps}회예요. 준비, 시작.`;
@@ -301,12 +418,12 @@ export default function SessionScreen() {
       cancelled = true;
       tts.stop();
     };
-  }, [phase, isPaused, parsed]);
+  }, [phase, parsed]);
 
   // ── phase: rep ─ repScripts[rep-1] 발화 + 다음 rep / rest / 다음 운동 ──
   // repScripts 는 useGenerateRoutine 에서 generateRepScripts() 로 펼친 완성 멘트 배열.
   useEffect(() => {
-    if (phase.kind !== 'rep' || isPaused || !parsed || parsed.type !== 'reps' || !current) return;
+    if (phase.kind !== 'rep' || isPausedRef.current || !parsed || parsed.type !== 'reps' || !current) return;
     const { reps, sets } = parsed;
     const { set, rep } = phase;
     const text = current.repScripts?.[rep - 1] ?? koreanCount(rep);
@@ -338,7 +455,7 @@ export default function SessionScreen() {
     };
     // advanceExercise는 closure로 충분
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, isPaused, parsed, current]);
+  }, [phase, parsed, current]);
 
   // ── phase: rest ─ "좋아요. N세트 완료했어요. 30초 쉬어갈게요" + 카운트다운 → 다음 set-start ──
   useEffect(() => {
@@ -381,7 +498,7 @@ export default function SessionScreen() {
   // 절반 격려는 진행 중인 cue가 끝난 뒤(다음 cue 슬롯)에 끼어듦.
   // cue 진행은 onDone 체인으로 진행. 마지막 5초 도달 시 자동으로 빠짐.
   useEffect(() => {
-    if (phase.kind !== 'time' || isPaused || !current) return;
+    if (phase.kind !== 'time' || isPausedRef.current || !current) return;
     const cues = current.timeScripts ?? [];
     if (cues.length === 0) return; // 폴백은 별도 effect
 
@@ -433,11 +550,11 @@ export default function SessionScreen() {
       cancelled = true;
       tts.stop();
     };
-  }, [phase.kind, isPaused, current]);
+  }, [phase.kind, current]);
 
   // ── phase: time (폴백) ─ 기존 routine에 timeScripts 없을 때 2/3 격려만 ──
   useEffect(() => {
-    if (phase.kind !== 'time' || isPaused || !current) return;
+    if (phase.kind !== 'time' || isPausedRef.current || !current) return;
     if ((current.timeScripts?.length ?? 0) > 0) return; // 신규 스키마는 위 effect가 처리
     const { secondsLeft, totalSeconds } = phase;
     const twoThirdsLeft = Math.floor(totalSeconds / 3);
@@ -450,11 +567,11 @@ export default function SessionScreen() {
       );
       playCue({ rate: rateRef.current, text: parts.join(' ') });
     }
-  }, [phase, isPaused, current]);
+  }, [phase, current]);
 
   // ── phase: time ─ 마지막 5초 한자어 카운트 + 종료 ──
   useEffect(() => {
-    if (phase.kind !== 'time' || isPaused) return;
+    if (phase.kind !== 'time' || isPausedRef.current) return;
     const { secondsLeft } = phase;
 
     if (secondsLeft >= 1 && secondsLeft <= 5) {
@@ -465,11 +582,11 @@ export default function SessionScreen() {
       advanceExercise();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, isPaused]);
+  }, [phase]);
 
   // ── phase: exercise-finish ─ "{name}을 모두 완료했어요" → 다음 운동의 intro 또는 finish ──
   useEffect(() => {
-    if (phase.kind !== 'exercise-finish' || isPaused || !current) return;
+    if (phase.kind !== 'exercise-finish' || isPausedRef.current || !current) return;
     // 이 운동이 exercise-finish 단계까지 도달했다 = 건너뛰지 않고 자연 완료.
     // 같은 idx 가 중복 카운트되지 않도록 ref Set 으로 가드.
     if (!countedRef.current.has(exerciseIdx)) {
@@ -493,7 +610,7 @@ export default function SessionScreen() {
       cancelled = true;
       tts.stop();
     };
-  }, [phase.kind, isPaused, current, exerciseIdx, total, incrementCompleted]);
+  }, [phase.kind, current, exerciseIdx, total, incrementCompleted]);
 
   // ── phase: finish ─ 완료 페이지로 즉시 이동 ──
   // 인-세션 완료 화면(축하 + "기록 남기기"/"그냥 닫기")은 제거.
@@ -530,7 +647,7 @@ export default function SessionScreen() {
             <Icon icon={X} size={24} color={Palette.gray500} />
           </Pressable>
           <ThemedText type="smallBold">
-            오늘의 운동 진행 중
+            홈트 진행 중
           </ThemedText>
           <ThemedText type="smallBold" themeColor="textSecondary">
             {exerciseIdx + 1} / {total}
@@ -615,23 +732,62 @@ export default function SessionScreen() {
               </Pressable>
             </View>
 
-            {/* 진행 바 — 시각 표시용 데코레이션. 실제 오디오 동기는 추후 연결. */}
-            <View style={styles.audioProgressRow}>
-              <ThemedText type="label" themeColor="textSecondary">
-                00:00
-              </ThemedText>
-              <View style={[styles.audioProgressTrack, { backgroundColor: Palette.bgMuted }]}>
-                <View
-                  style={[
-                    styles.audioProgressFill,
-                    { backgroundColor: Palette.primary, width: '40%' },
-                  ]}
-                />
-              </View>
-              <ThemedText type="label" themeColor="textSecondary">
-                {formatTime((parsed?.type === 'time' ? parsed.totalSeconds : 0))}
-              </ThemedText>
-            </View>
+            {/* 진행 바 — 위: 오디오 파형 / 아래: 얇은 진행바. 둘 다 phaseProgress 와 동기.
+                intro/caution 은 introProgress, rep 는 (rep-1 까지의 누적) + repProgress 보간. */}
+            {(() => {
+              const isIntroLike = phase.kind === 'intro' || phase.kind === 'caution';
+              let rawFraction: number;
+              if (isIntroLike) {
+                rawFraction = introProgress;
+              } else if (phase.kind === 'rep' && parsed?.type === 'reps') {
+                const totalReps = parsed.reps * parsed.sets;
+                const base = (phase.set - 1) * parsed.reps + (phase.rep - 1);
+                rawFraction = (base + repProgress) / totalReps;
+              } else {
+                rawFraction = exerciseFraction(phase, parsed);
+              }
+              const fraction = Math.min(1, Math.max(0, rawFraction));
+              const labels = audioProgressLabels(phase, parsed);
+              const playedCount = Math.round(fraction * WAVEFORM_BAR_COUNT);
+              const widthPct = `${fraction * 100}%` as const;
+              return (
+                <View style={styles.audioProgressBlock}>
+                  <View style={styles.audioProgressRow}>
+                    <ThemedText type="label" themeColor="textSecondary">
+                      {labels.left}
+                    </ThemedText>
+                    <View style={styles.waveformRow}>
+                      {WAVEFORM_BARS.map((h, i) => (
+                        <View
+                          key={i}
+                          style={[
+                            styles.waveformBar,
+                            {
+                              height: h,
+                              backgroundColor:
+                                i < playedCount ? Palette.primary : Palette.bgMuted,
+                            },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <ThemedText type="label" themeColor="textSecondary">
+                      {labels.right}
+                    </ThemedText>
+                  </View>
+                  {/* 파형 아래 얇은 진행바 — 일단 화면에서 숨김. 필요해지면 주석 해제.
+                  <View style={[styles.audioProgressLineTrack, { backgroundColor: Palette.bgMuted }]}>
+                    <View
+                      style={[
+                        styles.audioProgressFill,
+                        { backgroundColor: Palette.primary, width: widthPct },
+                      ]}
+                    />
+                  </View>
+                  */}
+                </View>
+              );
+            })()}
 
             {/* AI 아바타 + 말풍선 — 항상 표시. description + (caution 있으면 한 줄 띄고 '주의' 칩). */}
             <View style={styles.bubbleRow}>
@@ -712,6 +868,13 @@ export default function SessionScreen() {
             </Pressable>
           </View>
         </View>
+
+        {/* 영상이 있을 때만 하단에 AI 생성 영상 안내 (12px / 연한 회색). */}
+        {current.videoUrl ? (
+          <ThemedText style={styles.aiVideoNote}>
+            * AI로 생성된 영상입니다
+          </ThemedText>
+        ) : null}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -857,7 +1020,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: 'center',
     gap: Spacing.md,
-    paddingVertical: Spacing.lg,
+    paddingTop: Spacing.lg,
+    // 웹 하단 탭(고정 80px) 또는 iOS 홈 인디케이터에 가려지지 않도록 충분히 띄움.
+    paddingBottom: BottomTabInset + Spacing.lg,
   },
   center: { textAlign: 'center' },
   // 상단 헤더 — 운동명 + (디테일) 베이스라인 정렬.
@@ -895,6 +1060,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // 파형 + 얇은 진행바를 묶는 컨테이너.
+  audioProgressBlock: {
+    gap: Spacing.xs,
+  },
   audioProgressRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -906,8 +1075,27 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     overflow: 'hidden',
   },
+  // 파형 아래 가로 진행바 — column 컨테이너 안에서 부모 가로폭에 stretch.
+  audioProgressLineTrack: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
   audioProgressFill: {
     height: '100%',
+  },
+  // 오디오 파형 — 가운데 정렬된 세로 막대 N개. 막대마다 height 절대 픽셀.
+  waveformRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: WAVEFORM_MAX_HEIGHT,
+  },
+  waveformBar: {
+    width: 2,
+    borderRadius: 1,
   },
   bubbleRow: {
     flexDirection: 'row',
@@ -986,6 +1174,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   video: { width: '100%', height: '100%' },
+  aiVideoNote: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Palette.gray400,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+  },
   phaseCard: {
     width: '100%',
     padding: Spacing.lg,

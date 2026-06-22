@@ -267,7 +267,7 @@ async function generateFixedDevRoutine(): Promise<Routine> {
   return {
     id: Crypto.randomUUID(),
     title: '[개발용] 코브라·플랭크·스쿼트',
-    meta: '개발 테스트 · 고정 3운동',
+    meta: '개발 테스트 · 고정 3운동 · 10분',
     intro: '시범 영상 테스트용 고정 루틴이에요. 🛠',
     exercises,
   };

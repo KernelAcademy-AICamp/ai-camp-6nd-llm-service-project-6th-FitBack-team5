@@ -48,6 +48,7 @@ export function useDayWorkoutLogs(date: string) {
           'id, routine_title, routine_meta, duration_min, actual_duration_sec, exercise_count, calories, completion_status, ai_feedback, created_at, body_part',
         )
         .eq('user_id', user.id)
+        .neq('completion_status', 'missed')
         .gte('created_at', `${date}T00:00:00+09:00`)
         .lte('created_at', `${date}T23:59:59+09:00`)
         .order('created_at', { ascending: false });

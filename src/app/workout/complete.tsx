@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
-import { CheckCircle2, Clock, Flame, PartyPopper } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { CheckCircle2, Clock, Flame, Frown, PartyPopper } from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -61,20 +61,21 @@ function formatElapsed(sec: number): string {
 
 // 칼로리 = MET × 체중(kg) × 시간(h). 스트레칭은 2.5, 메인 운동은 6 MET 로 추정.
 // 운동별 정확한 시간은 모르므로 루틴 총 시간을 운동 개수로 균등 분배.
+// 계획 칼로리에 완료 비율(completed/total) 을 곱해 실제 진도만큼만 인정한다.
 const STRETCH_MET = 2.5;
 const MAIN_MET = 6;
 const DEFAULT_WEIGHT_KG = 60;
 
-function calculateCalories(routine: Routine, weight: number): number {
+function calculateCalories(routine: Routine, weight: number, completionRatio: number): number {
   const totalMin = parseDurationMin(routine.meta);
   const n = routine.exercises.length;
-  if (totalMin <= 0 || n === 0 || weight <= 0) return 0;
+  if (totalMin <= 0 || n === 0 || weight <= 0 || completionRatio <= 0) return 0;
   const perExerciseHour = totalMin / n / 60;
   const sum = routine.exercises.reduce((acc, ex) => {
     const met = ex.isStretch ? STRETCH_MET : MAIN_MET;
     return acc + met * weight * perExerciseHour;
   }, 0);
-  return Math.round(sum);
+  return Math.round(sum * completionRatio);
 }
 
 async function fetchUserWeight(userId: string): Promise<number> {
@@ -136,18 +137,23 @@ export default function CompleteScreen() {
   const sessionStartedAt = useWorkoutSession((s) => s.sessionStartedAt);
   const clearRoutine = useWorkoutSession((s) => s.clear);
 
-  // 진입 시 1회 캡처 — 이후 리렌더에 영향받지 않게 routine 키로만 갱신.
-  const elapsedSec = useMemo(() => {
+  // 진입 시 1회 캡처 — useState lazy init 으로 마운트 시점의 경과초를 고정.
+  // (useMemo 는 React 가 임의로 재계산할 수 있어 캡처-1회 보장이 안 됨.)
+  const [elapsedSec] = useState(() => {
     if (!sessionStartedAt) return 0;
     return Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routine]);
+  });
 
   const total = routine?.exercises.length ?? 0;
   const completed = Math.min(completedCount, total);
   const missed = Math.max(0, total - completed);
+  // 0개 완료 = 'missed' (UI 목록/집계 제외), 전부 완료 = 'completed', 그 외 = 'partial'.
   const completionStatus: CompletionStatus =
-    total > 0 && completed >= total ? 'completed' : 'partial';
+    total > 0 && completed >= total
+      ? 'completed'
+      : completed === 0
+        ? 'missed'
+        : 'partial';
 
   // 운동 기록 row id — 초기 INSERT 후 보관, 이후 UPDATE 에 사용.
   const [logId, setLogId] = useState<string | null>(null);
@@ -186,7 +192,8 @@ export default function CompleteScreen() {
         return;
       }
       const weight = await fetchUserWeight(userId);
-      const cal = calculateCalories(routine, weight);
+      const completionRatio = total > 0 ? completed / total : 0;
+      const cal = calculateCalories(routine, weight, completionRatio);
       setCalories(cal);
 
       const { data: log, error: insertErr } = await supabase
@@ -300,9 +307,17 @@ export default function CompleteScreen() {
             keyboardShouldPersistTaps="handled">
             <View style={styles.headerCelebrate}>
               <ThemedText type="title" style={styles.titleCenter}>
-                운동 완료!
+                {completionStatus === 'completed'
+                  ? '운동 모두 완료!'
+                  : completionStatus === 'missed'
+                    ? '운동을 하지 않았네요'
+                    : '운동 일부 완료!'}
               </ThemedText>
-              <PartyPopper color={Palette.primary} size={56} />
+              {completionStatus === 'completed' ? (
+                <PartyPopper color={Palette.primary} size={56} />
+              ) : completionStatus === 'missed' ? (
+                <Frown color={Palette.primary} size={56} />
+              ) : null}
             </View>
 
             <View style={styles.statsRow}>
@@ -382,116 +397,123 @@ export default function CompleteScreen() {
               </View>
             )}
 
-            <View style={styles.reviewHeader}>
-              <ThemedText type="subtitle">운동 리뷰를 남기세요</ThemedText>
-            </View>
+            {/* 'missed' (0개 완료/모두 건너뜀) 인 경우 리뷰 폼·리뷰 버튼 모두 숨기고 '운동 홈 가기' 만 노출. */}
+            {completionStatus !== 'missed' && (
+              <>
+                <View style={styles.reviewHeader}>
+                  <ThemedText type="subtitle">운동 리뷰를 남기세요</ThemedText>
+                </View>
 
-            <View style={styles.section}>
-              <ThemedText type="smallBold">운동 난이도</ThemedText>
-              <View style={styles.chipRow}>
-                {DIFFICULTY_OPTIONS.map((opt) => {
-                  const active = opt.value === difficulty;
-                  return (
-                    <Pressable
-                      key={opt.value}
-                      onPress={() => setDifficulty(opt.value)}
-                      style={({ pressed }) => [
-                        styles.chip,
-                        {
-                          backgroundColor: active ? Palette.primary : Palette.bgMuted,
-                          opacity: pressed ? 0.7 : 1,
-                        },
-                      ]}>
-                      <ThemedText
-                        type="smallBold"
-                        style={{ color: active ? Palette.white : Palette.gray700 }}>
-                        {opt.label}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
+                <View style={styles.section}>
+                  <ThemedText type="smallBold">운동 난이도</ThemedText>
+                  <View style={styles.chipRow}>
+                    {DIFFICULTY_OPTIONS.map((opt) => {
+                      const active = opt.value === difficulty;
+                      return (
+                        <Pressable
+                          key={opt.value}
+                          onPress={() => setDifficulty(opt.value)}
+                          style={({ pressed }) => [
+                            styles.chip,
+                            {
+                              backgroundColor: active ? Palette.primary : Palette.bgMuted,
+                              opacity: pressed ? 0.7 : 1,
+                            },
+                          ]}>
+                          <ThemedText
+                            type="smallBold"
+                            style={{ color: active ? Palette.white : Palette.gray700 }}>
+                            {opt.label}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
 
-            <View style={styles.section}>
-              <ThemedText type="smallBold">통증/불편 부위</ThemedText>
-              <View style={styles.chipRow}>
-                {PAIN_OPTIONS.map((opt) => {
-                  const active = painAreas.includes(opt);
-                  return (
-                    <Pressable
-                      key={opt}
-                      onPress={() => togglePainArea(opt)}
-                      style={({ pressed }) => [
-                        styles.chip,
-                        {
-                          backgroundColor: active ? Palette.primary : Palette.bgMuted,
-                          opacity: pressed ? 0.7 : 1,
-                        },
-                      ]}>
-                      <ThemedText
-                        type="smallBold"
-                        style={{ color: active ? Palette.white : Palette.gray700 }}>
-                        {opt}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
+                <View style={styles.section}>
+                  <ThemedText type="smallBold">통증/불편 부위</ThemedText>
+                  <View style={styles.chipRow}>
+                    {PAIN_OPTIONS.map((opt) => {
+                      const active = painAreas.includes(opt);
+                      return (
+                        <Pressable
+                          key={opt}
+                          onPress={() => togglePainArea(opt)}
+                          style={({ pressed }) => [
+                            styles.chip,
+                            {
+                              backgroundColor: active ? Palette.primary : Palette.bgMuted,
+                              opacity: pressed ? 0.7 : 1,
+                            },
+                          ]}>
+                          <ThemedText
+                            type="smallBold"
+                            style={{ color: active ? Palette.white : Palette.gray700 }}>
+                            {opt}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
 
-            <View style={styles.section}>
-              <ThemedText type="smallBold">메모 (선택)</ThemedText>
-              <TextInput
-                value={memo}
-                onChangeText={setMemo}
-                placeholder="예: 브릿지는 괜찮았는데 푸쉬업은 힘들었어요."
-                placeholderTextColor={theme.textSecondary}
-                maxLength={200}
-                multiline
-                style={[
-                  styles.memoInput,
-                  {
-                    backgroundColor: theme.backgroundElement,
-                    borderColor: Palette.lineDefault,
-                    color: theme.text,
-                  },
-                ]}
-              />
-              <ThemedText
-                type="small"
-                themeColor="textSecondary"
-                style={styles.memoCounter}>
-                {memo.length}/200
-              </ThemedText>
-            </View>
+                <View style={styles.section}>
+                  <ThemedText type="smallBold">메모 (선택)</ThemedText>
+                  <TextInput
+                    value={memo}
+                    onChangeText={setMemo}
+                    placeholder="예: 브릿지는 괜찮았는데 푸쉬업은 힘들었어요."
+                    placeholderTextColor={theme.textSecondary}
+                    maxLength={200}
+                    multiline
+                    style={[
+                      styles.memoInput,
+                      {
+                        backgroundColor: theme.backgroundElement,
+                        borderColor: Palette.lineDefault,
+                        color: theme.text,
+                      },
+                    ]}
+                  />
+                  <ThemedText
+                    type="small"
+                    themeColor="textSecondary"
+                    style={styles.memoCounter}>
+                    {memo.length}/200
+                  </ThemedText>
+                </View>
+              </>
+            )}
 
             <View style={styles.ctaRow}>
-              <Pressable
-                onPress={handleSaveReview}
-                disabled={!canSubmitReview}
-                style={({ pressed }) => [
-                  styles.primaryCta,
-                  styles.flex1,
-                  {
-                    backgroundColor: !canSubmitReview
-                      ? Palette.bgMuted
-                      : pressed
-                        ? Palette.primaryPressed
-                        : Palette.primary,
-                    opacity: isReviewSaving ? 0.7 : 1,
-                  },
-                ]}>
-                {isReviewSaving ? (
-                  <ActivityIndicator color={Palette.white} />
-                ) : (
-                  <ThemedText
-                    type="subtitle"
-                    style={{ color: canSubmitReview ? Palette.white : theme.textSecondary }}>
-                    운동 리뷰 남기기
-                  </ThemedText>
-                )}
-              </Pressable>
+              {completionStatus !== 'missed' && (
+                <Pressable
+                  onPress={handleSaveReview}
+                  disabled={!canSubmitReview}
+                  style={({ pressed }) => [
+                    styles.primaryCta,
+                    styles.flex1,
+                    {
+                      backgroundColor: !canSubmitReview
+                        ? Palette.bgMuted
+                        : pressed
+                          ? Palette.primaryPressed
+                          : Palette.primary,
+                      opacity: isReviewSaving ? 0.7 : 1,
+                    },
+                  ]}>
+                  {isReviewSaving ? (
+                    <ActivityIndicator color={Palette.white} />
+                  ) : (
+                    <ThemedText
+                      type="subtitle"
+                      style={{ color: canSubmitReview ? Palette.white : theme.textSecondary }}>
+                      운동 리뷰 남기기
+                    </ThemedText>
+                  )}
+                </Pressable>
+              )}
 
               {/* 리뷰 남기지 않고 운동 홈으로 — clearRoutine + replace 로 뒤로가기 X */}
               <Pressable
