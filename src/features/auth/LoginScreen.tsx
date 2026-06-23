@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Check, ChevronLeft } from 'lucide-react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { Icon } from '@/components/ui';
 import { Elevation, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
@@ -148,21 +152,37 @@ export function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.card}>
-        <Pressable onPress={() => setMode('landing')} style={styles.backRow} hitSlop={6}>
-          <Icon icon={ChevronLeft} size={16} color={Palette.gray500} />
-          <ThemedText type="caption" themeColor="textSecondary">처음으로</ThemedText>
-        </Pressable>
-        <ThemedText type="h1">{isSignup ? 'FitBack 회원가입' : 'FitBack 로그인'}</ThemedText>
-        <ThemedText type="caption" themeColor="textSecondary" style={styles.subtitle}>
-          {isSignup
-            ? '이메일과 비밀번호로 새 계정을 만드세요.'
-            : '이메일과 비밀번호로 로그인하세요.'}
-        </ThemedText>
+    <ThemedView style={styles.root}>
+      <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <View style={styles.content}>
+              {/* 상단: 브랜드 · 헤딩 */}
+              <View style={styles.topSection}>
+                <Pressable onPress={() => setMode('landing')} style={styles.backRow} hitSlop={6}>
+                  <Icon icon={ChevronLeft} size={16} color={Palette.gray500} />
+                  <ThemedText type="caption" themeColor="textSecondary">처음으로</ThemedText>
+                </Pressable>
+                <Image
+                  source={require('../../../assets/images/Logo.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+                <ThemedText type="h1">{isSignup ? '회원가입' : '로그인'}</ThemedText>
+                <ThemedText type="caption" themeColor="textSecondary" style={styles.subtitle}>
+                  {isSignup
+                    ? '이메일과 비밀번호로 새 계정을 만드세요.'
+                    : '이메일과 비밀번호로 로그인하세요.'}
+                </ThemedText>
+              </View>
 
+              {/* 중앙: 입력 · 동의 · 기본 버튼 */}
+              <View style={styles.middleSection}>
         <ThemedText type="label" themeColor="textSecondary" style={styles.fieldLabel}>
           이메일
         </ThemedText>
@@ -246,11 +266,16 @@ export function LoginScreen() {
           )}
         </Pressable>
 
+        {/* 모드 전환 — CTA 바로 아래 */}
         <Pressable onPress={toggleMode} style={styles.switchRow} hitSlop={6}>
           <ThemedText type="captionBold" style={styles.switchText}>
             {isSignup ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입'}
           </ThemedText>
         </Pressable>
+              </View>
+
+              {/* 하단: 개발용 */}
+              <View style={styles.bottomSection}>
 
         {/* 테스트 계정 — 개발 빌드에서만 노출(배포/프로덕션 숨김) */}
         {__DEV__ && TEST_EMAIL && TEST_PASSWORD ? (
@@ -271,7 +296,11 @@ export function LoginScreen() {
             </Pressable>
           </View>
         ) : null}
-      </View>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
 
       {/* 가입 완료 팝업 → 로그인 페이지로 전환 */}
       <Modal visible={showSignupDone} transparent animationType="fade" onRequestClose={closeSignupDone}>
@@ -324,18 +353,29 @@ export function LoginScreen() {
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: ScreenPadding,
-    backgroundColor: Palette.bgBase,
+  root: { flex: 1, backgroundColor: Palette.bgBase },
+  flex: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: ScreenPadding,
+    paddingVertical: Spacing.xl,
   },
+  content: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    justifyContent: 'space-between',
+  },
+  topSection: { gap: Spacing.xs },
+  middleSection: { gap: Spacing.xs },
+  bottomSection: { gap: Spacing.md },
+  logo: { width: 132, height: 34, marginTop: Spacing.md, marginBottom: Spacing.md },
   landingRoot: { flex: 1, backgroundColor: Palette.bgBase, padding: ScreenPadding },
   landingTop: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   landingSub: { textAlign: 'center', marginTop: Spacing.sm },
@@ -352,15 +392,6 @@ const styles = StyleSheet.create({
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: Spacing.xs },
   pressed: { opacity: 0.7 },
   hero: { width: '100%', maxWidth: 400, textAlign: 'center', marginBottom: Spacing.lg, lineHeight: 40 },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: Palette.bgSurface,
-    borderRadius: Radius.card,
-    padding: Spacing.lg,
-    gap: Spacing.xs,
-    ...Elevation.level1,
-  },
   consentRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
   consentText: { flex: 1 },
   checkbox: {
