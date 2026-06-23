@@ -29,10 +29,11 @@ import { CoachChat } from '@/features/coach/CoachChat';
 import { useDietSummary } from '@/features/coach/useDietSummary';
 import { MonthCalendar } from '@/features/home/MonthCalendar';
 import { PermissionGate } from '@/features/home/PermissionGate';
-import { useHomeActivity } from '@/features/home/useHomeActivity';
+import { RECOMMENDED_WEEKLY_VISITS, useHomeActivity } from '@/features/home/useHomeActivity';
 import { useSchedules } from '@/features/home/useSchedules';
 import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { MembershipForm } from '@/features/membership/MembershipForm';
+import { MembershipListModal } from '@/features/membership/MembershipListModal';
 import { useCurrentUser } from '@/stores/auth';
 import {
   computeRisk,
@@ -103,6 +104,7 @@ export default function HomeScreen() {
   const [showMyDrawer, setShowMyDrawer] = useState(false);
   const [showAlarm, setShowAlarm] = useState(false);
   const [showMembershipForm, setShowMembershipForm] = useState(false);
+  const [showMembershipList, setShowMembershipList] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(msg: string) {
@@ -146,6 +148,11 @@ export default function HomeScreen() {
 
   const weekDays = home?.weekDays ?? [];
   const weekVisits = home?.weekVisits ?? 0;
+  // 권장 페이스 — 활성 기간권 주당 목표 최댓값, 없으면 기본값. (일정 → 활용도 카드로 이동)
+  const goalFromMembership = list
+    .filter((m) => m.type === 'period' && m.status !== 'expired' && m.weeklyGoal)
+    .reduce((mx, m) => Math.max(mx, m.weeklyGoal ?? 0), 0);
+  const recommendedWeekly = goalFromMembership > 0 ? goalFromMembership : RECOMMENDED_WEEKLY_VISITS;
   const weekWorkouts = home?.weekWorkouts ?? 0;
   const weekBadge = getWeekBadge(weekVisits);
 
@@ -241,7 +248,13 @@ export default function HomeScreen() {
                 <ThemedText type="caption" style={styles.cardHeaderText}>
                   회원권 수ㆍ{list.length}개
                 </ThemedText>
-                <Icon icon={MoreHorizontal} size={20} color="rgba(255,255,255,0.4)" />
+                <Pressable
+                  onPress={() => setShowMembershipList(true)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="전체 회원권 목록">
+                  <Icon icon={MoreHorizontal} size={20} color="rgba(255,255,255,0.7)" />
+                </Pressable>
               </View>
               {/* 화이트 바디 */}
               <View style={styles.membershipCardBody}>
@@ -278,18 +291,24 @@ export default function HomeScreen() {
                     <ThemedText type="body" themeColor="text">{wonShort(remainingValue)}</ThemedText>
                   </View>
                   <View style={styles.infoBox}>
-                    <ThemedText type="caption" themeColor="textSecondary">원금</ThemedText>
+                    <ThemedText type="caption" themeColor="textSecondary">결제금액</ThemedText>
                     <ThemedText type="body" themeColor="text">{wonShort(totalPaid)}</ThemedText>
+                  </View>
+                  <View style={styles.infoBox}>
+                    <ThemedText type="caption" themeColor="textSecondary">이번 주 권장</ThemedText>
+                    <ThemedText type="body" themeColor="text">
+                      {weekVisits}/{recommendedWeekly}회
+                    </ThemedText>
                   </View>
                 </View>
 
-                {/* 회원권 출석 버튼 */}
+                {/* 지금 출석하기 버튼 */}
                 <Pressable
                   onPress={() => setShowCheckIn(true)}
                   style={({ pressed }) => [styles.utilBtn, pressed && styles.pressed]}
                   accessibilityRole="button">
                   <ThemedText type="subtitle" style={styles.utilBtnText}>
-                    회원권 출석
+                    지금 출석하기
                   </ThemedText>
                 </Pressable>
               </View>
@@ -514,6 +533,12 @@ export default function HomeScreen() {
           </SafeAreaView>
         </ThemedView>
       </Modal>
+
+      {/* 전체 회원권 목록 → 항목 선택 시 세부 정보 */}
+      <MembershipListModal
+        visible={showMembershipList}
+        onClose={() => setShowMembershipList(false)}
+      />
 
       {/* 위치·알림 권한 안내 (최초 1회) */}
       {user ? <PermissionGate userId={user.id} /> : null}

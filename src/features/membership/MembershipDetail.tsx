@@ -1,13 +1,22 @@
-import { Wallet, X } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Card, Chip, Icon } from '@/components/ui';
-import { Palette, ScreenPadding, Spacing } from '@/constants/theme';
-import { formatNumber, RISK_COLORS, RISK_META, won, type RiskInfo } from '@/features/membership/dashboard';
+import { Card, Icon } from '@/components/ui';
+import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
+import { ddayBadge, formatNumber, won, type RiskInfo } from '@/features/membership/dashboard';
+import { HelpButton } from '@/features/membership/HelpButton';
+import type { PortfolioValue } from '@/features/membership/portfolio';
 import type { Membership, MembershipType } from '@/features/membership/useMemberships';
 import { useMembershipVisits } from '@/features/membership/useMembershipVisits';
+
+const TYPE_HELP = [
+  '인세권: 정해진 횟수를 쓰는 회원권이에요. 회당 비용 = 결제금액 ÷ 전체 횟수.',
+  '기간권: 기간 안에 무제한으로 다니는 회원권이에요. 회당 비용 = 결제금액 ÷ (주 목표 × 주 수).',
+  '활용도 = 결제금액의 75%(목표)를 기준으로 지금까지 얼마나 되찾았는지예요.',
+  'D-23 은 만료까지 남은 일수예요. 색이 빨갈수록 지금 페이스로는 빠듯하다는 뜻이에요.',
+];
 
 const TYPE_LABELS: Record<MembershipType, string> = {
   session: 'PT 세션',
@@ -53,17 +62,20 @@ export function MembershipDetail({
   m,
   risk,
   monthlyVisits,
+  value,
   onClose,
 }: {
   m: Membership;
   risk: RiskInfo;
   monthlyVisits: number;
+  value: PortfolioValue;
   onClose: () => void;
 }) {
   const { data: visits, isLoading } = useMembershipVisits(m.id);
-  const color = RISK_COLORS[risk.level];
-  const meta = RISK_META[risk.level];
+  const { label: ddayLabel, color: ddayColor } = ddayBadge(risk);
   const expired = risk.remainingDays <= 0;
+  const pct = Math.min(100, Math.round(value.progressPct));
+  const remainingVisits = Math.max(0, value.goalVisits - m.usedVisits);
 
   return (
     <ThemedView style={styles.container}>
@@ -75,20 +87,46 @@ export function MembershipDetail({
       </View>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        <Card accentColor={color}>
+        <Card>
           <View style={styles.rowBetween}>
-            <ThemedText type="caption" themeColor="textSecondary">
-              {TYPE_LABELS[m.type]}
-            </ThemedText>
-            <Chip
-              label={expired ? '만료' : meta.label}
-              color={color}
-              bg={`${color}1A`}
-              icon={meta.icon}
-            />
+            <View style={styles.metaRow}>
+              <ThemedText type="caption" themeColor="textSecondary">
+                {TYPE_LABELS[m.type]}
+              </ThemedText>
+              <HelpButton title="회원권 어떻게 보나요?" paragraphs={TYPE_HELP} />
+            </View>
+            <View style={[styles.dday, { backgroundColor: `${ddayColor}1A` }]}>
+              <ThemedText type="captionBold" style={{ color: ddayColor }}>
+                {ddayLabel}
+              </ThemedText>
+            </View>
           </View>
+
+          {/* 활용도 진행바 + 목표 75% 마커 */}
+          <View style={styles.barRow}>
+            <View style={styles.barTrack}>
+              <View
+                style={[
+                  styles.barFill,
+                  { width: `${pct}%`, backgroundColor: expired ? Palette.gray300 : Palette.primary },
+                ]}
+              />
+              <View style={[styles.marker, { left: '75%' }]} />
+            </View>
+            <ThemedText type="captionBold" style={styles.pct}>
+              {pct}%
+            </ThemedText>
+          </View>
+          <ThemedText type="caption">
+            {value.isComplete
+              ? '목표 달성! 이제부터는 보너스예요'
+              : `목표까지 ${won(value.remaining)}${
+                  remainingVisits > 0 ? ` · ${formatNumber(remainingVisits)}회 더` : ''
+                }`}
+          </ThemedText>
+
           <View style={styles.statRow}>
-            <Stat label="정비용" value={won(m.cost)} />
+            <Stat label="결제금액" value={won(m.cost)} />
             {risk.hasSessions ? <Stat label="회당 비용" value={won(risk.costPerSession)} /> : null}
             <Stat label="이번 달 방문" value={`${formatNumber(monthlyVisits)}회`} />
           </View>
@@ -102,14 +140,6 @@ export function MembershipDetail({
             <Stat label="남은 기간" value={expired ? '만료' : `${formatNumber(risk.remainingDays)}일`} />
             <Stat label="시작·종료" value={`${m.startDate} ~ ${m.endDate}`} />
           </View>
-          {risk.hasSessions && risk.valueAtRisk > 0 ? (
-            <View style={styles.footRow}>
-              <Icon icon={Wallet} size={16} color={expired ? Palette.gray300 : Palette.loss} />
-              <ThemedText type="caption" themeColor={expired ? 'textSecondary' : 'text'}>
-                못 쓰면 {won(risk.valueAtRisk)} 손실
-              </ThemedText>
-            </View>
-          ) : null}
         </Card>
 
         <ThemedText type="captionBold" style={styles.sectionTitle}>
@@ -183,7 +213,20 @@ const styles = StyleSheet.create({
   },
   body: { paddingHorizontal: ScreenPadding, paddingBottom: Spacing.xl, gap: Spacing.md },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  footRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: Spacing.xs },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  dday: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.full },
+  barRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.md },
+  barTrack: {
+    flex: 1,
+    height: 24,
+    borderRadius: Radius.small,
+    backgroundColor: Palette.gray100,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  barFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: Radius.small },
+  marker: { position: 'absolute', top: 4, bottom: 4, width: 1, backgroundColor: 'rgba(0,0,0,0.18)' },
+  pct: { minWidth: 44, textAlign: 'right' },
   statRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.lg, marginTop: Spacing.sm },
   stat: { gap: 2 },
   sectionTitle: { marginTop: Spacing.sm },

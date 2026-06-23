@@ -43,6 +43,7 @@ export interface Membership {
   maxVisits: number | null; // 인세권 총 횟수
   weeklyGoal: number | null; // 기간권 주당 목표
   inputMethod: MembershipInputMethod | null;
+  createdAt: string; // 등록 시각(최신 등록순 정렬용)
   usedVisits: number;
   /** max_visits - used, clamped at 0. null when unlimited (period, or no cap). */
   remainingVisits: number | null;
@@ -79,6 +80,7 @@ function toMembership(row: MembershipRow): Membership {
     maxVisits: row.max_visits,
     weeklyGoal: row.weekly_goal ?? null,
     inputMethod: row.input_method ?? null,
+    createdAt: row.created_at,
     usedVisits,
     remainingVisits,
     status: deriveStatus(row.end_date),

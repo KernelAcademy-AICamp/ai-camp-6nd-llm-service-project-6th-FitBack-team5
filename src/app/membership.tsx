@@ -8,10 +8,12 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card, Icon } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
-import { computeRisk, sortByRisk, summarize, type RiskInfo } from '@/features/membership/dashboard';
+import { computeRisk, type RiskInfo } from '@/features/membership/dashboard';
+import { MembershipCard } from '@/features/membership/MembershipCard';
 import { MembershipDetail } from '@/features/membership/MembershipDetail';
 import { MembershipForm } from '@/features/membership/MembershipForm';
-import { MembershipStatsCard, SummaryHeader } from '@/features/membership/MembershipStatsCard';
+import type { PortfolioValue } from '@/features/membership/portfolio';
+import { buildPortfolioItems } from '@/features/membership/PortfolioView';
 import { useMemberships, type Membership } from '@/features/membership/useMemberships';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { supabase } from '@/lib/supabase';
@@ -48,19 +50,17 @@ export default function MembershipScreen() {
     m: Membership;
     risk: RiskInfo;
     monthlyVisits: number;
+    value: PortfolioValue;
   } | null>(null);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
-  const withRisk = list.map((m) => ({
-    m,
-    risk: computeRisk(m, visitsOf(m.id)),
-    visits: visitsOf(m.id),
-  }));
-  const sorted = sortByRisk(withRisk, (x) => x.risk); // spec: 위험순 정렬
-  const summary = summarize(
-    withRisk.map((x) => ({ risk: x.risk, monthlyVisits: x.visits, name: x.m.name })),
-  );
+  // 활용도 값(목표 75% 회수) — 회원권별로 매핑.
+  const valueById = new Map(buildPortfolioItems(list).map((it) => [it.m.id, it.value]));
+  // 최신 등록순 정렬 (필터·만료 우선 배치는 개선 항목).
+  const sorted = [...list]
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .map((m) => ({ m, risk: computeRisk(m, visitsOf(m.id)), value: valueById.get(m.id)! }));
   const isEmpty = !isLoading && !isError && list.length === 0;
 
   return (
@@ -80,11 +80,6 @@ export default function MembershipScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-          {/* spec 4-A 요약 헤더: 집계 + 비율막대 + 히어로 금액 + 보조 줄 + 센터 가기 CTA */}
-          {!isLoading && !isError && list.length > 0 ? (
-            <SummaryHeader summary={summary} count={list.length} />
-          ) : null}
-
           {isLoading && (
             <View style={styles.stateBox}>
               <ActivityIndicator />
@@ -107,14 +102,14 @@ export default function MembershipScreen() {
             </Card>
           )}
 
-          {/* 위험순 회원권 카드 */}
+          {/* 최신 등록순 활용도 카드 */}
           {sorted.map((x) => (
-            <MembershipStatsCard
+            <MembershipCard
               key={x.m.id}
               m={x.m}
               risk={x.risk}
-              monthlyVisits={x.visits}
-              onPress={() => setDetail({ m: x.m, risk: x.risk, monthlyVisits: x.visits })}
+              value={x.value}
+              onPress={() => setDetail({ m: x.m, risk: x.risk, monthlyVisits: visitsOf(x.m.id), value: x.value })}
             />
           ))}
         </ScrollView>
@@ -146,6 +141,7 @@ export default function MembershipScreen() {
                 m={detail.m}
                 risk={detail.risk}
                 monthlyVisits={detail.monthlyVisits}
+                value={detail.value}
                 onClose={() => setDetail(null)}
               />
             ) : null}
