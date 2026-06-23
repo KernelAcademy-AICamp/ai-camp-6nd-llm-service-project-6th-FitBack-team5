@@ -173,6 +173,21 @@ export function summarize(
   return s;
 }
 
+/** D-day 배지 표시값 — 라벨(D-N / 만료) + 색(페이스 3단계: 위험/주의/안전, 그 외 회색). */
+export function ddayBadge(risk: RiskInfo): { label: string; color: string } {
+  const expired = risk.remainingDays <= 0;
+  const color = expired
+    ? Palette.gray300
+    : risk.level === 'danger'
+      ? RISK_COLORS.danger
+      : risk.level === 'warning'
+        ? RISK_COLORS.warning
+        : risk.level === 'safe'
+          ? RISK_COLORS.safe
+          : Palette.gray500;
+  return { label: expired ? '만료' : `D-${formatNumber(risk.remainingDays)}`, color };
+}
+
 const RISK_ORDER: Record<RiskLevel, number> = { danger: 0, warning: 1, neutral: 2, safe: 3 };
 
 /** 위험순 정렬: danger→warning→neutral→safe, 같은 레벨은 손실액 큰 순. */

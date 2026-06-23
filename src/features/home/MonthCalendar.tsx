@@ -6,7 +6,6 @@ import {
   Flame,
   Plus,
   ShieldCheck,
-  Target,
   Trash2,
   X,
 } from 'lucide-react-native';
@@ -18,11 +17,7 @@ import { Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { useCalendarMonth } from '@/features/home/useCalendarMonth';
 import { useDayRecords } from '@/features/home/useDayRecords';
-import {
-  RECOMMEND_PACE_TEXT,
-  RECOMMENDED_WEEKLY_VISITS,
-  useHomeActivity,
-} from '@/features/home/useHomeActivity';
+import { RECOMMENDED_WEEKLY_VISITS, useHomeActivity } from '@/features/home/useHomeActivity';
 import { useMemberships } from '@/features/membership/useMemberships';
 import {
   useAddSchedule,
@@ -318,7 +313,6 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
     .filter((m) => m.type === 'period' && m.status !== 'expired' && m.weeklyGoal)
     .reduce((mx, m) => Math.max(mx, m.weeklyGoal ?? 0), 0);
   const recommendedWeekly = goalFromMembership > 0 ? goalFromMembership : RECOMMENDED_WEEKLY_VISITS;
-  const paceText = goalFromMembership > 0 ? `회원권 목표: 일주일에 ${recommendedWeekly}회` : RECOMMEND_PACE_TEXT;
 
   function shift(delta: number) {
     const m0 = month - 1 + delta;
@@ -331,7 +325,6 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
   const streak = home?.streakWeeks ?? 0;
   const maxStreak = home?.maxStreakWeeks ?? 0;
   const freezeLeft = home?.streakFreezeAvailable ?? true;
-  const weekVisits = home?.weekVisits ?? 0;
   const planList = schedules ?? [];
 
   // 날짜별 일정 타입 집합
@@ -475,36 +468,14 @@ export function MonthCalendar({ onClose }: { onClose: () => void }) {
               </Card>
             </View>
 
-            <Card accentColor={Palette.primary}>
-              <View style={styles.paceRow}>
-                <Icon icon={Target} size={20} color={Palette.primary} />
-                <View style={styles.paceText}>
-                  <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                    권장 페이스
-                  </ThemedText>
-                  <ThemedText type="label" themeColor="textSecondary">
-                    {paceText}
-                  </ThemedText>
-                </View>
-                <View style={styles.paceRight}>
-                  <ThemedText type="label" themeColor="textSecondary">
-                    이번 주 권장
-                  </ThemedText>
-                  <ThemedText type="captionBold">
-                    <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                      {weekVisits}
-                    </ThemedText>{' '}
-                    / {recommendedWeekly}회
-                  </ThemedText>
-                </View>
-              </View>
-              {/* 회복 동선 — 스트릭이 끊겼지만 기록이 있을 때 부드러운 재시작(하드 리셋 금지) */}
-              {streak === 0 && maxStreak > 0 ? (
-                <ThemedText type="label" themeColor="textSecondary" style={styles.restartNote}>
+            {/* 회복 동선 — 스트릭이 끊겼지만 기록이 있을 때 부드러운 재시작. (권장 페이스는 활용도 카드로 이동) */}
+            {streak === 0 && maxStreak > 0 ? (
+              <Card accentColor={Palette.primary}>
+                <ThemedText type="label" themeColor="textSecondary">
                   최고 {maxStreak}주 기록이 있어요 · 이번 주 {recommendedWeekly}회로 다시 이어가볼까요?
                 </ThemedText>
-              ) : null}
-            </Card>
+              </Card>
+            ) : null}
           </>
         ) : null}
       </ScrollView>
@@ -566,10 +537,6 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: 'row', gap: Spacing.md },
   statCard: { flex: 1, gap: 4 },
   statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  paceRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  paceText: { flex: 1, gap: 2 },
-  paceRight: { alignItems: 'flex-end', gap: 2 },
-  restartNote: { marginTop: Spacing.sm },
   recHead: { marginBottom: Spacing.sm },
   recList: { gap: Spacing.sm },
   recRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },

@@ -1,5 +1,5 @@
 import { CalendarClock, Dumbbell, TrendingUp } from 'lucide-react-native';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Icon } from '@/components/ui';
@@ -93,14 +93,14 @@ export function PortfolioHero({
         </ThemedText>
       </View>
 
-      {/* 총 회수 / 남은 금액 / 원금 */}
+      {/* 총 회수 / 남은 금액 / 결제금액 */}
       <View style={styles.stats}>
         <Stat label="총 회수" value={won(summary.recovered)} />
         <Stat label="남은 금액" value={won(summary.remaining)} />
-        <Stat label="원금" value={won(principal)} />
+        <Stat label="결제금액" value={won(principal)} />
       </View>
 
-      <Button label="회원권 출석" variant="secondary" onPress={onCta} style={styles.cta} />
+      <Button label="지금 출석하기" variant="secondary" onPress={onCta} style={styles.cta} />
     </Card>
   );
 }
