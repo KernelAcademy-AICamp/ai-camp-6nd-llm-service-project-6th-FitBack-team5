@@ -665,8 +665,22 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
             </View>
             <View style={{ gap: 2 }}>
               <ThemedText type="label" themeColor="textSecondary">안녕하세요!</ThemedText>
-              <ThemedText type="subtitle">회원권 본전 챙기는 피트니스예요</ThemedText>
+              <ThemedText type="subtitle">회원권 본전 챙기는 AI 코치예요</ThemedText>
             </View>
+          </View>
+
+          {/* 코치 소개 — 첫 진입 시 무엇을 돕는지 안내 */}
+          <View style={styles.introCard}>
+            <ThemedText type="caption" style={styles.introText}>
+              저는 회원권이 그냥 사라지지 않게 옆에서 챙기는 코치예요.{'\n'}이런 걸 도와드려요.
+            </ThemedText>
+            <View style={styles.introList}>
+              <ThemedText type="caption" themeColor="textSecondary">· 회원권 활용도·만료 — 얼마 남았고 본전은 얼마나 챙겼는지</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">· 오늘 운동 추천 — 내 상황에 맞는 루틴(운동 라이브러리 기반)</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">· 식단 추천·사진 분석 — 목표에 맞춰</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">· 내 일정 확인 — 이번 주 뭐가 잡혀있는지</ThemedText>
+            </View>
+            <ThemedText type="caption" style={styles.introText}>무엇이든 편하게 물어보세요.</ThemedText>
           </View>
 
           {/* ROI card */}
@@ -1065,6 +1079,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   avatarImg: { width: 52, height: 52 },
+  introCard: {
+    backgroundColor: Palette.primaryLight,
+    borderRadius: Radius.card,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  introText: { lineHeight: 20 },
+  introList: { gap: 4 },
   roiCard: {
     borderRadius: Radius.card, padding: Spacing.md, gap: Spacing.sm,
   },
