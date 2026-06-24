@@ -1,11 +1,13 @@
 import { useRouter } from 'expo-router';
 import { ChevronRight, Dumbbell, Sliders, Wrench } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GnbBar } from '@/components/gnb-bar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { MyPanel } from '@/features/auth/MyPanel';
 import {
   BottomTabInset,
   Elevation,
@@ -17,7 +19,6 @@ import {
 } from '@/constants/theme';
 import { routeToCustom } from '@/features/workout/route-to-custom';
 import { SelectedDayCard } from '@/features/workout/SelectedDayCard';
-import { WorkoutDateStrip } from '@/features/workout/WorkoutDateStrip';
 
 function todayIso(): string {
   const d = new Date();
@@ -28,7 +29,8 @@ function todayIso(): string {
 
 export default function WorkoutScreen() {
   const router = useRouter();
-  const [selectedDate, setSelectedDate] = useState<string>(() => todayIso());
+  const [selectedDate] = useState<string>(() => todayIso());
+  const [showMyPanel, setShowMyPanel] = useState(false);
 
   return (
     <ThemedView style={styles.container}>
@@ -36,15 +38,7 @@ export default function WorkoutScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <ThemedText type="title">홈트레이닝</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              지금 바로, 움직여볼까요?
-            </ThemedText>
-          </View>
-
-          {/* 가로 날짜 스트립 — 오늘 ±7일. 선택 시 아래 카드 갱신. */}
-          <WorkoutDateStrip selected={selectedDate} onSelect={setSelectedDate} />
+          <GnbBar onMenu={() => setShowMyPanel(true)} showCalendar={false} />
 
           {/* 운동 시작 진입 카드 3종 — 일일달력 바로 밑. AI 추천이 맨 위(강조).
               각 카드는 coach 모드 선택을 건너뛰고 곧장 해당 흐름으로 진입. */}
@@ -122,6 +116,13 @@ export default function WorkoutScreen() {
           />
         </ScrollView>
       </SafeAreaView>
+      <Modal
+        visible={showMyPanel}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowMyPanel(false)}>
+        <MyPanel onClose={() => setShowMyPanel(false)} />
+      </Modal>
     </ThemedView>
   );
 }
@@ -133,6 +134,7 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
+    backgroundColor: Palette.bgBase,
   },
   scrollContent: {
     paddingHorizontal: ScreenPadding,

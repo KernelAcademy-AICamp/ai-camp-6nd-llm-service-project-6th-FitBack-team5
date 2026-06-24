@@ -112,6 +112,8 @@ import {
 import { useTodayWorkoutLog } from '@/features/workout/useTodayWorkoutLog';
 import { pickFoodImage } from '@/features/diet/pickFoodImage';
 import { useRecommend } from '@/features/diet/recommend';
+import { GnbBar } from '@/components/gnb-bar';
+import { MyPanel } from '@/features/auth/MyPanel';
 import {
   MEAL_TYPES,
   useAddMeal,
@@ -1887,7 +1889,6 @@ export default function DietScreen() {
     if (params.date && params.date !== selectedDate) setSelectedDate(params.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.date]);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const { data: meals = [], isLoading, isError, refetch } = useMeals(selectedDate);
   const addMeal = useAddMeal(selectedDate);
   const addAnalyze = useAnalyzeMeal(); // 추천 음식 추가 시 영양값 계산용
@@ -2021,68 +2022,84 @@ export default function DietScreen() {
     addMeal.mutate({ ...meal, eatenAt });
   }
 
+  const [showMyPanel, setShowMyPanel] = useState(false);
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <DateStrip
-          selected={selectedDate}
-          onSelect={setSelectedDate}
-          onOpenCalendar={() => setCalendarOpen(true)}
-        />
+        <View style={styles.gnbWrap}>
+          <GnbBar onMenu={() => setShowMyPanel(true)} showCalendar={false} />
+        </View>
         <View style={styles.scrollWrap}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {/* 오늘 운동 요약 — 운동 완료 시: 유형/시간/소모칼로리 / 운동 전·계획 없음: 걸음수 */}
-          <View style={styles.workoutBar}>
-            {hasWorkout ? (
-              <>
-                <View style={styles.workoutLead}>
-                  <Icon name="fitness-center" size={13} color={Palette.gray500} />
-                  <Txt variant="label" weight="600" color={Palette.gray500}>
-                    오늘 운동
-                  </Txt>
-                </View>
-                <View style={styles.workoutDivider} />
-                <View style={styles.workoutCell}>
-                  <Txt variant="label" color={Palette.gray500}>
-                    {workoutCtx.part ? PART_LABEL[workoutCtx.part] : '운동'}
-                  </Txt>
-                </View>
-                <View style={styles.workoutDivider} />
-                <View style={styles.workoutCell}>
-                  <Txt variant="label" color={Palette.gray500}>
-                    {workoutMin}분
-                  </Txt>
-                </View>
-                <View style={styles.workoutDivider} />
-                <View style={styles.workoutCell}>
-                  <Txt variant="label" color={Palette.gray500}>
-                    {burnedKcal}kcal
-                  </Txt>
-                </View>
-              </>
-            ) : (
-              <>
-                <View style={styles.workoutLead}>
-                  <Icon name="footprints" size={13} color={Palette.gray500} />
-                  <Txt variant="label" weight="600" color={Palette.gray500}>
-                    오늘 걸음수
-                  </Txt>
-                </View>
-                <View style={styles.workoutDivider} />
-                <View style={styles.workoutCell}>
-                  <Txt variant="label" color={Palette.gray500}>
-                    {STEP_COUNT.toLocaleString()} 걸음
-                  </Txt>
-                </View>
-                <View style={styles.workoutDivider} />
-                <View style={styles.workoutCell}>
-                  <Txt variant="label" color={Palette.gray500}>
-                    {STEP_KCAL}kcal
-                  </Txt>
-                </View>
-              </>
-            )}
+          {/* ③+④ 오늘 기록 — 섭취 칼로리 + 끼니별 슬롯 통합 */}
+          <View style={styles.listHeadRow}>
+            <Txt variant="body" weight="700" color={Palette.gray900} style={{ fontSize: 18 }}>
+              오늘 기록
+            </Txt>
           </View>
+          <Card style={{ gap: 0 }}>
+            {/* 섭취 칼로리 요약 */}
+            <View style={styles.kcalHead}>
+              <View style={styles.flex1}>
+                <Txt variant="body" color={Palette.gray500}>
+                  {over
+                    ? `${(-remaining).toLocaleString()}kcal 초과예요`
+                    : `${remaining.toLocaleString()}kcal 더 먹어도 돼요`}
+                </Txt>
+                <View style={styles.kcalBig}>
+                  <Txt variant="h1" weight="700">
+                    {totals.kcal.toLocaleString()}
+                  </Txt>
+                  <Txt variant="body" color={Palette.gray500}>
+                    {' '}
+                    / {calorieGoal.toLocaleString()}kcal
+                  </Txt>
+                  <Icon name="info" size={16} color={Palette.gray300} style={styles.infoIcon} />
+                </View>
+              </View>
+              <Pressable
+                onPress={() => setModalOpen(true)}
+                style={({ pressed }) => [
+                  styles.addBtn,
+                  { backgroundColor: pressed ? Palette.primaryPressed : Palette.primary },
+                ]}>
+                <Icon name="add" size={24} color="#FFFFFF" />
+              </Pressable>
+            </View>
+            <CalorieBar consumed={totals.kcal} goal={calorieGoal} burned={burnedKcal} />
+
+            {/* 구분선 */}
+            <View style={styles.sectionDivider} />
+
+            {/* 끼니별 슬롯 */}
+            {isLoading ? (
+              <View style={styles.listState}>
+                <ActivityIndicator color={Palette.primary} />
+                <Txt variant="caption" color={Palette.gray500}>
+                  기록을 불러오는 중…
+                </Txt>
+              </View>
+            ) : isError ? (
+              <View style={styles.listState}>
+                <Txt variant="caption" color={Palette.gray500}>
+                  기록을 불러오지 못했어요.
+                </Txt>
+                <Pressable onPress={() => refetch()} hitSlop={8}>
+                  <Txt variant="caption" weight="600" color={Palette.primary}>
+                    다시 시도
+                  </Txt>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.slotGrid}>
+                {MEAL_TYPES.map((t) => (
+                  <MealSlot key={t} type={t} meals={meals} onPress={handleSlotPress} />
+                ))}
+              </View>
+            )}
+          </Card>
+
           {/* ① 운동 맞춤 식단 가이드 — 운동 대비 섭취 상태 게이지 + 목표 매크로 */}
           <Card style={styles.guideCard}>
             {/* 운동 대비 섭취 상태 게이지 + '오늘의 식단' 타이틀 (상단 중앙) */}
@@ -2191,73 +2208,6 @@ export default function DietScreen() {
             )}
           </Card>}
 
-          {/* ③+④ 오늘 기록 — 섭취 칼로리 + 끼니별 슬롯 통합 */}
-          <View style={styles.listHeadRow}>
-            <Txt variant="body" weight="700" color={Palette.gray900} style={{ fontSize: 18 }}>
-              오늘 기록
-            </Txt>
-          </View>
-          <Card style={{ gap: 0 }}>
-            {/* 섭취 칼로리 요약 */}
-            <View style={styles.kcalHead}>
-              <View style={styles.flex1}>
-                <Txt variant="body" color={Palette.gray500}>
-                  {over
-                    ? `${(-remaining).toLocaleString()}kcal 초과예요`
-                    : `${remaining.toLocaleString()}kcal 더 먹어도 돼요`}
-                </Txt>
-                <View style={styles.kcalBig}>
-                  <Txt variant="h1" weight="700">
-                    {totals.kcal.toLocaleString()}
-                  </Txt>
-                  <Txt variant="body" color={Palette.gray500}>
-                    {' '}
-                    / {calorieGoal.toLocaleString()}kcal
-                  </Txt>
-                  <Icon name="info" size={16} color={Palette.gray300} style={styles.infoIcon} />
-                </View>
-              </View>
-              <Pressable
-                onPress={() => setModalOpen(true)}
-                style={({ pressed }) => [
-                  styles.addBtn,
-                  { backgroundColor: pressed ? Palette.primaryPressed : Palette.primary },
-                ]}>
-                <Icon name="add" size={24} color="#FFFFFF" />
-              </Pressable>
-            </View>
-            <CalorieBar consumed={totals.kcal} goal={calorieGoal} burned={burnedKcal} />
-
-            {/* 구분선 */}
-            <View style={styles.sectionDivider} />
-
-            {/* 끼니별 슬롯 */}
-            {isLoading ? (
-              <View style={styles.listState}>
-                <ActivityIndicator color={Palette.primary} />
-                <Txt variant="caption" color={Palette.gray500}>
-                  기록을 불러오는 중…
-                </Txt>
-              </View>
-            ) : isError ? (
-              <View style={styles.listState}>
-                <Txt variant="caption" color={Palette.gray500}>
-                  기록을 불러오지 못했어요.
-                </Txt>
-                <Pressable onPress={() => refetch()} hitSlop={8}>
-                  <Txt variant="caption" weight="600" color={Palette.primary}>
-                    다시 시도
-                  </Txt>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={styles.slotGrid}>
-                {MEAL_TYPES.map((t) => (
-                  <MealSlot key={t} type={t} meals={meals} onPress={handleSlotPress} />
-                ))}
-              </View>
-            )}
-          </Card>
         </ScrollView>
           <FadeTop />
         </View>
@@ -2286,19 +2236,21 @@ export default function DietScreen() {
           openRecord(t);
         }}
       />
-      <CalendarModal
-        visible={calendarOpen}
-        selected={selectedDate}
-        onSelect={setSelectedDate}
-        onClose={() => setCalendarOpen(false)}
-      />
+      <Modal
+        visible={showMyPanel}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowMyPanel(false)}>
+        <MyPanel onClose={() => setShowMyPanel(false)} />
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Palette.bgBase },
-  safeArea: { flex: 1, width: '100%', maxWidth: 800, alignSelf: 'center' },
+  safeArea: { flex: 1, width: '100%', maxWidth: 800, alignSelf: 'center', backgroundColor: Palette.bgBase },
+  gnbWrap: { paddingHorizontal: ScreenPadding },
 
   // 날짜 스트립 (하단 선 없음, 아래 영역과 24px 간격)
   dateStrip: { flexGrow: 0, backgroundColor: Palette.bgBase },

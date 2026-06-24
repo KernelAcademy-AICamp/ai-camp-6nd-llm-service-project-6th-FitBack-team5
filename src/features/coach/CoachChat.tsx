@@ -974,7 +974,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
 // ── Styles ────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: Palette.bgSurface },
 
   // Header
   topBar: {

@@ -1,14 +1,15 @@
 import { router } from 'expo-router';
 import {
-  AlarmClock, Bell, Calendar, ChevronRight,
-  Menu, MoreHorizontal, TrendingUp, X,
+  AlarmClock, Calendar, ChevronRight,
+  MoreHorizontal, TrendingUp, X,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CountUp } from '@/components/count-up';
+import { GnbBar } from '@/components/gnb-bar';
 import { sheetPresentation } from '@/components/modal-presentation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -158,47 +159,16 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+      <SafeAreaView edges={Platform.select({ web: ['bottom'] as const, default: undefined })} style={styles.safeArea}>
+          {/* ── 헤더 (스크롤 밖 고정) ── */}
+          <GnbBar
+            onMenu={() => setShowMyDrawer(true)}
+            onCalendar={() => setShowCalendar(true)}
+            onAlarm={() => setShowAlarm(true)}
+            hasAlarm={hasAlarm}
+          />
 
-          {/* ── 헤더 ── */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <Pressable
-                onPress={() => setShowMyDrawer(true)}
-                style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel="메뉴 열기">
-                <Icon icon={Menu} size={22} color={Palette.gray900} />
-              </Pressable>
-              {/* FitBack 로고 */}
-              <Image
-                source={require('../../assets/images/Logo.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-            </View>
-
-            <View style={styles.headerActions}>
-              <Pressable
-                onPress={() => setShowCalendar(true)}
-                style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel="달력 보기">
-                <Icon icon={Calendar} size={22} color={Palette.gray900} />
-              </Pressable>
-              <Pressable
-                onPress={() => setShowAlarm(true)}
-                style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel="알림">
-                <View>
-                  <Icon icon={Bell} size={22} color={hasAlarm ? Palette.gray900 : Palette.gray300} />
-                  {hasAlarm ? <View style={styles.alarmDot} /> : null}
-                </View>
-              </Pressable>
-            </View>
-          </View>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
 
           {/* ── 만료 임박 알림 배너 ── */}
           {bannerItem ? (
@@ -559,14 +529,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Palette.bgBase },
   safeArea: {
     flex: 1,
-    paddingHorizontal: ScreenPadding,
-    paddingTop: Spacing.md,
-    paddingBottom: BottomTabInset + Spacing.md,
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
   },
-  body: { gap: Spacing.md, paddingBottom: Spacing.lg },
+  scrollView: { flex: 1 },
+  body: {
+    gap: Spacing.md,
+    paddingHorizontal: ScreenPadding,
+    paddingBottom: BottomTabInset + Spacing.lg,
+  },
   pressed: { opacity: 0.75 },
 
   // ── 헤더 ──
@@ -813,7 +785,7 @@ const styles = StyleSheet.create({
   },
 
   // ── 모달 공통 ──
-  modalRoot: { flex: 1, backgroundColor: Palette.bgBase },
+  modalRoot: { flex: 1, backgroundColor: Palette.bgSurface },
   modalSafe: { flex: 1 },
   alarmHeader: {
     flexDirection: 'row',
