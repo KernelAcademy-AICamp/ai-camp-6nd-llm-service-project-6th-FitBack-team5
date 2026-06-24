@@ -11,6 +11,8 @@ export interface AiFeedbackInput {
   userMessage?: string;
   questionAnswer?: string;
   photoAnalysis?: unknown;
+  /** 멀티턴 — 직전 대화(최근 N턴). 후속 질문 맥락 유지용. */
+  history?: { role: 'user' | 'coach'; text: string }[];
 }
 
 export function useAiFeedback() {

@@ -57,6 +57,8 @@ export const SYSTEM_PROMPT = `
 - exercise_candidates: 운동 라이브러리에서 추린 후보 [{name, body_region, target_parts, intensity}].
   plan(운동 추천) 시 가능하면 이 목록 안의 운동만 고르고, 각 item.source 에 고른 운동명을 그대로 적는다.
   목록에 적당한 운동이 없으면 일반 지식으로 답하되 그 item의 source 는 생략한다. (지어낸 운동에 source 를 붙이지 말 것)
+- history: 직전 대화 [{role:"user"|"coach", text}] (최근 몇 턴). "그거 더 자세히", "그럼 두 번째는?" 같은
+  후속 질문은 history 맥락을 이어서 답한다. 단, 같은 말을 반복하지 말고 새 질문에 집중한다.
 - (있으면) 사용자 질문 / 질문지 답변 / 음식 사진 분석 결과
 
 [04 ROI 인용 규칙]

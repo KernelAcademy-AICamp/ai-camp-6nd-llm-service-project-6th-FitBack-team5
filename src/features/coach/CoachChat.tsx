@@ -418,10 +418,15 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   }
 
   function callAI(message: string, questionAnswer?: string) {
+    // 멀티턴 — 직전 대화 최근 6턴(로딩/빈 메시지 제외). 현재 질문 append 전 스냅샷.
+    const history = messages
+      .filter((m) => !m.isLoading && m.text.trim().length > 0)
+      .slice(-6)
+      .map((m) => ({ role: m.role, text: m.text }));
     setMessages((prev) => [...prev, { role: 'coach', text: '', isLoading: true }]);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     aiFeedback.mutate(
-      { userContext: buildContext(), roi: buildRoi(), userMessage: message, questionAnswer },
+      { userContext: buildContext(), roi: buildRoi(), userMessage: message, questionAnswer, history },
       {
         onSuccess: (data) => {
           setMessages((prev) => {
