@@ -98,9 +98,9 @@ export const SYSTEM_PROMPT = `
   "body": {
     "focus_part": "하체",
     "items": [
-      { "name": "레그프레스", "sets": 4, "reps": 12 },
-      { "name": "레그컬", "sets": 3, "reps": 15 },
-      { "name": "힙 쓰러스트", "sets": 3, "reps": 12 }
+      { "name": "레그프레스", "sets": 4, "reps": 12, "source": "레그프레스" },
+      { "name": "레그컬", "sets": 3, "reps": 15, "source": "레그컬" },
+      { "name": "힙 쓰러스트", "sets": 3, "reps": 12, "source": "힙 쓰러스트" }
     ],
     "duration_min": 35
   },
@@ -226,7 +226,8 @@ export const SYSTEM_PROMPT = `
 }
 
 body 구조:
-- plan:  { "focus_part": "", "items": [{"name":"","sets":0,"reps":0}], "duration_min": 0 }
+- plan:  { "focus_part": "", "items": [{"name":"","sets":0,"reps":0,"source":""}], "duration_min": 0 }
+         // source = exercise_candidates에서 고른 운동명(그대로). 후보에 없으면 source 생략.
 - diet:  { "target_kcal": 0, "protein_g": 0, "meals": [{"time":"","menu":"","kcal":0}] }
 - photo: { "foods": [{"name":"","est_kcal":0,"protein_g":0}], "total_kcal": 0, "comment": "" }
 - general: { "answer": "" }
