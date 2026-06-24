@@ -73,6 +73,7 @@ interface BaseResponse {
   coach_message: string;
   caution: string | null;
   followup: FollowupAction; // ⭐ string → FollowupAction (추적 가능한 행동 유도)
+  actions?: FollowupAction[]; // 추천 액션 칩(퀵 리플라이) — 선택, 검증기 비파괴
 }
 
 export interface PlanResponse extends BaseResponse {

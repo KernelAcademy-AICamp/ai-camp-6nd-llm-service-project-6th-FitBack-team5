@@ -28,7 +28,7 @@ import { useDietSummary } from '@/features/coach/useDietSummary';
 import { pickFoodImage } from '@/features/diet/pickFoodImage';
 import { useHomeActivity } from '@/features/home/useHomeActivity';
 import { useAddSchedule, useSchedules, type ScheduleType } from '@/features/home/useSchedules';
-import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
+import { computeRisk, sortByRisk } from '@/features/membership/dashboard';
 import { useMemberships } from '@/features/membership/useMemberships';
 import { fetchCoachCandidates } from '@/features/workout/exercises';
 import { prepareSessionAudio } from '@/features/workout/start-session';
@@ -348,15 +348,6 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     : risk.level === 'warning' ? Palette.warning
     : Palette.gray500;
 
-  const riskBg = !risk ? Palette.bgMuted
-    : risk.level === 'safe' ? Palette.profitLight
-    : Palette.bgSurface;
-
-  const riskLabel = !risk ? ''
-    : risk.level === 'danger' ? '위험'
-    : risk.level === 'warning' ? '주의'
-    : risk.level === 'safe' ? '안전' : '';
-
   // 일정(캘린더) 컨텍스트 — 오늘 + 앞으로 7일 예정. 챗봇이 중복 추천을 피하고 예정 일정을 참고.
   const now0 = new Date();
   const { data: monthSchedules } = useSchedules(now0.getFullYear(), now0.getMonth() + 1);
@@ -459,6 +450,33 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     if (view === 'welcome') setView('chat');
     setMessages((prev) => [...prev, { role: 'user', text: q }]);
     callAI(q);
+  }
+
+  // 추천 액션 칩(퀵 리플라이) — 딥링크형은 화면 이동, 그 외는 템플릿 질문 전송.
+  function handleAction(a: FollowupAction) {
+    const { type, label } = a;
+    if (type === 'log_workout' || type === 'view_plan') {
+      onClose();
+      router.navigate('/workout' as never);
+    } else if (type === 'view_diet' || type === 'log_meal') {
+      onClose();
+      router.navigate('/diet' as never);
+    } else if (type === 'book_session') {
+      onClose();
+      router.navigate('/membership' as never);
+    } else {
+      send(label);
+    }
+  }
+
+  // 정적 케이스 버튼 — LLM이 actions를 안 줄 때(미배포 포함) general 응답에 기본 칩 부착.
+  function fallbackActions(intent: string): FollowupAction[] {
+    if (intent !== 'general') return [];
+    return [
+      { type: 'ask_question', label: '오늘 운동 추천' },
+      { type: 'ask_question', label: '이번 주 일정 알려줘' },
+      { type: 'book_session', label: '회원권 보기' },
+    ];
   }
 
   // ── Photo analysis handler ────────────────────────────
@@ -683,47 +701,6 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
             <ThemedText type="caption" style={styles.introText}>무엇이든 편하게 물어보세요.</ThemedText>
           </View>
 
-          {/* ROI card */}
-          {risk && membership ? (
-            <View style={[styles.roiCard, { backgroundColor: riskBg }]}>
-              <View style={styles.roiCardHead}>
-                <ThemedText type="label" themeColor="textSecondary">내 회원권 활용도</ThemedText>
-                {riskLabel ? (
-                  <View style={[styles.riskBadge, { borderColor: riskColor }]}>
-                    <ThemedText type="label" style={{ color: riskColor }}>{riskLabel}</ThemedText>
-                  </View>
-                ) : null}
-              </View>
-              {risk.hasSessions ? (
-                <>
-                  <ThemedText type="h1" themeColor="text">
-                    활용률 {Math.round(risk.sessionFilledRatio * 100)}%
-                  </ThemedText>
-                  <ThemedText type="label" themeColor="textSecondary">
-                    {membership.name} {risk.usedSessions}회 완료 · D-{risk.remainingDays}
-                  </ThemedText>
-                  <View style={styles.progressTrack}>
-                    <View style={[styles.progressFill, {
-                      flex: Math.max(0.001, risk.sessionFilledRatio),
-                      backgroundColor: riskColor,
-                    }]} />
-                    <View style={{ flex: Math.max(0.001, 1 - risk.sessionFilledRatio) }} />
-                  </View>
-                  {risk.valueAtRisk > 0 ? (
-                    <ThemedText type="label" style={{ color: riskColor }}>
-                      ⚠ 지금 페이스면 {won(risk.valueAtRisk)}이 날아져요
-                    </ThemedText>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <ThemedText type="h1" themeColor="text">D-{risk.remainingDays}</ThemedText>
-                  <ThemedText type="label" themeColor="textSecondary">{membership.name}</ThemedText>
-                </>
-              )}
-            </View>
-          ) : null}
-
           {/* Option cards */}
           <ThemedText type="body" style={{ marginTop: Spacing.sm }}>무엇을 도와드릴까요?</ThemedText>
           <View style={styles.optionsList}>
@@ -929,17 +906,8 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                     return (
                       <Pressable
                         onPress={() => {
-                          const { type, label } = followupObj;
-                          console.log('[analytics] followup_tap', { type, intent: m.response!.intent });
-                          if (type === 'log_workout' || type === 'view_plan') {
-                            onClose(); router.navigate('/workout' as never);
-                          } else if (type === 'view_diet' || type === 'log_meal') {
-                            onClose(); router.navigate('/diet' as never);
-                          } else if (type === 'book_session') {
-                            onClose(); router.navigate('/membership' as never);
-                          } else {
-                            send(label);
-                          }
+                          console.log('[analytics] followup_tap', { type: followupObj.type, intent: m.response!.intent });
+                          handleAction(followupObj);
                         }}
                         style={({ pressed }) => [styles.followupBtn, pressed && styles.pressed]}
                         accessibilityRole="button">
@@ -947,6 +915,27 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                           {followupObj.label}
                         </ThemedText>
                       </Pressable>
+                    );
+                  })() : null}
+
+                  {/* 추천 액션 칩(퀵 리플라이) — actions 우선, 없으면 general 기본 칩. followup과 중복 라벨 제외. */}
+                  {!isThinking ? (() => {
+                    const followLabel = typeof m.response.followup === 'string' ? m.response.followup : m.response.followup?.label;
+                    const chips = (m.response.actions?.length ? m.response.actions : fallbackActions(m.response.intent))
+                      .filter((a) => a.label && a.label !== followLabel);
+                    if (chips.length === 0) return null;
+                    return (
+                      <View style={styles.actionChips}>
+                        {chips.slice(0, 3).map((a, idx) => (
+                          <Pressable
+                            key={`${a.label}-${idx}`}
+                            onPress={() => handleAction(a)}
+                            style={({ pressed }) => [styles.actionChip, pressed && styles.pressed]}
+                            accessibilityRole="button">
+                            <ThemedText type="label" style={{ color: Palette.primary }}>{a.label}</ThemedText>
+                          </Pressable>
+                        ))}
+                      </View>
                     );
                   })() : null}
                 </>
@@ -1174,6 +1163,16 @@ const styles = StyleSheet.create({
   photoComment: {
     marginTop: Spacing.xs, paddingTop: Spacing.xs,
     borderTopWidth: 0.5, borderTopColor: Palette.lineDefault,
+  },
+
+  // 추천 액션 칩(퀵 리플라이)
+  actionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, alignSelf: 'stretch' },
+  actionChip: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 0.5, borderColor: Palette.primary,
+    backgroundColor: Palette.primaryLight,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
   },
 
   // Followup button

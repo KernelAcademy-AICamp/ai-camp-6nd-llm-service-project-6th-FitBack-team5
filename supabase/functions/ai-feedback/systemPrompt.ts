@@ -222,6 +222,9 @@ export const SYSTEM_PROMPT = `
     diet   → "log_meal" (식단 기록 유도, 예: "오늘 식단으로 기록") 또는 "view_diet"
     photo  → "log_meal" (예: "식단으로 저장하기")
     general → "ask_question"
+- (선택) actions: 추천 액션 칩(퀵 리플라이) 배열 [{type,label}], 최대 3개. followup과 라벨 중복 금지.
+  맥락에 맞는 다음 행동을 제안한다. 예) general 일정 안내 → [{ask_question,"오늘 운동 추천"},{book_session,"회원권 보기"}].
+  딱히 없으면 actions는 생략한다(빈 배열·억지 추천 금지).
 - 모든 텍스트는 한국어. caution이 필요 없으면 null.
 
 {
@@ -230,7 +233,8 @@ export const SYSTEM_PROMPT = `
   "body": { ... intent별 구조 ... },
   "coach_message": "격려 한 마디(가능하면 roi 수치 인용)",
   "caution": "주의/안전 멘트 또는 null",
-  "followup": { "type": "log_meal", "label": "오늘 식단으로 기록" }
+  "followup": { "type": "log_meal", "label": "오늘 식단으로 기록" },
+  "actions": [{ "type": "ask_question", "label": "오늘 운동 추천" }]
 }
 
 body 구조:

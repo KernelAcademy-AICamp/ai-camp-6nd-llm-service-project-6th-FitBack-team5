@@ -35,6 +35,8 @@ interface BaseResponse {
   coach_message: string;
   caution: string | null;
   followup: FollowupAction;
+  /** 추천 액션 칩(퀵 리플라이) — 텍스트 아래 버튼 묶음. 선택(검증기 비파괴). */
+  actions?: FollowupAction[];
 }
 
 export interface PlanResponse extends BaseResponse { intent: 'plan'; body: PlanBody }
