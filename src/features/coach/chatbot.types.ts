@@ -19,7 +19,7 @@ export interface FollowupAction {
   label: string;
 }
 
-export interface PlanItem { name: string; sets: number; reps: number }
+export interface PlanItem { name: string; sets: number; reps: number; source?: string }
 export interface PlanBody { focus_part: string; items: PlanItem[]; duration_min: number }
 
 export interface DietMeal { time: string; menu: string; kcal: number }

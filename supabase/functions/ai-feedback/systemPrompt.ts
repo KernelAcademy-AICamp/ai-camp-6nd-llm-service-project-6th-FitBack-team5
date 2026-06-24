@@ -54,6 +54,9 @@ export const SYSTEM_PROMPT = `
        at_risk_won, pace_status } (없으면 null)
 - schedule: 사용자의 일정(캘린더). { today: [{type,title,status}], upcoming: [{date,type,title}](앞으로 7일 예정) }.
   type=diet/workout/visit/custom. 이미 잡힌 일정은 중복 추천하지 말고, 예정된 일정을 자연스럽게 상기시켜라.
+- exercise_candidates: 운동 라이브러리에서 추린 후보 [{name, body_region, target_parts, intensity}].
+  plan(운동 추천) 시 가능하면 이 목록 안의 운동만 고르고, 각 item.source 에 고른 운동명을 그대로 적는다.
+  목록에 적당한 운동이 없으면 일반 지식으로 답하되 그 item의 source 는 생략한다. (지어낸 운동에 source 를 붙이지 말 것)
 - (있으면) 사용자 질문 / 질문지 답변 / 음식 사진 분석 결과
 
 [04 ROI 인용 규칙]

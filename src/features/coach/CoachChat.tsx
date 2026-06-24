@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Apple, ArrowLeft, ArrowUp, CalendarPlus, Camera, Check, Dumbbell, Flame, Sparkles, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -29,6 +30,7 @@ import { useHomeActivity } from '@/features/home/useHomeActivity';
 import { useAddSchedule, useSchedules, type ScheduleType } from '@/features/home/useSchedules';
 import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
 import { useMemberships } from '@/features/membership/useMemberships';
+import { fetchCoachCandidates } from '@/features/workout/exercises';
 import { prepareSessionAudio } from '@/features/workout/start-session';
 import { useGenerateRoutine, type Routine, type RoutineInput } from '@/features/workout/useGenerateRoutine';
 import { useWorkoutSession } from '@/stores/workout-session';
@@ -207,12 +209,20 @@ function ResponseBody({ response }: { response: AppResponse }) {
         {items.map((item, i) => (
           <View key={i} style={styles.exerciseRow}>
             <NumCircle n={i + 1} />
-            <ThemedText type="caption" style={{ flex: 1 }}>{item.name}</ThemedText>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="caption">{item.name}</ThemedText>
+              {item.source ? (
+                <ThemedText type="label" themeColor="textSecondary">📚 {item.source}</ThemedText>
+              ) : null}
+            </View>
             <ThemedText type="caption" themeColor="textSecondary">
               {item.sets}세트 × {item.reps}회
             </ThemedText>
           </View>
         ))}
+        {items.some((it) => it.source) ? (
+          <ThemedText type="label" themeColor="textSecondary">📚 운동 라이브러리 기반 추천</ThemedText>
+        ) : null}
         <AddToScheduleButton type="workout" title={`${focus_part} 루틴`} payload={{ items, duration_min }} />
       </View>
     );
@@ -370,6 +380,13 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     return { today: todayItems, upcoming };
   }, [monthSchedules]);
 
+  // RAG-lite: 운동 라이브러리 후보(회피 부위 제외) — plan 인텐트 grounding + 출처 표시용.
+  const { data: exerciseCandidates } = useQuery({
+    queryKey: ['coach-exercise-candidates', profile?.avoid_exercise_parts],
+    staleTime: 1000 * 60 * 30,
+    queryFn: () => fetchCoachCandidates(profile?.avoid_exercise_parts ?? []),
+  });
+
   function buildContext(): Record<string, unknown> {
     const ctx: Record<string, unknown> = {};
     if (profile) {
@@ -386,6 +403,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     if (home) { ctx.streak_weeks = home.streakWeeks; ctx.week_visits = home.weekVisits; }
     if (risk) { ctx.membership_risk = risk.level; ctx.value_at_risk = risk.valueAtRisk; ctx.remaining_days = risk.remainingDays; }
     if (scheduleCtx) ctx.schedule = scheduleCtx;
+    if (exerciseCandidates?.length) ctx.exercise_candidates = exerciseCandidates;
     return ctx;
   }
 

@@ -31,6 +31,8 @@ export interface PlanItem {
   name: string;
   sets: number;
   reps: number;
+  /** RAG-lite: 운동 라이브러리(exercise_candidates)에서 고른 근거 운동명. 못 고르면 생략. */
+  source?: string;
 }
 export interface PlanBody {
   focus_part: string;
