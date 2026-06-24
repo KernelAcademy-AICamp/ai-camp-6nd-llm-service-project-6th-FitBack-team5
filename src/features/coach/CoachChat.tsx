@@ -365,6 +365,11 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     if (all.length === 0) return null;
     const ymd = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const WD = ['일', '월', '화', '수', '목', '금', '토'];
+    const when = (iso: string) => {
+      const d = new Date(`${iso}T00:00:00`);
+      return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`;
+    };
     const today = new Date();
     const todayYmd = ymd(today);
     const cut = new Date(today);
@@ -372,10 +377,10 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     const cutYmd = ymd(cut);
     const todayItems = all
       .filter((s) => s.date === todayYmd)
-      .map((s) => ({ type: s.type, title: s.title, status: s.status }));
+      .map((s) => ({ when: when(s.date), type: s.type, title: s.title, status: s.status }));
     const upcoming = all
       .filter((s) => s.date > todayYmd && s.date <= cutYmd && s.status === 'planned')
-      .map((s) => ({ date: s.date, type: s.type, title: s.title }));
+      .map((s) => ({ when: when(s.date), type: s.type, title: s.title }));
     if (todayItems.length === 0 && upcoming.length === 0) return null;
     return { today: todayItems, upcoming };
   }, [monthSchedules]);

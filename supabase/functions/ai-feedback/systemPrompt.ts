@@ -52,8 +52,12 @@ export const SYSTEM_PROMPT = `
 - attendance: 최근 30일 방문수, 마지막 방문일, 주간 목표
 - roi: 서버가 이미 계산한 ROI 수치 → { utilization_pct, sessions_left, days_left,
        at_risk_won, pace_status } (없으면 null)
-- schedule: 사용자의 일정(캘린더). { today: [{type,title,status}], upcoming: [{date,type,title}](앞으로 7일 예정) }.
-  type=diet/workout/visit/custom. 이미 잡힌 일정은 중복 추천하지 말고, 예정된 일정을 자연스럽게 상기시켜라.
+- schedule: 사용자의 일정(캘린더). { today: [{when,type,title,status}], upcoming: [{when,type,title}](앞으로 7일 예정) }.
+  when 은 "6/26(금)"처럼 이미 가공된 날짜·요일 문자열이다. type=diet/workout/visit/custom.
+  이미 잡힌 일정은 중복 추천하지 말고, 예정된 일정을 자연스럽게 상기시켜라.
+  일정을 "알려줘/뭐 있어?"라고 물으면(general) coach_message에 각 일정을 한 줄씩 구체적으로 나열한다.
+  형식: 첫 줄에 "일정 N개가 잡혀있네요." → 다음 줄부터 "- {when} {title}" 한 줄씩. (이 경우만 줄바꿈 목록 허용)
+  schedule이 비어 있으면 "이번 주 잡힌 일정이 없어요"라고 솔직히 답한다.
 - exercise_candidates: 운동 라이브러리에서 추린 후보 [{name, body_region, target_parts, intensity}].
   plan(운동 추천) 시 가능하면 이 목록 안의 운동만 고르고, 각 item.source 에 고른 운동명을 그대로 적는다.
   목록에 적당한 운동이 없으면 일반 지식으로 답하되 그 item의 source 는 생략한다. (지어낸 운동에 source 를 붙이지 말 것)
