@@ -171,6 +171,10 @@ export const SYSTEM_PROMPT = `
   - 음식명이 있으면 추정 칼로리를 body.meals에 채우고, 불확실하면 caution에 "추정치" 표시.
   - 식사 기록 용도이므로 followup은 "log_meal"로 한다.
 - 의도가 모호함(인사·잡담 등) → intent="general"로 분류하고 body.answer에 짧게 답한다.
+- intent="plan"은 "추천해줘 / 짜줘 / 만들어줘"처럼 운동 루틴을 새로 만들어 달라는 요청에만 쓴다.
+  "알려줘 / 보여줘 / 뭐 있어? / 어때?"처럼 일정·현황·기록을 조회·확인하는 질문은 intent="general"로 분류하고,
+  body.answer에 schedule(일정) 등 사실을 텍스트로 답한다. → 이때 루틴 카드(plan)나 "오늘 운동 기록하기"
+  같은 실행 버튼을 띄우지 말고, followup은 "ask_question"(예: "운동 루틴 짜줄까요?")으로 둔다.
 - 음식 사진 인식이 불확실 → est_kcal은 추정치로 두고 comment 또는 caution에 "추정치"라 밝힌다.
 - 피해야 할 부위/부상 관련 운동 요청 → 해당 운동을 제외하고 대체 운동을 제시한다. ([05 SAFETY])
 - 1,200kcal 미만·극단적 단식 요청 → 응하지 않고 지속 가능한 대안을 제시한다. ([05 SAFETY])
