@@ -26,7 +26,7 @@ import { useAiFeedback } from '@/features/coach/useAiFeedback';
 import { useDietSummary } from '@/features/coach/useDietSummary';
 import { pickFoodImage } from '@/features/diet/pickFoodImage';
 import { useHomeActivity } from '@/features/home/useHomeActivity';
-import { useAddSchedule, type ScheduleType } from '@/features/home/useSchedules';
+import { useAddSchedule, useSchedules, type ScheduleType } from '@/features/home/useSchedules';
 import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
 import { useMemberships } from '@/features/membership/useMemberships';
 import { prepareSessionAudio } from '@/features/workout/start-session';
@@ -347,6 +347,29 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     : risk.level === 'warning' ? '주의'
     : risk.level === 'safe' ? '안전' : '';
 
+  // 일정(캘린더) 컨텍스트 — 오늘 + 앞으로 7일 예정. 챗봇이 중복 추천을 피하고 예정 일정을 참고.
+  const now0 = new Date();
+  const { data: monthSchedules } = useSchedules(now0.getFullYear(), now0.getMonth() + 1);
+  const scheduleCtx = useMemo(() => {
+    const all = monthSchedules ?? [];
+    if (all.length === 0) return null;
+    const ymd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = new Date();
+    const todayYmd = ymd(today);
+    const cut = new Date(today);
+    cut.setDate(cut.getDate() + 7);
+    const cutYmd = ymd(cut);
+    const todayItems = all
+      .filter((s) => s.date === todayYmd)
+      .map((s) => ({ type: s.type, title: s.title, status: s.status }));
+    const upcoming = all
+      .filter((s) => s.date > todayYmd && s.date <= cutYmd && s.status === 'planned')
+      .map((s) => ({ date: s.date, type: s.type, title: s.title }));
+    if (todayItems.length === 0 && upcoming.length === 0) return null;
+    return { today: todayItems, upcoming };
+  }, [monthSchedules]);
+
   function buildContext(): Record<string, unknown> {
     const ctx: Record<string, unknown> = {};
     if (profile) {
@@ -362,6 +385,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     }
     if (home) { ctx.streak_weeks = home.streakWeeks; ctx.week_visits = home.weekVisits; }
     if (risk) { ctx.membership_risk = risk.level; ctx.value_at_risk = risk.valueAtRisk; ctx.remaining_days = risk.remainingDays; }
+    if (scheduleCtx) ctx.schedule = scheduleCtx;
     return ctx;
   }
 

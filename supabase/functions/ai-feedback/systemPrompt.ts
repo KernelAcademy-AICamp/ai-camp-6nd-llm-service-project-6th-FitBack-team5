@@ -52,6 +52,8 @@ export const SYSTEM_PROMPT = `
 - attendance: 최근 30일 방문수, 마지막 방문일, 주간 목표
 - roi: 서버가 이미 계산한 ROI 수치 → { utilization_pct, sessions_left, days_left,
        at_risk_won, pace_status } (없으면 null)
+- schedule: 사용자의 일정(캘린더). { today: [{type,title,status}], upcoming: [{date,type,title}](앞으로 7일 예정) }.
+  type=diet/workout/visit/custom. 이미 잡힌 일정은 중복 추천하지 말고, 예정된 일정을 자연스럽게 상기시켜라.
 - (있으면) 사용자 질문 / 질문지 답변 / 음식 사진 분석 결과
 
 [04 ROI 인용 규칙]
