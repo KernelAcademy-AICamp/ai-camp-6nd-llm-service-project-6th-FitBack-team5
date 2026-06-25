@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { Apple, ArrowLeft, ArrowUp, Calendar, CalendarPlus, Camera, Check, Dumbbell, Flame, Sparkles, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
+import { Apple, ArrowLeft, ArrowUp, Calendar, CalendarPlus, Camera, Check, Dumbbell, Flame, History, Plus, Sparkles, Trash2, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,6 +22,7 @@ import { Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import { useProfile } from '@/features/auth/useProfile';
+import { deleteSession, loadSessions, saveSession, type ChatSession } from '@/features/coach/chatHistory';
 import type { AppResponse, DietResponse, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
 import { useAddMeal, type MealType } from '@/features/diet/useMeals';
 import { useAiFeedback } from '@/features/coach/useAiFeedback';
@@ -65,6 +66,13 @@ const WELCOME_OPTIONS: {
   { icon: Camera, label: '식단 사진 분석', action: 'photo' },
   { icon: Calendar, label: '내 일정 확인', action: 'message', message: '이번 주 일정 알려줘' },
 ];
+
+/** 히스토리 목록 시각 표기: "6/26 14:41" */
+function fmtSessionTime(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 // ── Workout coach inline flow ─────────────────────────────
 
@@ -409,14 +417,63 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
   const { data: memberships } = useMemberships();
   const aiFeedback = useAiFeedback();
 
-  const [view, setView] = useState<'welcome' | 'chat'>('welcome');
+  const [view, setView] = useState<'welcome' | 'chat' | 'history'>('welcome');
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
+
+  // 채팅 히스토리(로컬 영속화) — 사용자별 키.
+  const userKey = profile?.id ?? 'local';
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
 
   // 코치 진입 이벤트(1회)
   useEffect(() => {
     logEvent(EVENTS.coachOpen);
   }, []);
+
+  // 대화가 시작되면 세션 id 부여.
+  useEffect(() => {
+    if (!sessionId && messages.some((m) => !m.isLoading && m.text.trim().length > 0)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSessionId(`${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    }
+  }, [messages, sessionId]);
+
+  // 메시지 변동 시 현재 세션을 로컬에 저장(로딩 메시지 제외).
+  useEffect(() => {
+    if (!sessionId) return;
+    const settled = messages.filter((m) => !m.isLoading && (m.text.trim() || m.response || m.wcRoutineResult));
+    if (settled.length === 0) return;
+    const title = messages.find((m) => m.role === 'user' && m.text.trim())?.text.slice(0, 30) ?? '새 대화';
+    void saveSession(userKey, {
+      id: sessionId,
+      title,
+      updatedAt: Date.now(),
+      messages: settled.map((m) => ({ role: m.role, text: m.text, response: m.response, wcRoutineResult: m.wcRoutineResult })),
+    });
+  }, [messages, sessionId, userKey]);
+
+  function openHistory() {
+    void loadSessions(userKey).then(setSessions);
+    setView('history');
+  }
+  function openSession(s: ChatSession) {
+    setMessages(s.messages as ChatMsg[]);
+    setSessionId(s.id);
+    setWcMode(false);
+    setView('chat');
+  }
+  function newChat() {
+    setMessages([]);
+    setSessionId(null);
+    setWcMode(false);
+    setInput('');
+    setView('welcome');
+  }
+  async function removeSession(id: string) {
+    await deleteSession(userKey, id);
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+  }
 
   // initialMessage가 있으면 마운트 직후 자동 전송
   useEffect(() => {
@@ -772,6 +829,47 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
 
 
 
+  // ── History screen ────────────────────────────────────
+
+  if (view === 'history') {
+    return (
+      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.topBar}>
+          <Pressable
+            onPress={() => setView(messages.length ? 'chat' : 'welcome')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="뒤로">
+            <Icon icon={ArrowLeft} size={22} color={Palette.gray500} />
+          </Pressable>
+          <ThemedText type="subtitle">이전 대화</ThemedText>
+          <Pressable onPress={newChat} hitSlop={8} accessibilityRole="button" accessibilityLabel="새 대화">
+            <Icon icon={Plus} size={22} color={Palette.primary} />
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.welcomeBody} showsVerticalScrollIndicator={false}>
+          {sessions.length === 0 ? (
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.disclaimer}>
+              저장된 대화가 없어요. 새 대화를 시작해 보세요.
+            </ThemedText>
+          ) : (
+            sessions.map((s) => (
+              <View key={s.id} style={styles.historyRow}>
+                <Pressable style={styles.historyMain} onPress={() => openSession(s)} accessibilityRole="button">
+                  <ThemedText type="captionBold" numberOfLines={1}>{s.title}</ThemedText>
+                  <ThemedText type="label" themeColor="textSecondary">{fmtSessionTime(s.updatedAt)}</ThemedText>
+                </Pressable>
+                <Pressable onPress={() => removeSession(s.id)} hitSlop={8} accessibilityRole="button" accessibilityLabel="삭제">
+                  <Icon icon={Trash2} size={16} color={Palette.gray500} />
+                </Pressable>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
   // ── Welcome screen ────────────────────────────────────
 
   if (view === 'welcome') {
@@ -782,9 +880,14 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
             <Icon icon={Sparkles} size={13} color={Palette.primary} />
             <ThemedText type="label" style={{ color: Palette.primary }}>AI 피트니스</ThemedText>
           </View>
-          <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
-            <Icon icon={X} size={22} color={Palette.gray500} />
-          </Pressable>
+          <View style={styles.topRight}>
+            <Pressable onPress={openHistory} hitSlop={8} accessibilityRole="button" accessibilityLabel="이전 대화 보기">
+              <Icon icon={History} size={20} color={Palette.gray500} />
+            </Pressable>
+            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
+              <Icon icon={X} size={22} color={Palette.gray500} />
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.welcomeBody} showsVerticalScrollIndicator={false}>
@@ -874,9 +977,14 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Header */}
       <View style={styles.topBar}>
-        <Pressable onPress={() => setView('welcome')} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Icon icon={ArrowLeft} size={22} color={Palette.gray500} />
-        </Pressable>
+        <View style={styles.topRight}>
+          <Pressable onPress={() => setView('welcome')} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
+            <Icon icon={ArrowLeft} size={22} color={Palette.gray500} />
+          </Pressable>
+          <Pressable onPress={openHistory} hitSlop={8} accessibilityRole="button" accessibilityLabel="이전 대화 보기">
+            <Icon icon={History} size={20} color={Palette.gray500} />
+          </Pressable>
+        </View>
         <View style={styles.topCenter}>
           <View style={styles.pill}>
             <Icon icon={Sparkles} size={13} color={Palette.primary} />
@@ -1163,6 +1271,19 @@ const styles = StyleSheet.create({
     borderBottomColor: Palette.lineDefault,
   },
   topCenter: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.button,
+    borderWidth: 0.5,
+    borderColor: Palette.lineDefault,
+    backgroundColor: Palette.bgSurface,
+  },
+  historyMain: { flex: 1, gap: 2 },
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Palette.primaryLight,
