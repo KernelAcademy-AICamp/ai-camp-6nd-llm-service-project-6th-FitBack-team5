@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui';
+import { Button, Input } from '@/components/ui';
 import { Palette, Radius, Spacing } from '@/constants/theme';
 import { formatNumber } from '@/features/membership/dashboard';
 import { useCreateExerciseRecord } from '@/features/membership/useCreateExerciseRecord';
@@ -48,7 +48,6 @@ export function ExerciseRecordForm({
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
   const [trainer, setTrainer] = useState('');
-  const [focused, setFocused] = useState<string | null>(null);
   const { mutate, isPending, error } = useCreateExerciseRecord();
 
   const isPeriod = membershipType === 'period';
@@ -74,8 +73,6 @@ export function ExerciseRecordForm({
       { onSuccess: onDone },
     );
   }
-
-  const inputStyle = (key: string) => [styles.input, focused === key && styles.inputFocused];
 
   return (
     <View style={styles.wrap}>
@@ -145,14 +142,10 @@ export function ExerciseRecordForm({
           <ThemedText type="label" themeColor="textSecondary">
             담당 트레이너 (선택)
           </ThemedText>
-          <TextInput
+          <Input
             value={trainer}
             onChangeText={setTrainer}
-            onFocus={() => setFocused('trainer')}
-            onBlur={() => setFocused(null)}
             placeholder="예: 김코치"
-            placeholderTextColor={Palette.gray300}
-            style={inputStyle('trainer')}
           />
         </View>
       )}
@@ -162,15 +155,11 @@ export function ExerciseRecordForm({
         <ThemedText type="label" themeColor="textSecondary">
           시간 (분)
         </ThemedText>
-        <TextInput
+        <Input
           value={duration}
           onChangeText={(t) => setDuration(t.replace(/[^0-9]/g, ''))}
-          onFocus={() => setFocused('duration')}
-          onBlur={() => setFocused(null)}
           keyboardType="numeric"
           placeholder="예: 40"
-          placeholderTextColor={Palette.gray300}
-          style={inputStyle('duration')}
         />
       </View>
 
@@ -179,14 +168,10 @@ export function ExerciseRecordForm({
         <ThemedText type="label" themeColor="textSecondary">
           메모
         </ThemedText>
-        <TextInput
+        <Input
           value={notes}
           onChangeText={setNotes}
-          onFocus={() => setFocused('notes')}
-          onBlur={() => setFocused(null)}
           placeholder={isSession ? '예: 하체 집중, 데드리프트' : '예: 스쿼트 5x5'}
-          placeholderTextColor={Palette.gray300}
-          style={inputStyle('notes')}
         />
       </View>
 

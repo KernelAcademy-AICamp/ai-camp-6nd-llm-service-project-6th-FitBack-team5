@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Card, Icon } from '@/components/ui';
+import { Card, Icon, Input } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { useDeleteAccountData } from '@/features/auth/useDeleteAccountData';
 import { useProfile, type Gender } from '@/features/auth/useProfile';
@@ -199,7 +199,7 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
                 ) : (
                   <View style={styles.editWrap}>
                     <Field label="나이">
-                      <TextInput value={eAge} onChangeText={(t) => setEAge(t.replace(/[^0-9]/g, ''))} keyboardType="numeric" placeholder="예: 30" placeholderTextColor={Palette.gray300} style={styles.input} />
+                      <Input value={eAge} onChangeText={(t) => setEAge(t.replace(/[^0-9]/g, ''))} keyboardType="numeric" placeholder="예: 30" />
                     </Field>
                     <Field label="성별">
                       <View style={styles.segmentRow}>
@@ -214,10 +214,10 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
                       </View>
                     </Field>
                     <Field label="키 (cm)">
-                      <TextInput value={eHeight} onChangeText={(t) => setEHeight(t.replace(/[^0-9.]/g, ''))} keyboardType="numeric" placeholder="예: 168" placeholderTextColor={Palette.gray300} style={styles.input} />
+                      <Input value={eHeight} onChangeText={(t) => setEHeight(t.replace(/[^0-9.]/g, ''))} keyboardType="numeric" placeholder="예: 168" />
                     </Field>
                     <Field label="몸무게 (kg)">
-                      <TextInput value={eWeight} onChangeText={(t) => setEWeight(t.replace(/[^0-9.]/g, ''))} keyboardType="numeric" placeholder="예: 58" placeholderTextColor={Palette.gray300} style={styles.input} />
+                      <Input value={eWeight} onChangeText={(t) => setEWeight(t.replace(/[^0-9.]/g, ''))} keyboardType="numeric" placeholder="예: 58" />
                     </Field>
                     <Field label="피해야 할 운동 부위 (선택)">
                       <View style={styles.goalGrid}>
@@ -269,7 +269,7 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
                       </View>
                     </Field>
                     <Field label="운동 가는 횟수 (주당)">
-                      <TextInput value={eWeekly} onChangeText={(t) => setEWeekly(t.replace(/[^0-9]/g, ''))} keyboardType="numeric" placeholder="예: 3" placeholderTextColor={Palette.gray300} style={styles.input} />
+                      <Input value={eWeekly} onChangeText={(t) => setEWeekly(t.replace(/[^0-9]/g, ''))} keyboardType="numeric" placeholder="예: 3" />
                     </Field>
                     <EditActions onCancel={() => setEditGoal(false)} onSave={() => saveGoal.mutate()} saving={saveGoal.isPending} />
                   </View>

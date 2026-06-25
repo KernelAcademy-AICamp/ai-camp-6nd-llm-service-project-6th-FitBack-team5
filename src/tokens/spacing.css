@@ -17,6 +17,7 @@
   --space-p-2:  2px;
   --space-p-4:  4px;
   --space-p-8:  8px;
+  --space-p-10: 10px;
   --space-p-12: 12px;
   --space-p-16: 16px;
   --space-p-20: 20px;
@@ -58,6 +59,7 @@
 
   --spacing-xs:   var(--space-p-4);   /* Spacing.xs  = 4  */
   --spacing-sm:   var(--space-p-8);   /* Spacing.sm  = 8  */
+  --spacing-ms:   var(--space-p-10);  /* Spacing.ms  = 10 */
   --spacing-md:   var(--space-p-16);  /* Spacing.md  = 16 */
   --spacing-lg:   var(--space-p-24);  /* Spacing.lg  = 24 */
   --spacing-xl:   var(--space-p-32);  /* Spacing.xl  = 32 */

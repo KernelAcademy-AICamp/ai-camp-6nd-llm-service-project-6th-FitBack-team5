@@ -9,7 +9,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +17,7 @@ import { Check, ChevronLeft } from 'lucide-react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Icon } from '@/components/ui';
+import { Icon, Input } from '@/components/ui';
 import { Elevation, Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import { supabase } from '@/lib/supabase';
@@ -201,28 +200,24 @@ export function LoginScreen() {
         <ThemedText type="label" themeColor="textSecondary" style={styles.fieldLabel}>
           이메일
         </ThemedText>
-        <TextInput
+        <Input
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           autoComplete="email"
           keyboardType="email-address"
           placeholder="you@example.com"
-          placeholderTextColor={Palette.gray300}
-          style={styles.input}
         />
 
         <ThemedText type="label" themeColor="textSecondary" style={styles.fieldLabel}>
           비밀번호
         </ThemedText>
-        <TextInput
+        <Input
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           autoComplete={isSignup ? 'new-password' : 'current-password'}
           placeholder="6자 이상"
-          placeholderTextColor={Palette.gray300}
-          style={styles.input}
           onSubmitEditing={canSubmit ? handleSubmit : undefined}
         />
         {isSignup && password.length > 0 && !passwordOk && (

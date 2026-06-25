@@ -1,5 +1,5 @@
 /**
- * FitBack AI 피트니스 챗봇 — 응답 스키마 타입
+ * FitBack 핏쌤 챗봇 — 응답 스키마 타입
  *
  * ⚠️ CONTRACT (계약): 이 파일은 챗봇 응답의 "고정 계약"입니다.
  * 시스템 프롬프트, 검증기(validateChatbotResponse), 질문지 UI가 모두 이 타입에 의존합니다.

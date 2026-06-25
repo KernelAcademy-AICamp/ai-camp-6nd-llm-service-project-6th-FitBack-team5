@@ -10,10 +10,10 @@ import {
   X,
 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Card, Icon } from '@/components/ui';
+import { Card, Icon, Input } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { useCalendarMonth } from '@/features/home/useCalendarMonth';
 import { useDayRecords } from '@/features/home/useDayRecords';
@@ -240,11 +240,10 @@ function ScheduleSection({ date, items }: { date: string; items: Schedule[] }) {
         })}
       </View>
       <View style={styles.addRow}>
-        <TextInput
+        <Input
           value={title}
           onChangeText={setTitle}
           placeholder="일정 내용 (예: 하체 루틴 20분)"
-          placeholderTextColor={Palette.gray300}
           style={styles.addInput}
           onSubmitEditing={submit}
           returnKeyType="done"
@@ -557,15 +556,7 @@ const styles = StyleSheet.create({
   addType: { flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.md },
   typeChip: { borderWidth: 0.5, borderColor: Palette.lineStrong, borderRadius: Radius.full, paddingHorizontal: Spacing.md, paddingVertical: 4 },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
-  addInput: {
-    flex: 1,
-    backgroundColor: Palette.gray100,
-    borderRadius: Radius.small,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    fontSize: 14,
-    color: Palette.gray900,
-  },
+  addInput: { flex: 1 },
   addBtn: { width: 38, height: 38, borderRadius: Radius.small, backgroundColor: Palette.primary, alignItems: 'center', justifyContent: 'center' },
   addBtnOff: { backgroundColor: Palette.gray300 },
 });

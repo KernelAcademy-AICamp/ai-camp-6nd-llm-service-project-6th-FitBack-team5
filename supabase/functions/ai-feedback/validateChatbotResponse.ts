@@ -1,5 +1,5 @@
 /**
- * FitBack AI 피트니스 챗봇 — 응답 검증기
+ * FitBack 핏쌤 챗봇 — 응답 검증기
  *
  * Claude가 반환한 raw 텍스트를 받아 JSON 파싱 + 스키마 검증을 수행합니다.
  * 의존성 없음(zod 등 불필요) — Deno Edge Function / RN 양쪽에서 그대로 사용.
