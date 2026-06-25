@@ -1308,7 +1308,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   introText: { lineHeight: 22, letterSpacing: -0.3 },
-  introList: { gap: 8 },
+  introList: { gap: 8, marginVertical: Spacing.sm },
   roiCard: {
     borderRadius: Radius.card, padding: Spacing.md, gap: Spacing.sm,
   },
