@@ -576,11 +576,33 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
   }
 
   function callAI(message: string, questionAnswer?: string) {
-    // 멀티턴 — 직전 대화 최근 6턴(로딩/빈 메시지 제외). 현재 질문 append 전 스냅샷.
+    // 멀티턴 — 직전 대화 최근 6턴. 코치 멘트(text)뿐 아니라 구조화 응답(루틴/식단/사진)의
+    // 실제 내용까지 요약해 history에 넣어야 "두 번째 운동 설명해줘" 같은 후속질문이 이어진다.
     const history = messages
-      .filter((m) => !m.isLoading && m.text.trim().length > 0)
-      .slice(-6)
-      .map((m) => ({ role: m.role, text: m.text }));
+      .filter((m) => !m.isLoading)
+      .map((m) => {
+        let text = m.text?.trim() ?? '';
+        const r = m.response;
+        if (r) {
+          if (r.intent === 'plan') {
+            text += ` [추천 루틴 ${r.body.focus_part}: ${r.body.items
+              .map((it, i) => `${i + 1}.${it.name} ${it.sets}x${it.reps}`)
+              .join(', ')}]`;
+          } else if (r.intent === 'diet') {
+            text += ` [추천 식단: ${r.body.meals.map((mm) => `${mm.time} ${mm.menu}`).join(', ')}]`;
+          } else if (r.intent === 'photo') {
+            text += ` [사진 분석: ${r.body.foods.map((f) => f.name).join(', ')} 총 ${r.body.total_kcal}kcal]`;
+          }
+        }
+        if (m.wcRoutineResult) {
+          text += ` [추천 루틴: ${m.wcRoutineResult.exercises
+            .map((e, i) => `${i + 1}.${e.name} ${e.detail}`)
+            .join(', ')}]`;
+        }
+        return { role: m.role, text: text.trim() };
+      })
+      .filter((h) => h.text.length > 0)
+      .slice(-6);
     setMessages((prev) => [...prev, { role: 'coach', text: '', isLoading: true }]);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     aiFeedback.mutate(
