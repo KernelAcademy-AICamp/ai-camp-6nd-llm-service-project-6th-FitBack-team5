@@ -107,7 +107,7 @@ export function IconArrowChevron({
         <Path
           d="M7.5 5L12.5 10L7.5 15"
           stroke={color}
-          strokeWidth={1.5}
+          strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -129,7 +129,7 @@ export function IconArrowCircle({
       <Path
         d="M11 18H23M19.5 14L23 18L19.5 22"
         stroke="white"
-        strokeWidth={1.5}
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

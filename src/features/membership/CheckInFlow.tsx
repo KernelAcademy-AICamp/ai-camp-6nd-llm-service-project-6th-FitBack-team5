@@ -16,7 +16,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View }
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Button, Card, Icon } from '@/components/ui';
+import { Button, Card, Icon, Input } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import { won } from '@/features/membership/dashboard';
@@ -535,13 +535,12 @@ export function CheckInFlow({
                 </View>
               ) : null}
               <View style={styles.searchRow}>
-                <TextInput
+                <Input
                   value={originQuery}
                   onChangeText={setOriginQuery}
                   onSubmitEditing={runOriginSearch}
                   returnKeyType="search"
                   placeholder={origin ? '출발지 변경 (주소·장소 검색)' : '출발지 검색 (예: 강남역)'}
-                  placeholderTextColor={Palette.gray300}
                   style={styles.searchInput}
                 />
                 <Pressable
@@ -904,17 +903,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
 
   searchRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
-  searchInput: {
-    flex: 1,
-    borderRadius: Radius.small,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    fontSize: 16,
-    fontFamily: 'Pretendard',
-    color: Palette.gray900,
-    backgroundColor: Palette.gray100,
-    minHeight: 44,
-  },
+  searchInput: { flex: 1 },
   searchBtn: {
     width: 44,
     borderRadius: Radius.small,

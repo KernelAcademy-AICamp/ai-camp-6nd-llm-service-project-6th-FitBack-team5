@@ -42,6 +42,12 @@
           "cameraPermission": "음식을 촬영해 식단을 기록하기 위해 카메라 권한이 필요해요."
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "음식을 촬영해 식단을 기록하기 위해 카메라 권한이 필요해요."
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-audio",
       "expo-video",

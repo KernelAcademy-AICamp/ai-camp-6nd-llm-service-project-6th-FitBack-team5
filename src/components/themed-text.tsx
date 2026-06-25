@@ -9,6 +9,7 @@ export type ThemedTextType =
   | 'h1'
   | 'h2'
   | 'body'
+  | 'bodySemibold'
   | 'caption'
   | 'captionBold'
   | 'label'
@@ -43,6 +44,7 @@ const styles = StyleSheet.create({
   h1: Typography.h1,
   h2: Typography.h2,
   body: Typography.body,
+  bodySemibold: Typography.bodySemibold,
   caption: Typography.caption,
   captionBold: Typography.captionBold,
   label: Typography.label,
