@@ -211,7 +211,7 @@ function ResponseBody({ response }: { response: AppResponse }) {
             <NumCircle n={i + 1} />
             <View style={{ flex: 1 }}>
               <ThemedText type="caption">{item.name}</ThemedText>
-              {item.source ? (
+              {item.source && item.source !== item.name ? (
                 <ThemedText type="label" themeColor="textSecondary">📚 {item.source}</ThemedText>
               ) : null}
             </View>
