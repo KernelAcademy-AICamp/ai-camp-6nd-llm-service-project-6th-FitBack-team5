@@ -3,6 +3,7 @@ import {
   Check,
   ChevronRight,
   Footprints,
+  Flame,
   MapPin,
   Navigation,
   Search,
@@ -10,7 +11,7 @@ import {
   TrainFront,
   X,
 } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -26,6 +27,8 @@ import { getPosition } from '@/features/membership/location';
 import { searchPlaces, type GeoResult } from '@/features/membership/useGeocode';
 import { useCenter } from '@/features/membership/useCenter';
 import { useCreateVisit } from '@/features/membership/useCreateVisit';
+import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
+import { useHomeActivity } from '@/features/home/useHomeActivity';
 import { useRoute } from '@/features/membership/useRoute';
 import { useTransit } from '@/features/membership/useTransit';
 import type { Membership } from '@/features/membership/useMemberships';
@@ -392,6 +395,25 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
         totalWeeks: weeksBetween(selected.startDate, selected.endDate),
       })
     : 0;
+
+  // 출석 완료 화면용 — 주간 목표 연속 주(스트릭) + 이번 달 누적 환급액.
+  const { data: home } = useHomeActivity();
+  const { data: monthStats } = useMonthlyStats();
+  const streakWeeks = home?.streakWeeks ?? 0;
+  const monthRecovered = useMemo(() => {
+    const byM = monthStats?.byMembership ?? {};
+    return memberships.reduce((sum, m) => {
+      const per = perVisitValue({
+        type: m.type,
+        principal: m.cost,
+        visitCount: m.usedVisits,
+        totalSessions: m.maxVisits,
+        weeklyGoal: m.weeklyGoal,
+        totalWeeks: weeksBetween(m.startDate, m.endDate),
+      });
+      return sum + (byM[m.id] ?? 0) * per;
+    }, 0);
+  }, [memberships, monthStats]);
 
   // asExercise=true: 수동 출석 — 위치 미검증으로 기록하되 회수액은 반영(타깃 유저 기준 의도적 상향은 특이케이스).
   function checkIn(asExercise = false) {
@@ -791,23 +813,46 @@ export function CheckInFlow({ memberships, onClose }: { memberships: Membership[
             <View style={styles.celebrate}>
               <Icon icon={Check} size={32} color={Palette.profit} />
             </View>
-            <ThemedText type="h1">오늘 출석 완료!</ThemedText>
-            {perVisit > 0 ? (
-              <ThemedText type="h2" style={{ color: Palette.primary }}>
-                +{won(perVisit)} 되찾았어요
-              </ThemedText>
+            <ThemedText type="h1" style={styles.center}>오늘 출석 완료!</ThemedText>
+
+            {streakWeeks > 0 ? (
+              <View style={styles.streakBadge}>
+                <Icon icon={Flame} size={14} color={Palette.warning} />
+                <ThemedText type="captionBold" style={{ color: Palette.warning }}>
+                  주간 목표 {streakWeeks}주 연속 달성 중
+                </ThemedText>
+              </View>
             ) : null}
-            <View style={[styles.infoRow, { marginTop: Spacing.xs }]}>
-              <Icon icon={MapPin} size={15} color={Palette.primary} />
-              <ThemedText type="caption">
-                {center?.name ?? selected?.name ?? '센터'} ·{' '}
-                {`${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`}
+
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
+              {center?.name ?? selected?.name ?? '센터'} ·{' '}
+              {`${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`}
+            </ThemedText>
+
+            {perVisit > 0 ? (
+              <View style={styles.recoverCard}>
+                <ThemedText type="caption" themeColor="textSecondary">오늘 되찾은 금액</ThemedText>
+                <ThemedText type="display" style={{ color: Palette.profit }}>
+                  +{won(perVisit)}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {monthRecovered > 0 ? (
+              <View style={styles.monthRow}>
+                <ThemedText type="caption" themeColor="textSecondary">이번 달 누적</ThemedText>
+                <ThemedText type="captionBold">{won(monthRecovered)} 되찾음</ThemedText>
+              </View>
+            ) : null}
+
+            <View style={styles.noteChip}>
+              <Icon icon={Check} size={14} color={Palette.gray500} />
+              <ThemedText type="caption" themeColor="textSecondary">
+                수동 출석으로 기록됐어요
               </ThemedText>
             </View>
-            <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
-              수동 출석으로 기록됐어요.
-            </ThemedText>
-            <Button label="닫기" onPress={onClose} style={styles.popupBtn} />
+
+            <Button label="홈으로" onPress={onClose} style={styles.popupBtn} />
           </View>
         ) : null}
 
@@ -936,5 +981,45 @@ const styles = StyleSheet.create({
   destText: { gap: 2 },
   modeSection: { gap: Spacing.md },
   popup: { alignItems: 'center', gap: Spacing.sm, paddingTop: Spacing.xxl },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    backgroundColor: `${Palette.warning}1A`,
+  },
+  monthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.button,
+    backgroundColor: Palette.bgMuted,
+  },
+  recoverCard: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.card,
+    backgroundColor: Palette.profitLight,
+  },
+  noteChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.button,
+    borderWidth: 1,
+    borderColor: Palette.lineDefault,
+  },
   popupBtn: { marginTop: Spacing.md, alignSelf: 'stretch' },
 });
