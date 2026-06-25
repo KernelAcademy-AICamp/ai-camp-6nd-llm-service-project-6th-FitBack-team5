@@ -63,10 +63,10 @@ function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
 
-// 4-2: 도착이 가까워질수록 거리(m) 기준 격려 문구 3단계. (Voice&Tone: 압박 X, 응원·본전 톤)
+// 4-2: 도착이 가까워질수록 거리(m) 기준 격려 문구 3단계. (Voice&Tone: 압박 X, 응원·활용 톤)
 function encourageMsg(remainM: number | null): string | null {
   if (remainM == null) return null;
-  if (remainM <= 120) return '도착 직전! 오늘도 본전 찾기 성공이에요.';
+  if (remainM <= 120) return '도착 직전! 오늘도 회원권 잘 활용했어요.';
   if (remainM <= 300) return '코앞이에요. 이 페이스면 충분해요.';
   if (remainM <= 600) return '거의 다 왔어요. 조금만 더!';
   return null;

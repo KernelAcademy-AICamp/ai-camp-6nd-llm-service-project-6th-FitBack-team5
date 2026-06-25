@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { Apple, ArrowLeft, ArrowUp, CalendarPlus, Camera, Check, Dumbbell, Flame, Sparkles, X } from 'lucide-react-native';
+import { Apple, ArrowLeft, ArrowUp, Calendar, CalendarPlus, Camera, Check, Dumbbell, Flame, Sparkles, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -52,33 +52,18 @@ interface ChatMsg {
 
 // ── Welcome screen option cards ──────────────────────────
 
-const WELCOME_OPTIONS = [
-  {
-    icon: Dumbbell,
-    label: '오늘 운동 추천해줘',
-    desc: '내 수준에 맞는 루틴을 짜드려요',
-    iconColor: Palette.primary,
-    bg: Palette.primaryLight,
-    message: null,
-    navigate: '/workout/coach' as const,
-  },
-  {
-    icon: Apple,
-    label: '식단 질문',
-    desc: '목표에 맞는 식단을 추천해요',
-    iconColor: Palette.gray500,
-    bg: Palette.bgMuted,
-    message: '오늘 식단 추천해줘',
-  },
-  {
-    icon: Camera,
-    label: '식단 사진 분석',
-    desc: '음식 사진으로 칼로리를 분석해요',
-    iconColor: Palette.gray500,
-    bg: Palette.bgMuted,
-    message: null,
-    photoAction: true as const,
-  },
+// 빠른 실행 칩 — 기능 동일, UI만 태그 칩. action으로 동작 분기.
+const WELCOME_OPTIONS: {
+  icon: LucideIcon;
+  label: string;
+  action: 'workout' | 'photo' | 'message';
+  message?: string;
+}[] = [
+  { icon: TrendingUp, label: '회원권 활용도', action: 'message', message: '내 회원권 활용도 어때?' },
+  { icon: Dumbbell, label: '오늘 운동 추천', action: 'workout' },
+  { icon: Apple, label: '식단 추천', action: 'message', message: '오늘 식단 추천해줘' },
+  { icon: Camera, label: '식단 사진 분석', action: 'photo' },
+  { icon: Calendar, label: '내 일정 확인', action: 'message', message: '이번 주 일정 알려줘' },
 ];
 
 // ── Workout coach inline flow ─────────────────────────────
@@ -810,7 +795,7 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
             </View>
             <View style={{ gap: 2 }}>
               <ThemedText type="label" themeColor="textSecondary">안녕하세요!</ThemedText>
-              <ThemedText type="subtitle">회원권 본전 챙기는 AI 코치예요</ThemedText>
+              <ThemedText type="subtitle">회원권 활용도를 챙기는 AI 코치예요</ThemedText>
             </View>
           </View>
 
@@ -820,7 +805,7 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
               저는 회원권이 그냥 사라지지 않게 옆에서 챙기는 코치예요.{'\n'}이런 걸 도와드려요.
             </ThemedText>
             <View style={styles.introList}>
-              <ThemedText type="caption" themeColor="textSecondary">· 회원권 활용도·만료 — 얼마 남았고 본전은 얼마나 챙겼는지</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">· 회원권 활용도·만료 — 얼마 남았고 얼마나 활용했는지</ThemedText>
               <ThemedText type="caption" themeColor="textSecondary">· 오늘 운동 추천 — 내 상황에 맞는 루틴(운동 라이브러리 기반)</ThemedText>
               <ThemedText type="caption" themeColor="textSecondary">· 식단 추천·사진 분석 — 목표에 맞춰</ThemedText>
               <ThemedText type="caption" themeColor="textSecondary">· 내 일정 확인 — 이번 주 뭐가 잡혀있는지</ThemedText>
@@ -828,26 +813,21 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
             <ThemedText type="caption" style={styles.introText}>무엇이든 편하게 물어보세요.</ThemedText>
           </View>
 
-          {/* Option cards */}
+          {/* 빠른 실행 — 태그 칩 (가로 배열·넘치면 줄바꿈) */}
           <ThemedText type="body" style={{ marginTop: Spacing.sm }}>무엇을 도와드릴까요?</ThemedText>
-          <View style={styles.optionsList}>
+          <View style={styles.chipsWrap}>
             {WELCOME_OPTIONS.map((opt) => (
               <Pressable
                 key={opt.label}
-                style={({ pressed }) => [styles.optionCard, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.welcomeChip, pressed && styles.pressed]}
                 onPress={() => {
-                  if ('navigate' in opt) { initWorkoutCoach(); return; }
-                  if ('photoAction' in opt) { setShowPhotoSource(true); return; }
-                  send((opt as { message: string }).message);
+                  if (opt.action === 'workout') initWorkoutCoach();
+                  else if (opt.action === 'photo') setShowPhotoSource(true);
+                  else if (opt.message) send(opt.message);
                 }}
                 accessibilityRole="button">
-                <View style={[styles.optionIconWrap, { backgroundColor: opt.bg }]}>
-                  <Icon icon={opt.icon} size={20} color={opt.iconColor} />
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <ThemedText type="captionBold">{opt.label}</ThemedText>
-                  <ThemedText type="label" themeColor="textSecondary">{opt.desc}</ThemedText>
-                </View>
+                <Icon icon={opt.icon} size={15} color={Palette.primary} />
+                <ThemedText type="captionBold">{opt.label}</ThemedText>
               </Pressable>
             ))}
           </View>
@@ -1231,16 +1211,18 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.bgSurface,
   },
   progressFill: { height: 6 },
-  optionsList: { gap: Spacing.sm },
-  optionCard: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    backgroundColor: Palette.bgSurface,
-    borderWidth: 0.5, borderColor: Palette.lineDefault,
-    borderRadius: Radius.card, padding: Spacing.md,
-  },
-  optionIconWrap: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+  // 빠른 실행 칩 (흰 배경 · 메인컬러 아이콘 · 가로 wrap)
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  welcomeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.lineDefault,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   disclaimer: { textAlign: 'center', marginTop: Spacing.xs },
 

@@ -281,7 +281,7 @@ export default function HomeScreen() {
                           <View style={styles.cardAmountLeft}>
                             {cardRecovered === 0 ? (
                               <ThemedText type="body" style={styles.checkInText}>
-                                센터를 방문하여 본전을 찾으세요
+                                센터를 방문해 회원권을 활용하세요
                               </ThemedText>
                             ) : cardEffPrice > 0 ? (
                               <ThemedText type="body" style={styles.checkInText}>
@@ -370,7 +370,7 @@ export default function HomeScreen() {
               style={[styles.mainCard, Elevation.level1, styles.emptyCard]}>
               <Icon icon={TrendingUp} size={28} color={Palette.primary} />
               <ThemedText type="subtitle" style={{ textAlign: 'center' }}>
-                회원권을 등록하여 본전을 찾으세요
+                회원권을 등록해 활용도를 챙기세요
               </ThemedText>
               <View style={styles.utilBtn}>
                 <ThemedText type="subtitle" style={styles.utilBtnText}>
