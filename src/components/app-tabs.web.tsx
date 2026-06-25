@@ -1,4 +1,5 @@
-import { useRouter } from 'expo-router';
+import React from 'react';
+import { usePathname, useRouter } from 'expo-router';
 import {
   TabList,
   TabListProps,
@@ -7,10 +8,13 @@ import {
   TabTrigger,
   TabTriggerSlotProps,
 } from 'expo-router/ui';
-import { Dumbbell, House, Utensils, type LucideIcon } from 'lucide-react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
-import { Elevation, MaxContentWidth, Palette, Radius } from '@/constants/theme';
+import { IconFit, IconFood, IconHome } from '@/components/icons';
+import { MaxContentWidth, Palette, Radius } from '@/constants/theme';
+
+// Figma 491:1533 — 탭바 위쪽 섀도우 (y: -2)
+const tabBarShadow = { boxShadow: '0px -2px 12px 0px rgba(34,44,67,0.08)' } as ViewStyle;
 
 const NAV = {
   active: Palette.primary,
@@ -25,14 +29,14 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="index" href="/" asChild>
-            <TabButton icon={House}>홈</TabButton>
+            <TabButton icon={IconHome}>홈</TabButton>
           </TabTrigger>
           <TabTrigger name="diet" href="/diet" asChild>
-            <TabButton icon={Utensils}>식단</TabButton>
+            <TabButton icon={IconFood}>식단</TabButton>
           </TabTrigger>
           {/* 운동 탭은 홈(/workout)을 기본 진입점으로 사용. 어디 있어도 항상 홈으로 리셋. */}
           <TabTrigger name="workout" href="/workout" asChild>
-            <TabButton icon={Dumbbell} onPress={() => router.replace('/workout')}>
+            <TabButton icon={IconFit} onPress={() => router.replace('/workout')}>
               홈트
             </TabButton>
           </TabTrigger>
@@ -42,19 +46,24 @@ export default function AppTabs() {
   );
 }
 
-type TabButtonProps = TabTriggerSlotProps & { icon: LucideIcon };
+type FigmaIcon = (props: { color: string; size?: number }) => React.ReactElement;
+type TabButtonProps = TabTriggerSlotProps & { icon: FigmaIcon };
 
 export function TabButton({ children, isFocused, icon: IconCmp, style: _ignored, ...props }: TabButtonProps) {
   const color = isFocused ? NAV.active : NAV.inactive;
   return (
     <Pressable {...props} style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
-      <IconCmp size={24} color={color} strokeWidth={1.5} />
+      <IconCmp size={24} color={color} />
       <Text style={[styles.label, { color }]}>{children}</Text>
     </Pressable>
   );
 }
 
+const TAB_ROUTES = new Set(['/', '/diet', '/workout']);
+
 export function CustomTabList({ style: _ignored, ...props }: TabListProps) {
+  const pathname = usePathname();
+  if (!TAB_ROUTES.has(pathname)) return null;
   return (
     <View {...props} style={styles.tabListContainer}>
       <View style={styles.innerContainer}>{props.children}</View>
@@ -65,22 +74,23 @@ export function CustomTabList({ style: _ignored, ...props }: TabListProps) {
 const styles = StyleSheet.create({
   slot: { height: '100%' },
   tabListContainer: {
-    position: 'fixed',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 54,
   },
   innerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    marginHorizontal: 'auto' as unknown as number,
     height: 54,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    backdropFilter: 'blur(4px)',
-    borderRadius: Radius.button,
-    ...Elevation.level2,
+    backgroundColor: Palette.bgSurface,
+    borderTopLeftRadius: Radius.button,
+    borderTopRightRadius: Radius.button,
+    ...tabBarShadow,
   },
   tabButton: {
     flex: 1,

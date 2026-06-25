@@ -320,6 +320,74 @@ async function handleFeedback(
   return json({ feedback });
 }
 
+
+// ── action: daily-feedback ─────────────────────────────────
+// 오늘 하루 전체 식단 기록 → 핏쌤의 종합 피드백 (첫 줄 요약 + 본문)
+const DAILY_FEEDBACK_SYSTEM =
+  'You are FitBack\'s nutrition coach "핏쌤", an experienced Korean personal trainer.\n' +
+  '회원의 오늘 하루 전체 식단 기록을 보고 구체적이고 솔직한 피드백을 한국어로 작성하라.\n\n' +
+  '출력 형식 (엄수):\n' +
+  '- 첫 줄: 오늘 식단을 한마디로 요약. 20자 이내. (예: "단백질이 아쉬운 하루였어요", "균형잡힌 좋은 하루예요!")\n' +
+  '- 바로 다음 줄부터 본문 3~5문장\n\n' +
+  '규칙:\n' +
+  '1. 수치를 반드시 근거로 들기 (예: "단백질 45g은 목표의 75%예요", "탄수화물이 목표보다 40g 많아요")\n' +
+  '2. 기록된 끼니·음식만 구체적으로 언급 (없는 끼니 언급 금지)\n' +
+  '3. 운동 맥락이 주어지면 "운동에서 얻은 효과를 극대화한다"는 관점으로 반영 (예: "오늘 헬스에서 자극한 근육에 단백질을 공급해 근성장을 이끌어요"). 회복·회복력 표현 금지.\n' +
+  '4. 내일/다음 끼니에 실제 음식명 1~2가지 제안 (닭가슴살·계란·고구마·두부 등)\n' +
+  '5. 이모지·마크다운·별표(**) 없이 순수 한국어 문장만\n' +
+  '6. 존댓말 ("~예요", "~해요", "~보세요")\n' +
+  '7. 죄책감·공포 없이 동기부여로 마무리\n' +
+  '8. 끼니 기록이 1개뿐이면 "아직 기록이 적어 전체 분석은 어렵지만" 으로 시작';
+
+interface DailyMeal {
+  mealType: string;
+  name: string;
+  kcal: number;
+  carb: number;
+  protein: number;
+  fat: number;
+}
+interface DailyTotals { kcal: number; carb: number; protein: number; fat: number }
+
+async function handleDailyFeedback(
+  anthropicKey: string,
+  totals: DailyTotals,
+  target: DailyTotals,
+  meals: DailyMeal[],
+  burnedKcal: number,
+  context?: string,
+) {
+  if (!meals || meals.length === 0) return json({ feedback: '' });
+
+  const mealLines = meals
+    .map((m) => `- ${m.mealType}: ${m.name} (${Math.round(m.kcal)}kcal, 단백질 ${Math.round(m.protein)}g, 탄수화물 ${Math.round(m.carb)}g, 지방 ${Math.round(m.fat)}g)`)
+    .join('\n');
+
+  const userMsg =
+    `[오늘 식단 기록]\n` +
+    `총 섭취: ${Math.round(num(totals?.kcal))}kcal / 목표: ${Math.round(num(target?.kcal))}kcal\n` +
+    `단백질: ${Math.round(num(totals?.protein))}g / 목표: ${Math.round(num(target?.protein))}g\n` +
+    `탄수화물: ${Math.round(num(totals?.carb))}g / 목표: ${Math.round(num(target?.carb))}g\n` +
+    `지방: ${Math.round(num(totals?.fat))}g / 목표: ${Math.round(num(target?.fat))}g\n` +
+    (burnedKcal > 0 ? `운동 소모: ${Math.round(burnedKcal)}kcal${context ? ` (${context})` : ''}\n` : '') +
+    `\n끼니별 기록:\n${mealLines}\n\n오늘 하루 식단에 대한 핏쌤 피드백을 작성해줘.`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      system: DAILY_FEEDBACK_SYSTEM,
+      messages: [{ role: 'user', content: userMsg }],
+    }),
+  });
+  if (!res.ok) return json({ error: 'Claude API error', status: res.status, detail: await res.text() }, 502);
+  const claude = await res.json();
+  const feedback = str(claude?.content?.[0]?.text);
+  return json({ feedback });
+}
+
 // ── 라우터 ──────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -359,5 +427,10 @@ Deno.serve(async (req) => {
     if (!ANTHROPIC_API_KEY) return json({ error: 'Missing ANTHROPIC_API_KEY secret' }, 500);
     return handleFeedback(ANTHROPIC_API_KEY, payload.meal ?? {}, payload.context);
   }
-  return json({ error: "body.action 은 'search' | 'analyze' | 'analyze-image' | 'recommend' | 'feedback' 여야 합니다" }, 400);
+  if (payload.action === 'daily-feedback') {
+    if (!ANTHROPIC_API_KEY) return json({ error: 'Missing ANTHROPIC_API_KEY secret' }, 500);
+    const p = payload as { totals?: DailyTotals; target?: DailyTotals; meals?: DailyMeal[]; burnedKcal?: number; context?: string };
+    return handleDailyFeedback(ANTHROPIC_API_KEY, p.totals ?? { kcal: 0, carb: 0, protein: 0, fat: 0 }, p.target ?? { kcal: 0, carb: 0, protein: 0, fat: 0 }, p.meals ?? [], num(p.burnedKcal), p.context);
+  }
+  return json({ error: "body.action 은 'search' | 'analyze' | 'analyze-image' | 'recommend' | 'feedback' | 'daily-feedback' 여야 합니다" }, 400);
 });

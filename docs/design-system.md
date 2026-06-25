@@ -7,6 +7,12 @@
 > **작성 원칙** — ①토큰엔 값과 함께 '언제 쓰는지'를 적는다 ②규칙은 가능한 Don't로 적는다(§3) ③핵심만 간결하게.
 > **정본 출처** — Figma: `fitback` 파일 > `FitBack Design System ▸ Spec (정본)` 프레임.
 
+**토큰 파일**:
+- `src/constants/theme.ts` — RN 코드에서 직접 import (`Palette.*` / `Spacing.*` / `Radius.*`)
+- `src/tokens/colors.css` — Web CSS 커스텀 프로퍼티 (컬러)
+- `src/tokens/spacing.css` — Web CSS 커스텀 프로퍼티 (스페이싱·Radius·타이포)
+- `docs/design-tokens.md` — Primitive→Semantic 매핑 테이블
+
 ---
 
 ## 1. 서비스 정의
@@ -51,29 +57,29 @@ Reliable(데이터 기반·신뢰) · Encouraging(압박 대신 응원) · Insig
 
 | 이름 | 값 | CSS 변수 | 용도 |
 |------|-----|----------|------|
-| Primary | `#6675FF` | `--color-primary` | CTA 버튼, 주요 수치, 액티브 상태 |
-| Primary Hover | `#5566F7` | `--color-primary-hover` | 버튼 hover |
-| Primary Pressed | `#4957D8` | `--color-primary-pressed` | 버튼 pressed |
-| Primary Light | `#EEF1FF` | `--color-primary-light` | 배지 배경, 카드 강조 배경, 인풋 포커스 링 |
-| Secondary | `#6892FF` | `--color-secondary` | 보조 강조, 그라데이션 블렌딩 |
+| Primary | `#6675FF` | `--color-brand-primary` | CTA 버튼, 주요 수치, 액티브 상태 |
+| Primary Hover | `#5566F7` | `--color-brand-primary-hover` | 버튼 hover |
+| Primary Pressed | `#4957D8` | `--color-brand-primary-pressed` | 버튼 pressed |
+| Primary Light | `#EEF1FF` | `--color-brand-primary-light` | 배지 배경, 카드 강조 배경, 인풋 포커스 링 |
+| Secondary | `#6892FF` | `--color-brand-secondary` | 보조 강조, 그라데이션 블렌딩 |
 
 ### Background
 
-| 이름 | 값 | 용도 |
-|------|-----|------|
-| BG Base | `#FAF9F7` | 앱 전체 배경 (웜 오프화이트) |
-| BG Surface | `#FFFFFF` | 카드, 모달, 바텀시트 |
-| BG Muted | `#F3F4F6` | 비활성 영역 |
+| 이름 | 값 | CSS 변수 | 용도 |
+|------|-----|----------|------|
+| BG Base | `#F2F2F7` | `--color-bg-base` | 앱 전체 배경 (웜 오프화이트) |
+| BG Surface | `#FFFFFF` | `--color-bg-surface` | 카드, 모달, 바텀시트 |
+| BG Muted | `#F3F4F6` | `--color-bg-muted` | 비활성 영역 |
 
 ### Semantic — UI 상태
 
 | 이름 | 값 | CSS 변수 | 용도 |
 |------|-----|----------|------|
-| Success | `#22C55E` | `--color-success` | 운동 완료·목표 달성·스트릭 유지 |
-| Warning | `#F59E0B` | `--color-warning` | 회원권 만료 임박, 목표 미달 |
-| Error | `#EF4444` | `--color-error` | 입력·네트워크 오류 |
-| Success Light | `#DCFCE7` | `--color-success-light` | 성공 상태 카드 배경 |
-| Error Light | `#FEE2E2` | `--color-error-light` | 오류 상태 카드 배경 |
+| Success | `#22C55E` | `--color-state-success` | 운동 완료·목표 달성·스트릭 유지 |
+| Warning | `#F59E0B` | `--color-state-warning` | 회원권 만료 임박, 목표 미달 |
+| Error | `#EF4444` | `--color-state-error` | 입력·네트워크 오류 |
+| Success Light | `#DCFCE7` | `--color-state-success-light` | 성공 상태 카드 배경 |
+| Error Light | `#FEE2E2` | `--color-state-error-light` | 오류 상태 카드 배경 |
 
 ### Semantic — 손익 상태
 
@@ -83,27 +89,31 @@ Reliable(데이터 기반·신뢰) · Encouraging(압박 대신 응원) · Insig
 
 | 이름 | 값 | CSS 변수 | 용도 |
 |------|-----|----------|------|
-| pnl/profit | `#6675FF` | `--color-pnl-profit` | 이익 상태 (Primary와 동일) |
-| pnl/loss | `#222C43` | `--color-pnl-loss` | 손실 상태 (Gray 900과 동일 — 중립 전달) |
+| roi/profit | `#6675FF` | `--color-roi-profit` | 이익 상태 (Primary와 동일) |
+| roi/profit-light | `#EEF1FF` | `--color-roi-profit-light` | 이익 배지·배경 |
+| roi/loss | `#222C43` | `--color-roi-loss` | 손실 상태 (Gray 900과 동일 — 중립 전달) |
+| roi/loss-light | `#F2F2F7` | `--color-roi-loss-light` | 손실 배지·배경 |
 
 ### Neutral
 
 | 이름 | 값 | CSS 변수 | 용도 |
 |------|-----|----------|------|
-| Gray 900 | `#222C43` | `--color-gray-900` | 주요 텍스트, 본문 |
-| Gray 500 | `#6B7280` | `--color-gray-500` | 보조 설명, 라벨 |
-| Gray 400 | `#999999` | `--color-gray-400` | 플레이스홀더, 약한 보조 텍스트 |
-| Gray 300 | `#D1D5DB` | `--color-gray-300` | 비활성 텍스트, 아이콘 |
-| Gray 100 | `#F3F4F6` | `--color-gray-100` | 배경, Secondary 버튼 |
-| Gray 50 | `#F2F2F7` | `--color-gray-50` | 구분 배경 |
+| Gray 900 | `#222C43` | `--color-neutral-900` | 주요 텍스트, 본문 |
+| Gray 700 | `#374151` | `--color-neutral-700` | (하위 호환용) |
+| Gray 500 | `#6B7280` | `--color-neutral-500` | 보조 설명, 라벨 |
+| Gray 400 | `#999999` | `--color-neutral-400` | 플레이스홀더, 약한 보조 텍스트 |
+| Gray 300 | `#D1D5DB` | `--color-neutral-300` | 비활성 텍스트, 아이콘 |
+| Gray 100 | `#F3F4F6` | `--color-neutral-100` | 배경, Secondary 버튼 |
+| Gray 50 | `#F2F2F7` | `--color-neutral-50` | 구분 배경 |
 
 ### Line / Border
 
 | 이름 | 값 | CSS 변수 | 용도 |
 |------|-----|----------|------|
 | Border Strong | `#6B7280` | `--color-border-strong` | 아이콘 stroke, 강조 라인 |
-| Line Default | `rgba(0, 0, 0, 0.07)` | — | 카드 테두리, 일반 구분선 |
-| Line Primary | `#6675FF` | — | 선택된 탭 인디케이터, 포커스 테두리 |
+| Line Default | `rgba(0, 0, 0, 0.07)` | `--color-line-default` | 카드 테두리, 일반 구분선 |
+| Line Strong | `rgba(0, 0, 0, 0.15)` | `--color-line-strong` | 강조 구분선 |
+| Line Primary | `#6675FF` | `--color-line-primary` | 선택된 탭 인디케이터, 포커스 테두리 |
 
 ---
 
@@ -123,15 +133,16 @@ Reliable(데이터 기반·신뢰) · Encouraging(압박 대신 응원) · Insig
 
 ### 타입 스케일
 
-| 이름 | 크기 | 굵기 | 행간 | 용도 |
-|------|------|------|------|------|
-| Display | 32px | Bold | 125% | 메인 수치 — 회당 실비용, 달성률 |
-| Heading 1 | 24px | Bold | 125% | 페이지 타이틀 |
-| Heading 2 | 20px | Semibold | 125% | 섹션 타이틀, 카드 타이틀 |
-| Subtitle | 18px | Semibold | 125% | 서브타이틀, 버튼 |
-| Body | 16px | Medium | 150% | 본문 |
-| Caption | 14px | Medium | 150% | 보조 설명 |
-| Label | 12px | Medium | 150% | 배지, 태그, 메타 정보 |
+| 이름 | 크기 | 굵기 | 행간 | CSS 변수 | 용도 |
+|------|------|------|------|----------|------|
+| Display | 32px | Bold | 125% | `--font-size-display` / `--line-height-display` | 메인 수치 — 회당 실비용, 달성률 |
+| Display 2 | 28px | Bold | 128% | `--font-size-display2` / `--line-height-display2` | 대형 강조 수치 |
+| Heading 1 | 24px | Bold | 125% | `--font-size-h1` / `--line-height-h1` | 페이지 타이틀 |
+| Heading 2 | 20px | Semibold | 125% | `--font-size-h2` / `--line-height-h2` | 섹션 타이틀, 카드 타이틀 |
+| Subtitle | 18px | Semibold | 125% | `--font-size-subtitle` / `--line-height-subtitle` | 서브타이틀, 버튼 |
+| Body | 16px | Medium | 150% | `--font-size-body` / `--line-height-body` | 본문 |
+| Caption | 14px | Medium | 150% | `--font-size-caption` / `--line-height-caption` | 보조 설명 |
+| Label | 12px | Medium | 150% | `--font-size-label` / `--line-height-label` | 배지, 태그, 메타 정보 |
 
 > 자간 -2.5%는 전체 공통 적용. 별도 예외 없음.
 
@@ -141,28 +152,28 @@ Reliable(데이터 기반·신뢰) · Encouraging(압박 대신 응원) · Insig
 
 8pt Grid System 기반.
 
-| 토큰 | 값 | 용도 |
-|------|----|------|
-| XS | 4px | 아이콘-텍스트 간격, 인라인 요소 |
-| SM | 8px | 컴포넌트 내부 간격 |
-| MD | 16px | 카드 패딩, 리스트 아이템 간격 |
-| LG | 24px | 섹션 간 간격 |
-| XL | 32px | 페이지 상단 여백 |
-| XXL | 48px | 주요 섹션 구분 |
+| 토큰 | 값 | CSS 변수 | 용도 |
+|------|----|----------|------|
+| XS | 4px | `--spacing-xs` | 아이콘-텍스트 간격, 인라인 요소 |
+| SM | 8px | `--spacing-sm` | 컴포넌트 내부 간격 |
+| MD | 16px | `--spacing-md` | 카드 패딩, 리스트 아이템 간격 |
+| LG | 24px | `--spacing-lg` | 섹션 간 간격 |
+| XL | 32px | `--spacing-xl` | 페이지 상단 여백 |
+| XXL | 48px | `--spacing-xxl` | 주요 섹션 구분 |
 
-**좌우 여백** — 20px (전 화면 공통)
+**좌우 여백** — 20px (`--spacing-screen-pad`, 전 화면 공통)
 
 ---
 
 ## 8. Border Radius
 
-| 이름 | 값 | 용도 |
-|------|----|------|
-| Small | 8px | 배지, 태그, 인풋 |
-| Button | 12px | 버튼 |
-| Card | 20px | 메인 카드 |
-| Modal | 20px | 모달, 바텀시트 |
-| Full | 100px | 칩, 필 버튼 |
+| 이름 | 값 | CSS 변수 | 용도 |
+|------|----|----------|------|
+| Small | 8px | `--radius-small` | 배지, 태그, 인풋 |
+| Button | 12px | `--radius-button` | 버튼 |
+| Card | 20px | `--radius-card` | 메인 카드 |
+| Modal | 20px | `--radius-modal` | 모달, 바텀시트 |
+| Full | 100px | `--radius-full` | 칩, 필 버튼 |
 
 ---
 
@@ -184,11 +195,11 @@ Reliable(데이터 기반·신뢰) · Encouraging(압박 대신 응원) · Insig
 
 | 타입 | 배경 | 테두리 | 텍스트 | 용도 |
 |------|------|--------|--------|------|
-| Primary | `#6675FF` | — | `#FFFFFF` | 핵심 CTA (운동 시작, 저장) |
-| Outline | `transparent` | `1px solid #6675FF` | `#6675FF` | 주요 보조 액션 (체크인, 출석) |
-| Secondary | `#F3F4F6` | — | `#222C43` | 보조 액션 |
-| Ghost | `transparent` | — | `#6675FF` | 텍스트 버튼, 취소 |
-| Danger | `transparent` | — | `#EF4444` | 손실 경고 관련 액션 (Ghost 스타일) |
+| Primary | `--color-brand-primary` | — | `--color-neutral-0` | 핵심 CTA (운동 시작, 저장) |
+| Outline | `transparent` | `1px solid var(--color-brand-primary)` | `--color-brand-primary` | 주요 보조 액션 (체크인, 출석) |
+| Secondary | `--color-neutral-100` | — | `--color-neutral-900` | 보조 액션 |
+| Ghost | `transparent` | — | `--color-brand-primary` | 텍스트 버튼, 취소 |
+| Danger | `transparent` | — | `--color-state-error` | 손실 경고 관련 액션 (Ghost 스타일) |
 
 - 높이: 44px (Outline/Secondary/Ghost), 52px (Primary)
 - 폰트: Pretendard 18px Semibold (Subtitle)
@@ -198,39 +209,39 @@ Reliable(데이터 기반·신뢰) · Encouraging(압박 대신 응원) · Insig
 
 모든 정보의 기본 단위 — 운동 기록·AI 피드백·회원권 활용도 등은 카드로 제공.
 
-- 배경: `#FFFFFF`
-- 테두리: `0.5px solid rgba(0,0,0,0.07)`
-- 반경: 20px
-- 패딩: 16px
+- 배경: `--color-bg-surface`
+- 테두리: `0.5px solid var(--color-line-default)`
+- 반경: `--radius-card` (20px)
+- 패딩: `--spacing-md` (16px)
 - 그림자: Level 1 (선택)
 
 ### 인풋
 
-- 배경: `#F3F4F6`
-- 포커스 테두리: `1.5px solid #6675FF`
-- 포커스 배경: `#EEF1FF`
+- 배경: `--color-bg-muted`
+- 포커스 테두리: `1.5px solid var(--color-line-primary)`
+- 포커스 배경: `--color-brand-primary-light`
 - 높이: 52px
 
 ### Progress
 
 운동 달성률·회원권 활용률·목표 진행률 표현용.
 
-- 기본: Primary `#6675FF`
-- 손익 게이지: `#EF4444` → `#D1D5DB` → `#6675FF` (적자 → 중립 → 흑자)
+- 기본: `--color-brand-primary`
+- 손익 게이지: `--color-state-error` → `--color-neutral-300` → `--color-brand-primary` (적자 → 중립 → 흑자)
 
 ### 바텀 네비게이션
 
 - 탭: 홈 · 식단 · 홈트
-- 활성 아이콘/라벨: `#6675FF`
-- 비활성: `#D1D5DB`
-- 배경: `#FFFFFF`, 상단 구분선 `0.5px`
+- 활성 아이콘/라벨: `--color-brand-primary`
+- 비활성: `--color-neutral-300`
+- 배경: `--color-bg-surface`, 상단 구분선 `0.5px var(--color-line-default)`
 - 그림자: Level 2 · Tab Bar
 
 ### 아이콘
 
 - 라이브러리: Lucide (outline 통일)
 - 기본 크기: 24px, 스트로크 1.5px
-- stroke 색상은 `border/strong (#6B7280)` 또는 컨텍스트 색상
+- stroke 색상은 `--color-border-strong` 또는 컨텍스트 색상
 
 ### 매크로 / 영양소 표기 (식단)
 
