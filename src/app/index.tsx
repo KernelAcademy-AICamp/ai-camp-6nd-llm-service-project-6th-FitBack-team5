@@ -329,7 +329,7 @@ export default function HomeScreen() {
                               <ThemedText type="body" themeColor="text">{wonShort(cardRemaining)}</ThemedText>
                             </View>
                             <View style={styles.infoBox}>
-                              <ThemedText type="caption" themeColor="textSecondary">결제금액</ThemedText>
+                              <ThemedText type="caption" themeColor="textSecondary">원금</ThemedText>
                               <ThemedText type="body" themeColor="text">{wonShort(item.m.cost)}</ThemedText>
                             </View>
                           </View>
