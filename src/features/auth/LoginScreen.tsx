@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     fontSize: 16,
     color: Palette.gray900,
-    backgroundColor: Palette.gray50,
+    backgroundColor: Palette.white,
     minHeight: 44,
   },
   hint: { color: Palette.warning, marginTop: Spacing.xs },
