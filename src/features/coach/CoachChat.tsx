@@ -831,7 +831,7 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
         onSubmitEditing={() => send(input)}
         returnKeyType="send"
         editable={!isThinking}
-        style={{ flex: 1 }}
+        style={{ flex: 1, width: undefined }}
       />
       <Pressable
         onPress={() => send(input)}

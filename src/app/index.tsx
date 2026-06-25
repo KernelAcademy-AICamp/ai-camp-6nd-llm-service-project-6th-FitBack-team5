@@ -3,7 +3,8 @@ import {
   AlarmClock, Calendar,
   Info, MoreHorizontal, TrendingUp, X,
 } from 'lucide-react-native';
-import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -115,6 +116,11 @@ export default function HomeScreen() {
   const [showMembershipActions, setShowMembershipActions] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [activeCard, setActiveCard] = useState(0);
+  const [dismissedAlarmKey, setDismissedAlarmKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('alarm_dismissed_key').then((v) => setDismissedAlarmKey(v));
+  }, []);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -147,13 +153,25 @@ export default function HomeScreen() {
   const expiring = list
     .filter((m) => m.status === 'expiring')
     .sort((a, b) => daysUntil(a.endDate) - daysUntil(b.endDate));
-  const bannerItem = expiring[0] ? withRisk.find((x) => x.m.id === expiring[0].id) ?? null : null;
+  const bannerItemRaw = expiring[0] ? withRisk.find((x) => x.m.id === expiring[0].id) ?? null : null;
 
   const today = new Date();
   const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const { data: monthSchedules } = useSchedules(today.getFullYear(), today.getMonth() + 1);
   const todayPlans = (monthSchedules ?? []).filter((s) => s.date === todayYmd && s.status === 'planned');
-  const hasAlarm = expiring.length > 0 || todayPlans.length > 0;
+
+  const alarmKey = bannerItemRaw
+    ? `${bannerItemRaw.m.id}-${todayYmd}`
+    : todayPlans.length > 0 ? `plans-${todayYmd}` : null;
+  const alarmRead = alarmKey !== null && dismissedAlarmKey === alarmKey;
+  const hasAlarm = (expiring.length > 0 || todayPlans.length > 0) && !alarmRead;
+  const bannerItem = alarmRead ? null : bannerItemRaw;
+
+  function dismissAlarm() {
+    if (!alarmKey) return;
+    setDismissedAlarmKey(alarmKey);
+    void AsyncStorage.setItem('alarm_dismissed_key', alarmKey);
+  }
 
   const coach = useCoach({ withRisk, summary, monthly: stats, pattern: visitPattern });
 
@@ -174,7 +192,7 @@ export default function HomeScreen() {
           <GnbBar
             onMenu={() => setShowMyDrawer(true)}
             onCalendar={() => setShowCalendar(true)}
-            onAlarm={() => setShowAlarm(true)}
+            onAlarm={() => { dismissAlarm(); setShowAlarm(true); }}
             hasAlarm={hasAlarm}
           />
 
@@ -183,7 +201,7 @@ export default function HomeScreen() {
           {/* ── 만료 임박 알림 배너 ── */}
           {bannerItem ? (
             <Pressable
-              onPress={() => router.navigate('/membership')}
+              onPress={() => { dismissAlarm(); router.navigate('/membership'); }}
               style={({ pressed }) => [styles.expiryBanner, pressed && styles.pressed]}>
               <Icon icon={AlarmClock} size={16} color={Palette.white} />
               <ThemedText type="captionBold" style={styles.expiryBannerText} numberOfLines={1}>
