@@ -60,7 +60,8 @@
           "project": "fitback-mobile",
           "organization": "fitback-wt"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
