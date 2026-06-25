@@ -22,7 +22,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.CAMERA"
       ],
       "package": "com.fitback.app"
     },
@@ -79,6 +80,12 @@
         "projectId": "be74960d-3be0-4cdd-8daf-b7c94a334601"
       }
     },
-    "owner": "fitback-team"
+    "owner": "fitback-team",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/be74960d-3be0-4cdd-8daf-b7c94a334601"
+    }
   }
 }
