@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "FItBack",
+    "name": "FitBack",
     "slug": "FItBack",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +15,15 @@
         "foregroundImage": "./assets/images/favicon.png",
         "backgroundColor": "#E6F4FE"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.CAMERA"
+      ],
+      "package": "com.fitback.app"
     },
     "web": {
       "output": "static",
@@ -49,11 +57,33 @@
       "@react-native-community/datetimepicker",
       "expo-audio",
       "expo-video",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "fitback-mobile",
+          "organization": "fitback-wt"
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "be74960d-3be0-4cdd-8daf-b7c94a334601"
+      }
+    },
+    "owner": "fitback-team",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/be74960d-3be0-4cdd-8daf-b7c94a334601"
     }
   }
 }

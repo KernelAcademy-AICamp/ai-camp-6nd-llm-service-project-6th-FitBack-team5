@@ -6,9 +6,9 @@
  */
 
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Lightbulb, Clock } from 'lucide-react-native';
+import { ChevronLeft, Clock, Lightbulb } from 'lucide-react-native';
 import { useEffect } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -72,7 +72,7 @@ export default function RoutineScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           <Pressable
             onPress={() => router.back()}
@@ -180,8 +180,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: ScreenPadding,
-    // 하단 fixed 탭 바에 가려지지 않도록 BottomTabInset 보정.
-    paddingBottom: Spacing.xxl + BottomTabInset,
+    // 네이티브: NativeTabs 자체 inset 처리 → BottomTabInset 불필요. 웹: fixed 탭바 보정.
+    paddingBottom: Spacing.xxl + (Platform.OS === 'web' ? BottomTabInset : 0),
   },
 
   summaryCard: {

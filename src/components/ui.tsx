@@ -36,25 +36,28 @@ export function Icon({
 }
 
 // ── 버튼 ──────────────────────────────────────────────────
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
 
 const BTN_BG: Record<ButtonVariant, string> = {
   primary: Palette.primary,
   secondary: Palette.gray100,
   ghost: 'transparent',
   danger: Palette.loss,
+  outline: Palette.white,
 };
 const BTN_FG: Record<ButtonVariant, string> = {
   primary: Palette.white,
   secondary: Palette.gray900,
   ghost: Palette.primary,
   danger: Palette.white,
+  outline: Palette.primary,
 };
 const BTN_PRESSED: Record<ButtonVariant, string> = {
   primary: Palette.primaryPressed,
   secondary: Palette.gray300,
   ghost: Palette.primaryLight,
   danger: '#C01840',
+  outline: Palette.primaryLight,
 };
 
 export function Button({
@@ -81,9 +84,10 @@ export function Button({
       disabled={off}
       style={({ pressed }) => [
         styles.btn,
-        variant === 'primary' ? styles.btnPrimary : styles.btnSecondary,
+        variant === 'primary' || variant === 'outline' ? styles.btnPrimary : styles.btnSecondary,
         { backgroundColor: pressed && !off ? BTN_PRESSED[variant] : BTN_BG[variant] },
         variant === 'ghost' && styles.btnGhost,
+        variant === 'outline' && styles.btnOutline,
         off && styles.btnDisabled,
         style,
       ]}
@@ -219,6 +223,7 @@ const styles = StyleSheet.create({
   btnPrimary: { height: 52 },
   btnSecondary: { height: 44 },
   btnGhost: { paddingHorizontal: Spacing.sm },
+  btnOutline: { borderWidth: 1, borderColor: Palette.primary },
   btnDisabled: { opacity: 0.4 },
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
 

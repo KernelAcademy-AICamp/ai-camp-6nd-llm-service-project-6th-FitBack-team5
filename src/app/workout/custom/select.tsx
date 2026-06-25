@@ -8,7 +8,8 @@
 
 import { useRouter } from 'expo-router';
 import { Check, ChevronLeft, X } from 'lucide-react-native';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -48,7 +49,7 @@ export default function SelectScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           <Pressable
             onPress={() => router.back()}
@@ -73,7 +74,7 @@ export default function SelectScreen() {
           </ThemedText>
 
           {/* 부위 */}
-          <Section title="부위">
+          <Section title="부위" inline>
             <ChipRow
               options={BODY_PARTS}
               active={bodyPart}
@@ -82,7 +83,7 @@ export default function SelectScreen() {
           </Section>
 
           {/* 유형 */}
-          <Section title="유형">
+          <Section title="유형" inline>
             <ChipRow
               options={EXERCISE_TYPES}
               active={exerciseType}
@@ -153,11 +154,28 @@ function Section({
   title,
   subtitle,
   children,
+  inline,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  /** true: 타이틀 옆으로 children 가로 정렬. false: 타이틀 아래로 children 세로 정렬. */
+  inline?: boolean;
 }) {
+  if (inline) {
+    return (
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: Spacing.md,
+          marginTop: Spacing.lg,
+        }}>
+        <ThemedText type="subtitle">{title}</ThemedText>
+        <View style={{ flex: 1 }}>{children}</View>
+      </View>
+    );
+  }
   return (
     <View style={{ marginTop: Spacing.lg }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: Spacing.xs }}>
@@ -226,7 +244,7 @@ function ExerciseImage({ url }: { url: string | null }) {
     <Image
       source={{ uri: url }}
       style={styles.exImage}
-      resizeMode="contain"
+      contentFit="contain"
       onError={() => setFailed(true)}
     />
   );
@@ -364,8 +382,8 @@ const styles = StyleSheet.create({
   bottomBar: {
     paddingHorizontal: ScreenPadding,
     paddingTop: Spacing.md,
-    // 웹: 하단 fixed 탭 바(BottomTabInset)에 가려지지 않게 띄움.
-    paddingBottom: Spacing.md + BottomTabInset,
+    // 네이티브: NativeTabs 가 자체 inset 처리 → 0. 웹: JS fixed 탭 바 높이만큼 보정.
+    paddingBottom: Platform.OS === 'web' ? BottomTabInset : 0,
     borderTopWidth: 0.5,
     borderTopColor: Palette.lineDefault,
     backgroundColor: Palette.bgSurface,
