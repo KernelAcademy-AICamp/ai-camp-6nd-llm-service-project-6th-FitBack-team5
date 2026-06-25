@@ -1,6 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
-import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,8 +15,6 @@ import {
 import { DayWorkoutList } from '@/features/workout/DayWorkoutList';
 import { SelectedDayFeedback } from '@/features/workout/SelectedDayCard';
 import { WeekStatusCard } from '@/features/workout/WeekStatusCard';
-import { WorkoutDateStrip } from '@/features/workout/WorkoutDateStrip';
-
 function todayIso(): string {
   const d = new Date();
   const m = `${d.getMonth() + 1}`.padStart(2, '0');
@@ -29,7 +26,7 @@ export default function WorkoutSummaryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
   const initial = typeof params.date === 'string' && params.date ? params.date : todayIso();
-  const [selectedDate, setSelectedDate] = useState<string>(initial);
+  const selectedDate = initial;
 
   return (
     <ThemedView style={styles.container}>
@@ -47,7 +44,6 @@ export default function WorkoutSummaryScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <WorkoutDateStrip selected={selectedDate} onSelect={setSelectedDate} />
           <WeekStatusCard selectedDate={selectedDate} />
           <DayWorkoutList date={selectedDate} />
           <SelectedDayFeedback date={selectedDate} />

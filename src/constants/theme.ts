@@ -19,7 +19,7 @@ export const Palette = {
   // Background
   bgBase: '#F2F2F7',
   bgSurface: '#FFFFFF',
-  bgMuted: '#F3F4F6',
+  bgMuted: '#F5F5F9',
 
   // Semantic — UI 상태
   success: '#22C55E',
@@ -36,14 +36,19 @@ export const Palette = {
   lossLight: '#F2F2F7',
 
   // Neutral
-  gray900: '#222C43',
-  gray700: '#374151', // Figma 미포함 — 하위 호환용
+  gray900: '#111827',
+  gray800: '#222C43',
+  gray700: '#313E5B',
   gray500: '#6B7280',
   gray400: '#999999',
   gray300: '#D1D5DB',
-  gray100: '#F3F4F6',
+  gray200: '#E7E9F1',
+  gray100: '#F5F5F9',
   gray50: '#F2F2F7',
   white: '#FFFFFF',
+
+  // Coach banner — "운동" 강조 (코치 배너 전용, 인디고 위 노란 포인트)
+  coachAccent: '#FFF700',
 
   // Diet — 매크로·끼니 구분 틴트 (diet.tsx 전용)
   tintOrange: '#F5A623',   // 단백질·아침·간식
@@ -112,10 +117,13 @@ export const Fonts = Platform.select({
 export const Spacing = {
   xs: 4,
   sm: 8,
+  m: 12,
   md: 16,
+  card: 20,
   lg: 24,
   xl: 32,
   xxl: 48,
+  'screen-x': 20,
   // legacy aliases (점진 마이그레이션)
   half: 2,
   one: 4,
@@ -176,5 +184,5 @@ export const Elevation: Record<'level1' | 'level2' | 'sticky', ViewStyle> = {
   }) as ViewStyle,
 };
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80, web: 80 }) ?? 0;
+export const BottomTabInset = Platform.select({ ios: 50, android: 80, web: 54 }) ?? 0;
 export const MaxContentWidth = 800;

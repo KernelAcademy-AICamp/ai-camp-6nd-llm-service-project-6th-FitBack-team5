@@ -22,7 +22,8 @@ import { Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import { useProfile } from '@/features/auth/useProfile';
-import type { AppResponse, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
+import type { AppResponse, DietResponse, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
+import { useAddMeal, type MealType } from '@/features/diet/useMeals';
 import { useAiFeedback } from '@/features/coach/useAiFeedback';
 import { useDietSummary } from '@/features/coach/useDietSummary';
 import { pickFoodImage } from '@/features/diet/pickFoodImage';
@@ -155,23 +156,29 @@ function AddToScheduleButton({
 }) {
   const add = useAddSchedule();
   const [added, setAdded] = useState(false);
+  const [failed, setFailed] = useState(false);
   const now = new Date();
   const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+  const color = added ? Palette.profit : failed ? Palette.error : Palette.primary;
   return (
     <Pressable
       onPress={() => {
         if (added || add.isPending) return;
+        setFailed(false);
         logEvent(EVENTS.recommendClick, { type, title });
-        add.mutate({ date: ymd, type, title, payload, source: 'ai' }, { onSuccess: () => setAdded(true) });
+        add.mutate(
+          { date: ymd, type, title, payload, source: 'ai' },
+          { onSuccess: () => setAdded(true), onError: () => setFailed(true) },
+        );
       }}
       disabled={added || add.isPending}
-      style={({ pressed }) => [addSchedStyles.btn, pressed && { opacity: 0.6 }, added && addSchedStyles.done]}
+      style={({ pressed }) => [addSchedStyles.btn, pressed && { opacity: 0.6 }, added && addSchedStyles.done, failed && addSchedStyles.fail]}
       accessibilityRole="button"
       accessibilityLabel={added ? '오늘 일정에 추가됨' : '오늘 일정에 추가'}>
-      <Icon icon={added ? Check : CalendarPlus} size={14} color={added ? Palette.profit : Palette.primary} />
-      <ThemedText type="label" style={{ color: added ? Palette.profit : Palette.primary }}>
-        {added ? '오늘 일정에 추가됨' : '오늘 일정에 추가'}
+      <Icon icon={added ? Check : CalendarPlus} size={14} color={color} />
+      <ThemedText type="label" style={{ color }}>
+        {added ? '오늘 일정에 추가됨' : failed ? '추가 실패 · 다시 시도' : '오늘 일정에 추가'}
       </ThemedText>
     </Pressable>
   );
@@ -189,6 +196,118 @@ const addSchedStyles = StyleSheet.create({
     borderColor: Palette.primary,
   },
   done: { borderColor: Palette.profit },
+  fail: { borderColor: Palette.error },
+});
+
+// ── "오늘 식단으로 기록" — 끼니 선택 후 실제 DB 저장 ────────
+const DIET_TIME_OPTIONS = ['아침', '점심', '저녁', '오늘'] as const;
+type DietTimeOption = typeof DIET_TIME_OPTIONS[number];
+
+function DietLogButton({
+  meals,
+  totalKcal,
+  proteinG,
+}: {
+  meals: DietResponse['body']['meals'];
+  totalKcal: number;
+  proteinG: number;
+}) {
+  const addMeal = useAddMeal();
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [savedTime, setSavedTime] = useState<DietTimeOption | null>(null);
+
+  async function handleSave(time: DietTimeOption) {
+    if (status !== 'idle') return;
+    const toSave = time === '오늘' ? meals : meals.filter((m) => m.time === time);
+    if (!toSave.length) return;
+    setSavedTime(time);
+    setStatus('saving');
+    try {
+      for (const m of toSave) {
+        // protein 비례 추정, carb/fat은 AI 응답에 없어 0으로 저장
+        await addMeal.mutateAsync({
+          mealType: m.time as MealType,
+          name: m.menu,
+          kcal: m.kcal,
+          carb: 0,
+          protein: totalKcal > 0 ? Math.round((m.kcal / totalKcal) * proteinG) : 0,
+          fat: 0,
+          inputMethod: 'manual',
+        });
+      }
+      setStatus('saved');
+    } catch {
+      setStatus('error');
+    }
+  }
+
+  if (status === 'saved') {
+    return (
+      <View style={dietLogStyles.savedRow}>
+        <Icon icon={Check} size={16} color={Palette.profit} />
+        <ThemedText type="captionBold" style={{ color: Palette.profit }}>
+          {savedTime === '오늘' ? '오늘 식단이 기록됐어요!' : `${savedTime} 식단이 기록됐어요!`}
+        </ThemedText>
+      </View>
+    );
+  }
+
+  // 처음부터 끼니 칩을 바로 표시 (클릭 2단계 없음)
+  return (
+    <View style={dietLogStyles.pickerWrap}>
+      <ThemedText type="label" themeColor="textSecondary">
+        {status === 'saving' ? '저장 중…' : '오늘 식단으로 기록'}
+      </ThemedText>
+      <View style={dietLogStyles.chipRow}>
+        {DIET_TIME_OPTIONS.map((t) => {
+          const hasMeals = t === '오늘' ? meals.length > 0 : meals.some((m) => m.time === t);
+          return (
+            <Pressable
+              key={t}
+              onPress={() => handleSave(t)}
+              disabled={!hasMeals || status === 'saving'}
+              style={({ pressed }) => [
+                dietLogStyles.chip,
+                !hasMeals && dietLogStyles.chipDisabled,
+                pressed && { opacity: 0.7 },
+                status === 'saving' && { opacity: 0.4 },
+              ]}
+              accessibilityRole="button">
+              <ThemedText type="captionBold" style={{ color: hasMeals ? Palette.primary : Palette.gray300 }}>
+                {t}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
+      </View>
+      {status === 'error' && (
+        <ThemedText type="label" style={{ color: Palette.error }}>
+          저장에 실패했어요. 다시 시도해주세요.
+        </ThemedText>
+      )}
+    </View>
+  );
+}
+
+const dietLogStyles = StyleSheet.create({
+  pickerWrap: {
+    gap: Spacing.sm, padding: Spacing.md,
+    backgroundColor: Palette.primaryLight,
+    borderRadius: Radius.button, alignSelf: 'stretch',
+  },
+  chipRow: { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap' },
+  chip: {
+    borderWidth: 1, borderColor: Palette.primary,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    backgroundColor: Palette.bgSurface,
+  },
+  chipDisabled: { borderColor: Palette.gray300, backgroundColor: Palette.bgSurface },
+  savedRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
+    padding: Spacing.md, backgroundColor: Palette.successLight,
+    borderRadius: Radius.button, alignSelf: 'stretch',
+  },
 });
 
 function ResponseBody({ response }: { response: AppResponse }) {
@@ -297,7 +416,7 @@ function ResponseBody({ response }: { response: AppResponse }) {
 
 // ── Main component ───────────────────────────────────────
 
-export function CoachChat({ onClose }: { onClose: () => void }) {
+export function CoachChat({ onClose, initialMessage }: { onClose: () => void; initialMessage?: string }) {
   const router = useRouter();
   const { summary } = useDietSummary();
   const { data: home } = useHomeActivity();
@@ -312,6 +431,14 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   // 코치 진입 이벤트(1회)
   useEffect(() => {
     logEvent(EVENTS.coachOpen);
+  }, []);
+
+  // initialMessage가 있으면 마운트 직후 자동 전송
+  useEffect(() => {
+    if (!initialMessage) return;
+    const t = setTimeout(() => send(initialMessage), 150);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Workout coach inline flow state
@@ -896,13 +1023,27 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                   ) : null}
 
                   {/* Followup button — routes by type.
-                      followup이 구버전 string으로 올 경우도 방어 처리. */}
+                      followup이 구버전 string으로 올 경우도 방어 처리.
+                      diet + log_meal 조합은 DietLogButton으로 대체. */}
                   {m.response.followup && !isThinking ? (() => {
                     const raw = m.response.followup;
                     const followupObj = typeof raw === 'string'
                       ? { type: 'ask_question' as const, label: raw as string }
                       : raw as FollowupAction;
                     if (!followupObj.label) return null;
+
+                    // 식단 기록 → 끼니 선택 후 실제 DB 저장
+                    if (m.response.intent === 'diet' && followupObj.type === 'log_meal') {
+                      const dietBody = (m.response as DietResponse).body;
+                      return (
+                        <DietLogButton
+                          meals={dietBody.meals}
+                          totalKcal={dietBody.target_kcal}
+                          proteinG={dietBody.protein_g}
+                        />
+                      );
+                    }
+
                     return (
                       <Pressable
                         onPress={() => {
@@ -1029,7 +1170,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
 // ── Styles ────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: Palette.bgSurface },
 
   // Header
   topBar: {

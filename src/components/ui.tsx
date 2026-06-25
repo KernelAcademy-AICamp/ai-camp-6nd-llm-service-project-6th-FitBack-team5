@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.modal, // §9 카드 반경 20
     borderWidth: 0.5,
     borderColor: Palette.lineDefault,
-    padding: Spacing.md,
+    padding: Spacing.card,
   },
   cardPressed: { opacity: 0.85 },
 
