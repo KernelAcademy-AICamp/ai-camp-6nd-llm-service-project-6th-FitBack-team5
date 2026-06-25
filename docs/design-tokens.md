@@ -31,9 +31,9 @@ CSS에서 Figma 변수명의 `/` 구분자는 `-`로 변환합니다.
 | `primaryPressed` | `--color-p-indigo-600` | `--color-brand-primary-pressed` | `#4957D8` |
 | `primaryLight` | `--color-p-indigo-50` | `--color-brand-primary-light` | `#EEF1FF` |
 | `secondary` | `--color-p-blue-400` | `--color-brand-secondary` | `#6892FF` |
-| `bgBase` | `--color-p-gray-50` | `--color-bg-base` | `#F2F2F7` |
+| `bgBase` | `--color-p-surface-page` | `--color-bg-base` | `#F5F5F9` |
 | `bgSurface` | `--color-p-white` | `--color-bg-surface` | `#FFFFFF` |
-| `bgMuted` | `--color-p-gray-100` | `--color-bg-muted` | `#F5F5F9` |
+| `bgMuted` | `--color-p-surface-muted` | `--color-bg-muted` | `#F5F5F8` |
 | `success` | `--color-p-green-500` | `--color-state-success` | `#22C55E` |
 | `successLight` | `--color-p-green-50` | `--color-state-success-light` | `#DCFCE7` |
 | `warning` | `--color-p-amber-400` | `--color-state-warning` | `#F59E0B` |
@@ -49,6 +49,7 @@ CSS에서 Figma 변수명의 `/` 구분자는 `-`로 변환합니다.
 | `gray500` | `--color-p-gray-500` | `--color-neutral-500` | `#6B7280` |
 | `gray400` | `--color-p-gray-400` | `--color-neutral-400` | `#999999` |
 | `gray300` | `--color-p-gray-300` | `--color-neutral-300` | `#D1D5DB` |
+| `gray200` | `--color-p-gray-200` | `--color-neutral-200` | `#E7E9F1` |
 | `gray100` | `--color-p-gray-100` | `--color-neutral-100` | `#F5F5F9` |
 | `gray50` | `--color-p-gray-50` | `--color-neutral-50` | `#F2F2F7` |
 | `white` | `--color-p-white` | `--color-neutral-0` | `#FFFFFF` |
@@ -71,6 +72,7 @@ CSS에서 Figma 변수명의 `/` 구분자는 `-`로 변환합니다.
 |---|---|---|---|
 | `xs` | `--space-p-4` | `--spacing-xs` | `4px` |
 | `sm` | `--space-p-8` | `--spacing-sm` | `8px` |
+| `ms` | `--space-p-10` | `--spacing-ms` | `10px` |
 | `md` | `--space-p-16` | `--spacing-md` | `16px` |
 | `lg` | `--space-p-24` | `--spacing-lg` | `24px` |
 | `xl` | `--space-p-32` | `--spacing-xl` | `32px` |
@@ -96,7 +98,8 @@ CSS에서 Figma 변수명의 `/` 구분자는 `-`로 변환합니다.
 | `h1` | `--font-size-h1` | `--line-height-h1` | 24 / 30 |
 | `h2` | `--font-size-h2` | `--line-height-h2` | 20 / 25 |
 | `subtitle` | `--font-size-subtitle` | `--line-height-subtitle` | 18 / 23 |
-| `body` | `--font-size-body` | `--line-height-body` | 16 / 24 |
+| `body` | `--font-size-body` | `--line-height-body` | 16 / 24 · Medium (16_M) |
+| `bodySemibold` | `--font-size-body` | `--line-height-body` | 16 / 24 · SemiBold (16_SB) |
 | `caption` | `--font-size-caption` | `--line-height-caption` | 14 / 21 |
 | `label` | `--font-size-label` | `--line-height-label` | 12 / 18 |
 

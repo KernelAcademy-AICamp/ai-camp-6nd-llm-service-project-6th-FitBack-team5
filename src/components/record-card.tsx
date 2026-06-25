@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Chip } from './chip';
 import { IconArrowChevron } from './icons';
 import { ThemedText } from './themed-text';
 import { Elevation, FontFamily, Palette, Radius, Spacing } from '@/constants/theme';
@@ -28,11 +29,7 @@ export function RecordCard({ label, value, onPress, children }: RecordCardProps)
 }
 
 RecordCard.Pill = function Pill({ text }: { text: string }) {
-  return (
-    <View style={styles.pill}>
-      <ThemedText style={styles.pillText}>{text}</ThemedText>
-    </View>
-  );
+  return <Chip label={text} style={{ marginTop: 'auto' as never }} />;
 };
 
 RecordCard.Badge = function Badge({ text }: { text: string }) {
@@ -76,22 +73,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontWeight: '700',
     letterSpacing: -0.5,
-  },
-  // Figma: card/secondary #F5F5F9, radius 99, SemiBold 16px
-  pill: {
-    alignSelf: 'flex-start',
-    backgroundColor: Palette.gray50,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    marginTop: 'auto' as never,
-  },
-  pillText: {
-    fontSize: 16,
-    fontFamily: FontFamily.semibold,
-    fontWeight: '600',
-    letterSpacing: -0.4,
-    color: Palette.gray500,
   },
   badge: {
     backgroundColor: Palette.primaryLight,

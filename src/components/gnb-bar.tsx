@@ -54,7 +54,7 @@ export function GnbBar({
             accessibilityRole="button"
             accessibilityLabel="알림">
             <View>
-              <IconBell size={22} color={hasAlarm ? Palette.primary : Palette.gray300} />
+              <IconBell size={22} color={Palette.gray300} />
               {hasAlarm && <View style={styles.alarmDot} />}
             </View>
           </Pressable>

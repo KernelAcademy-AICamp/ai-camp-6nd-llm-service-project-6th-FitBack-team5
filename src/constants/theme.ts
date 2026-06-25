@@ -17,9 +17,9 @@ export const Palette = {
   secondary: '#6892FF',
 
   // Background
-  bgBase: '#F2F2F7',
+  bgBase: '#F5F5F9',
   bgSurface: '#FFFFFF',
-  bgMuted: '#F5F5F9',
+  bgMuted: '#F5F5F8',
 
   // Semantic — UI 상태
   success: '#22C55E',
@@ -100,6 +100,7 @@ export const Typography = {
   h2: { fontSize: 20, lineHeight: 25, fontFamily: FontFamily.semibold, letterSpacing: -0.5, fontWeight: '600' },
   subtitle: { fontSize: 18, lineHeight: 23, fontFamily: FontFamily.semibold, letterSpacing: -0.45, fontWeight: '600' },
   body: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.medium, letterSpacing: -0.4, fontWeight: '500' },
+  bodySemibold: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.semibold, letterSpacing: -0.4, fontWeight: '600' },
   bodyMedium: { fontSize: 16, lineHeight: 24, fontFamily: FontFamily.medium, letterSpacing: -0.4, fontWeight: '500' }, // body와 동일 — alias
   caption: { fontSize: 14, lineHeight: 21, fontFamily: FontFamily.medium, letterSpacing: -0.35, fontWeight: '500' },
   captionBold: { fontSize: 14, lineHeight: 21, fontFamily: FontFamily.semibold, letterSpacing: -0.35, fontWeight: '600' },
@@ -117,6 +118,7 @@ export const Fonts = Platform.select({
 export const Spacing = {
   xs: 4,
   sm: 8,
+  ms: 10,
   m: 12,
   md: 16,
   card: 20,

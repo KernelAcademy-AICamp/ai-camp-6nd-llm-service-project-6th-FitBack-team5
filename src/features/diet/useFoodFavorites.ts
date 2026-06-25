@@ -58,20 +58,20 @@ export function useFoodFavorites() {
   });
 }
 
-// food가 즐겨찾기에 있으면 삭제, 없으면 추가
+// food가 즐겨찾기에 있으면 삭제, 없으면 추가 — DB 직접 조회로 캐시 불일치 방지
 export function useToggleFavorite() {
   const user = useCurrentUser();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      food,
-      favorites,
-    }: {
-      food: FoodSearchResult;
-      favorites: FoodFavorite[];
-    }): Promise<'added' | 'removed'> => {
+    mutationFn: async ({ food }: { food: FoodSearchResult; favorites?: FoodFavorite[] }): Promise<'added' | 'removed'> => {
       if (!user) throw new Error('로그인이 필요합니다.');
-      const existing = favorites.find((f) => f.name === food.name);
+      const { data: existing, error: selectError } = await supabase
+        .from('food_favorites')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('name', food.name)
+        .maybeSingle();
+      if (selectError) throw selectError;
       if (existing) {
         const { error } = await supabase
           .from('food_favorites')
