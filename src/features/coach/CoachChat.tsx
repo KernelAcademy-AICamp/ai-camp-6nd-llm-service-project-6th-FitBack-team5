@@ -1409,12 +1409,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5, borderTopColor: Palette.lineDefault,
   },
 
-  // 추천 액션 칩(퀵 리플라이)
+  // 추천 액션 칩(퀵 리플라이) — 모든 칩은 흰 배경으로 통일. (새 칩도 이 스타일을 재사용)
   actionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, alignSelf: 'stretch' },
   actionChip: {
     flexDirection: 'row', alignItems: 'center',
     borderWidth: 0.5, borderColor: Palette.primary,
-    backgroundColor: Palette.primaryLight,
+    backgroundColor: Palette.white,
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
     borderRadius: Radius.full,
   },
@@ -1471,6 +1471,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     flexShrink: 0, borderWidth: 0.5, borderColor: Palette.lineStrong,
+    backgroundColor: Palette.white,
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.full,
   },
   inputBar: {
