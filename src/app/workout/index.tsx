@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { ChevronRight, Dumbbell, Sliders, Wrench } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -32,7 +32,7 @@ export default function WorkoutScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
@@ -137,7 +137,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: ScreenPadding,
     paddingTop: Spacing.lg,
-    paddingBottom: BottomTabInset + Spacing.lg,
+    // 네이티브: NativeTabs 자체 inset 처리 → BottomTabInset 불필요. 웹: fixed 탭바 보정.
+    paddingBottom: (Platform.OS === 'web' ? BottomTabInset : 0) + Spacing.lg,
     gap: Spacing.md,
   },
   header: { gap: Spacing.xs },

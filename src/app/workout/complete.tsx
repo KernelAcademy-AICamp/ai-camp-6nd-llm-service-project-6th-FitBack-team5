@@ -18,13 +18,12 @@ import { ThemedView } from '@/components/themed-view';
 import {
   BottomTabInset,
   Elevation,
-  FontFamily,
   MaxContentWidth,
   Palette,
   Radius,
   ScreenPadding,
   Spacing,
-  Typography,
+  Typography
 } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import type { Routine } from '@/features/workout/useGenerateRoutine';
@@ -302,7 +301,7 @@ export default function CompleteScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
@@ -572,7 +571,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: ScreenPadding,
     paddingTop: Spacing.lg,
-    paddingBottom: BottomTabInset + Spacing.lg,
+    // 네이티브: NativeTabs 자체 inset 처리 → BottomTabInset 불필요. 웹: fixed 탭바 보정.
+    paddingBottom: (Platform.OS === 'web' ? BottomTabInset : 0) + Spacing.lg,
     gap: Spacing.md,
   },
   headerCelebrate: {
@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: Spacing.lg,
     right: Spacing.lg,
-    bottom: BottomTabInset + Spacing.lg,
+    bottom: (Platform.OS === 'web' ? BottomTabInset : 0) + Spacing.lg,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     borderRadius: Radius.button,

@@ -72,14 +72,14 @@ export default function RecordScreen() {
   if (isLoading && items.length === 0) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safe} />
+        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']} />
       </ThemedView>
     );
   }
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           <Pressable
             onPress={() => router.back()}
@@ -343,7 +343,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: ScreenPadding,
-    paddingBottom: Spacing.xxl + BottomTabInset,
+    // 네이티브: NativeTabs 자체 inset 처리 → BottomTabInset 불필요. 웹: fixed 탭바 보정.
+    paddingBottom: Spacing.xxl + (Platform.OS === 'web' ? BottomTabInset : 0),
   },
 
   banner: {
