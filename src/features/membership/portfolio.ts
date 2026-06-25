@@ -39,20 +39,28 @@ export function weeksBetween(startISO: string, endISO: string): number {
   return Math.max(1, Math.round((e - s) / (7 * 86_400_000)));
 }
 
-/** 회당 가치 — 인세권: 원금/총횟수 · 기간권: 원금/(주목표×주수). 분모 0 가드. */
+/** 회당 가치 — 인세권: 원금/총횟수 · 기간권: 원금/(주목표×주수). 분모 0 가드.
+ *  기간권에 주목표 없이 maxVisits만 있으면 인세권 방식으로 폴백. */
 export function perVisitValue(p: PortfolioInput): number {
   if (p.type === 'session') {
     const total = p.totalSessions ?? 0;
     return total > 0 ? Math.round(p.principal / total) : 0;
   }
-  const denom = (p.weeklyGoal ?? 0) * (p.totalWeeks ?? 0);
-  return denom > 0 ? Math.round(p.principal / denom) : 0;
+  const weeklyDenom = (p.weeklyGoal ?? 0) * (p.totalWeeks ?? 0);
+  if (weeklyDenom > 0) return Math.round(p.principal / weeklyDenom);
+  const total = p.totalSessions ?? 0;
+  return total > 0 ? Math.round(p.principal / total) : 0;
 }
 
 /** 목표 방문 횟수 — 전체의 GOAL_RATIO(75%)에 해당하는 방문 수(반올림). */
 export function goalVisits(p: PortfolioInput): number {
+  const weeklyTotal = (p.weeklyGoal ?? 0) * (p.totalWeeks ?? 0);
   const totalVisits =
-    p.type === 'session' ? p.totalSessions ?? 0 : (p.weeklyGoal ?? 0) * (p.totalWeeks ?? 0);
+    p.type === 'session'
+      ? p.totalSessions ?? 0
+      : weeklyTotal > 0
+        ? weeklyTotal
+        : p.totalSessions ?? 0;
   return Math.round(totalVisits * GOAL_RATIO);
 }
 

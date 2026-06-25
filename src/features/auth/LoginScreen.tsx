@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -111,16 +112,30 @@ export function LoginScreen() {
     setInfoMessage(null);
   }
 
-  // 첫 진입 — 헤드라인 + 시작/로그인 두 갈래
+  // 첫 진입 — 로고 + 시작/로그인 두 갈래
   if (mode === 'landing') {
     return (
       <View style={styles.landingRoot}>
-        <View style={styles.landingTop}>
-          <ThemedText type="display" style={styles.hero}>
-            운동만 하세요,{'\n'}회원권은 FitBack이 챙길게요
-          </ThemedText>
-          <ThemedText type="caption" themeColor="textSecondary" style={styles.landingSub}>
-            회원권 활용도를 분석하고, 다음 행동을 제안해요.
+        <LinearGradient
+          colors={[`${Palette.primary}28`, Palette.bgBase]}
+          style={styles.landingGradient}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 0.55 }}
+          pointerEvents="none"
+        />
+        <View style={styles.landingCenter}>
+          <Image
+            source={require('../../../assets/images/favicon.png')}
+            style={styles.faviconImg}
+            resizeMode="contain"
+          />
+          <Image
+            source={require('../../../assets/images/Logo.png')}
+            style={styles.logoImg}
+            resizeMode="contain"
+          />
+          <ThemedText type="body" style={styles.landingTagline}>
+            운동만 하세요,{'\n'}회원권은 FitBack이 챙길게요!
           </ThemedText>
         </View>
         <View style={styles.landingFooter}>
@@ -130,7 +145,7 @@ export function LoginScreen() {
               setErrorMessage(null);
               setInfoMessage(null);
             }}
-            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
+            style={({ pressed }) => [styles.landingBtn, pressed && styles.buttonPressed]}>
             <ThemedText type="subtitle" style={styles.buttonLabel}>
               이메일로 시작하기
             </ThemedText>
@@ -141,8 +156,8 @@ export function LoginScreen() {
               setErrorMessage(null);
               setInfoMessage(null);
             }}
-            style={({ pressed }) => [styles.buttonSecondary, pressed && styles.pressed]}>
-            <ThemedText type="subtitle" style={styles.buttonSecondaryLabel}>
+            style={({ pressed }) => [styles.landingBtnOutline, pressed && styles.pressed]}>
+            <ThemedText type="subtitle" style={styles.landingBtnOutlineLabel}>
               기존 계정으로 로그인하기
             </ThemedText>
           </Pressable>
@@ -376,19 +391,46 @@ const styles = StyleSheet.create({
   middleSection: { gap: Spacing.xs },
   bottomSection: { gap: Spacing.md },
   logo: { width: 132, height: 34, marginTop: Spacing.md, marginBottom: Spacing.md },
-  landingRoot: { flex: 1, backgroundColor: Palette.bgBase, padding: ScreenPadding },
-  landingTop: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  landingSub: { textAlign: 'center', marginTop: Spacing.sm },
-  landingFooter: { gap: Spacing.sm, paddingBottom: Spacing.md, width: '100%', maxWidth: 400, alignSelf: 'center' },
-  buttonSecondary: {
-    backgroundColor: Palette.gray100,
-    borderRadius: Radius.button,
-    paddingVertical: Spacing.md,
+  landingRoot: { flex: 1, backgroundColor: Palette.bgBase },
+  landingGradient: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  landingCenter: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
+    gap: Spacing.md,
+    paddingHorizontal: ScreenPadding,
   },
-  buttonSecondaryLabel: { color: Palette.gray900 },
+  faviconImg: { width: 84, height: 84 },
+  logoImg: { width: 130, height: 26 },
+  landingTagline: {
+    textAlign: 'center',
+    color: Palette.gray900,
+    marginTop: Spacing.sm,
+  },
+  landingFooter: {
+    gap: Spacing.sm,
+    paddingHorizontal: ScreenPadding,
+    paddingBottom: Spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  landingBtn: {
+    backgroundColor: Palette.primary,
+    borderRadius: Radius.button,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landingBtnOutline: {
+    borderWidth: 1,
+    borderColor: Palette.primary,
+    borderRadius: Radius.button,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landingBtnOutlineLabel: { color: Palette.primary },
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: Spacing.xs },
   pressed: { opacity: 0.7 },
   hero: { width: '100%', maxWidth: 400, textAlign: 'center', marginBottom: Spacing.lg, lineHeight: 40 },
@@ -415,7 +457,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     fontSize: 16,
     color: Palette.gray900,
-    backgroundColor: Palette.gray50,
+    backgroundColor: Palette.white,
     minHeight: 44,
   },
   hint: { color: Palette.warning, marginTop: Spacing.xs },

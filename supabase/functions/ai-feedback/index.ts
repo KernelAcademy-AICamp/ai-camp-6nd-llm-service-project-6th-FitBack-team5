@@ -26,6 +26,7 @@ interface ChatbotRequest {
   userMessage?: string;                 // 사용자 질문
   questionAnswer?: string;             // 질문지 답변
   photoAnalysis?: unknown;             // analyze-meal 결과 (사진인 경우)
+  history?: { role: string; text: string }[]; // 멀티턴 — 직전 대화(최근 N턴)
 }
 
 /** Claude 호출 → raw 텍스트 반환 */
@@ -98,6 +99,7 @@ Deno.serve(async (req) => {
     message: body.userMessage ?? null,
     answer: body.questionAnswer ?? null,
     photo: body.photoAnalysis ?? null,
+    history: body.history ?? null,     // 멀티턴 맥락
   });
 
   const chatResponse = await getValidatedResponse(payload);

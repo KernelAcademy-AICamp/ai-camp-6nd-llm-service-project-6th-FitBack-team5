@@ -84,9 +84,7 @@ export function SelectedDayCard({
     <View style={styles.summaryWrap}>
       {header}
       <View style={styles.statsRow}>
-        <ThemedView
-          type="backgroundElement"
-          style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+        <View style={[styles.statCard, { backgroundColor: Palette.bgMuted }]}>
           <Clock color={Palette.primary} size={20} />
           <View style={styles.statTexts}>
             <ThemedText type="small" themeColor="textSecondary">
@@ -99,10 +97,8 @@ export function SelectedDayCard({
               </ThemedText>
             </ThemedText>
           </View>
-        </ThemedView>
-        <ThemedView
-          type="backgroundElement"
-          style={[styles.statCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: Palette.bgMuted }]}>
           <Flame color={Palette.warning} size={20} />
           <View style={styles.statTexts}>
             <ThemedText type="small" themeColor="textSecondary">
@@ -110,7 +106,7 @@ export function SelectedDayCard({
             </ThemedText>
             <ThemedText type="subtitle">{totalCalories} kcal</ThemedText>
           </View>
-        </ThemedView>
+        </View>
       </View>
     </View>
   );
@@ -171,7 +167,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   card: {
-    padding: Spacing.md,
+    padding: Spacing.card,
     borderRadius: Radius.card,
     borderWidth: StyleSheet.hairlineWidth,
   },
@@ -189,14 +185,13 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     padding: Spacing.sm,
     borderRadius: Radius.card,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   statTexts: {
     alignItems: 'center',
     gap: 2,
   },
   feedbackCard: {
-    padding: Spacing.md,
+    padding: Spacing.card,
     borderRadius: Radius.card,
     borderWidth: StyleSheet.hairlineWidth,
     gap: Spacing.sm,

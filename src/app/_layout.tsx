@@ -3,7 +3,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 import { DefaultTheme, ThemeProvider } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, ActivityIndicator, Image, StyleSheet, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
@@ -74,6 +75,29 @@ function AppShell() {
   );
 }
 
+const SPLASH_HOLD = 1200;
+const SPLASH_FADE = 300;
+
+function SplashScreen({ opacity }: { opacity: Animated.Value }) {
+  return (
+    <Animated.View style={[splashStyles.overlay, { opacity }]}>
+      <LinearGradient
+        colors={[Palette.primary, Palette.primaryHover]}
+        style={splashStyles.container}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      >
+        <Image
+          source={require('@/assets/images/Logo.png')}
+          style={splashStyles.logo}
+          resizeMode="contain"
+          tintColor="#FFFFFF"
+        />
+      </LinearGradient>
+    </Animated.View>
+  );
+}
+
 export default Sentry.wrap(function TabLayout() {
   const [fontsLoaded] = useFonts({
     Pretendard: require('@/assets/fonts/Pretendard-Regular.otf'),
@@ -81,6 +105,21 @@ export default Sentry.wrap(function TabLayout() {
     PretendardSemiBold: require('@/assets/fonts/Pretendard-SemiBold.otf'),
     PretendardBold: require('@/assets/fonts/Pretendard-Bold.otf'),
   });
+  const [splashDone, setSplashDone] = useState(false);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const hold = setTimeout(() => {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: SPLASH_FADE,
+        useNativeDriver: true,
+      }).start(() => setSplashDone(true));
+    }, SPLASH_HOLD);
+    return () => clearTimeout(hold);
+  }, [opacity]);
+
+  if (!splashDone) return <SplashScreen opacity={opacity} />;
 
   if (!fontsLoaded) {
     return (
@@ -103,5 +142,21 @@ const loadingStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Palette.bgBase,
+  },
+});
+
+const splashStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 999,
+  },
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: {
+    width: 159,
+    height: 32,
   },
 });

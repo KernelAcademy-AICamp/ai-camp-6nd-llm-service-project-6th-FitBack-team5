@@ -551,7 +551,7 @@ export default function CoachScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Palette.bgSurface },
   safeArea: {
     flex: 1,
     maxWidth: MaxContentWidth,

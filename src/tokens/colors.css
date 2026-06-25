@@ -1,0 +1,115 @@
+/**
+ * FitBack Color Tokens
+ *
+ * 구조: Primitive (raw hex) → Semantic (var 참조)
+ * 소스: src/constants/theme.ts (Palette / Colors)
+ * Figma 파일(aJIudmwrEER8OoccfLmHiY)에 Variables 미정의 → theme.ts 기준 생성
+ *
+ * 네이밍 규칙: Figma '/' 구분자 → CSS '-' 변환
+ *   예) brand/primary → --color-brand-primary
+ */
+
+:root {
+  /* ─────────────────────────────────────────────
+     PRIMITIVE — raw 색상값. semantic 토큰에서만 참조.
+     ───────────────────────────────────────────── */
+
+  /* Indigo */
+  --color-p-indigo-300: #8E9BFF;
+  --color-p-indigo-400: #6675FF;
+  --color-p-indigo-500: #5566F7;
+  --color-p-indigo-600: #4957D8;
+  --color-p-indigo-50:  #EEF1FF;
+
+  /* Blue */
+  --color-p-blue-400: #6892FF;
+
+  /* Neutral */
+  --color-p-gray-900: #222C43;
+  --color-p-gray-700: #374151;
+  --color-p-gray-500: #6B7280;
+  --color-p-gray-400: #999999;
+  --color-p-gray-300: #D1D5DB;
+  --color-p-gray-100: #F3F4F6;
+  --color-p-gray-50:  #F2F2F7;
+  --color-p-white:    #FFFFFF;
+
+  /* Green */
+  --color-p-green-500: #22C55E;
+  --color-p-green-50:  #DCFCE7;
+
+  /* Amber */
+  --color-p-amber-400: #F59E0B;
+
+  /* Red */
+  --color-p-red-500: #EF4444;
+  --color-p-red-50:  #FEE2E2;
+
+  /* Diet tints */
+  --color-p-orange-400: #F5A623;
+  --color-p-yellow-400: #F2B807;
+  --color-p-purple-500: #7C6CF0;
+
+  /* Alpha */
+  --color-p-black-07: rgba(0, 0, 0, 0.07);
+  --color-p-black-15: rgba(0, 0, 0, 0.15);
+
+
+  /* ─────────────────────────────────────────────
+     SEMANTIC — primitive 참조. 코드에서 이 토큰을 사용.
+     ───────────────────────────────────────────── */
+
+  /* Brand */
+  --color-brand-primary:         var(--color-p-indigo-400);
+  --color-brand-primary-hover:   var(--color-p-indigo-500);
+  --color-brand-primary-pressed: var(--color-p-indigo-600);
+  --color-brand-primary-light:   var(--color-p-indigo-50);
+  --color-brand-secondary:       var(--color-p-blue-400);
+
+  /* Background */
+  --color-bg-base:    var(--color-p-gray-50);
+  --color-bg-surface: var(--color-p-white);
+  --color-bg-muted:   var(--color-p-gray-100);
+
+  /* State */
+  --color-state-success:       var(--color-p-green-500);
+  --color-state-success-light: var(--color-p-green-50);
+  --color-state-warning:       var(--color-p-amber-400);
+  --color-state-error:         var(--color-p-red-500);
+  --color-state-error-light:   var(--color-p-red-50);
+
+  /* ROI 손익 — ROI 화면 전용 */
+  --color-roi-profit:       var(--color-p-indigo-400);
+  --color-roi-profit-light: var(--color-p-indigo-50);
+  --color-roi-loss:         var(--color-p-gray-900);
+  --color-roi-loss-light:   var(--color-p-gray-50);
+
+  /* Text */
+  --color-text-default:   var(--color-p-gray-900);
+  --color-text-secondary: var(--color-p-gray-500);
+  --color-text-muted:     var(--color-p-gray-400);
+  --color-text-inverse:   var(--color-p-white);
+  --color-text-primary:   var(--color-p-indigo-400);
+
+  /* Neutral scale */
+  --color-neutral-900: var(--color-p-gray-900);
+  --color-neutral-700: var(--color-p-gray-700);
+  --color-neutral-500: var(--color-p-gray-500);
+  --color-neutral-400: var(--color-p-gray-400);
+  --color-neutral-300: var(--color-p-gray-300);
+  --color-neutral-100: var(--color-p-gray-100);
+  --color-neutral-50:  var(--color-p-gray-50);
+  --color-neutral-0:   var(--color-p-white);
+
+  /* Line / Border */
+  --color-line-default: var(--color-p-black-07);
+  --color-line-strong:  var(--color-p-black-15);
+  --color-line-primary: var(--color-p-indigo-400);
+  --color-border-strong: var(--color-p-gray-500);
+
+  /* Diet tints — diet.tsx 전용 */
+  --color-diet-tint-orange: var(--color-p-orange-400);
+  --color-diet-tint-yellow: var(--color-p-yellow-400);
+  --color-diet-tint-purple: var(--color-p-purple-500);
+  --color-diet-tint-indigo: var(--color-p-indigo-300);
+}

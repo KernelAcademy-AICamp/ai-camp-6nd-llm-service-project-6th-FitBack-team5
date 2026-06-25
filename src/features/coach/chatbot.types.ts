@@ -19,7 +19,7 @@ export interface FollowupAction {
   label: string;
 }
 
-export interface PlanItem { name: string; sets: number; reps: number }
+export interface PlanItem { name: string; sets: number; reps: number; source?: string }
 export interface PlanBody { focus_part: string; items: PlanItem[]; duration_min: number }
 
 export interface DietMeal { time: string; menu: string; kcal: number }
@@ -35,6 +35,8 @@ interface BaseResponse {
   coach_message: string;
   caution: string | null;
   followup: FollowupAction;
+  /** 추천 액션 칩(퀵 리플라이) — 텍스트 아래 버튼 묶음. 선택(검증기 비파괴). */
+  actions?: FollowupAction[];
 }
 
 export interface PlanResponse extends BaseResponse { intent: 'plan'; body: PlanBody }

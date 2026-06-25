@@ -124,6 +124,25 @@ export async function filterCandidates(input: RoutineInput): Promise<CandidateRo
   return Array.from(merged.values());
 }
 
+/** 코치 챗봇 RAG-lite용 후보 — 회피 부위 제외, 이름·부위·강도만(LLM 출처 grounding). */
+export interface CoachCandidate {
+  name: string;
+  body_region: string | null;
+  target_parts: string[];
+  intensity: number;
+}
+
+/** 운동 라이브러리에서 회피 부위(금기)를 제외한 후보를 압축 조회. 챗봇 plan 인텐트 grounding용. */
+export async function fetchCoachCandidates(avoidParts: string[]): Promise<CoachCandidate[]> {
+  let q = supabase.from('exercises').select('name, body_region, target_parts, intensity');
+  for (const p of avoidParts) {
+    q = q.not('contraindicated_parts', 'cs', `{${p}}`);
+  }
+  const { data, error } = await q.limit(40);
+  if (error) throw error;
+  return (data ?? []) as CoachCandidate[];
+}
+
 /** 선택된 ID 들의 전체 데이터 조회. */
 export async function fetchExercisesByIds(ids: string[]): Promise<ExerciseRow[]> {
   if (ids.length === 0) return [];

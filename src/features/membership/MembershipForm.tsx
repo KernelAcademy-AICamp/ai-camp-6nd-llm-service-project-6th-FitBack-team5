@@ -1,9 +1,9 @@
-import * as ImagePicker from 'expo-image-picker';
 import { Camera, Check, MapPin, Search, X } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -11,17 +11,20 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { sheetPresentation } from '@/components/modal-presentation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { formatNumber } from '@/features/membership/dashboard';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
+import { KakaoMap } from '@/features/membership/KakaoMap';
 import { searchPlaces, type GeoResult } from '@/features/membership/useGeocode';
 import { getPosition } from '@/features/membership/location';
-import { recognizeText } from '@/features/membership/ocr';
-import { parseReceipt } from '@/features/membership/parseReceipt';
+import { recognizeReceipt } from '@/features/membership/receiptOcr';
+import { pickFoodImage } from '@/features/diet/pickFoodImage';
 import {
   computeEndDate,
   isValidDate,
@@ -84,6 +87,7 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
   const [maxVisits, setMaxVisits] = useState('');
   const [weeklyGoal, setWeeklyGoal] = useState(''); // 기간권 주당 목표
   const [usedScan, setUsedScan] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [centerName, setCenterName] = useState('');
   const [centerCoord, setCenterCoord] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -92,6 +96,7 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [focused, setFocused] = useState<string | null>(null);
 
@@ -127,19 +132,27 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
   ];
 
   async function scanReceipt() {
+    if (isScanning) return;
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({ quality: 1 });
-      if (res.canceled) return;
-      const text = await recognizeText(res.assets[0].uri);
-      const parsed = parseReceipt(text);
+      const img = await pickFoodImage('library');
+      if (!img) return; // 취소
+      setIsScanning(true); // 인식 처리 중 — 로딩 표시
+      const parsed = await recognizeReceipt(img.base64, img.mediaType);
       if (parsed.name) setName(parsed.name);
       if (parsed.cost != null) setCost(String(parsed.cost));
       if (parsed.startDate && isValidDate(parsed.startDate)) setStartDate(parsed.startDate);
       setUsedScan(true);
+      if (!parsed.name && parsed.cost == null && !parsed.startDate) {
+        const msg = '영수증에서 정보를 읽지 못했어요. 직접 입력해 주세요.';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('영수증 스캔', msg);
+      }
     } catch (e) {
       const msg = (e as Error).message;
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('영수증 스캔', msg);
+    } finally {
+      setIsScanning(false);
     }
   }
 
@@ -238,11 +251,23 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <Pressable
           onPress={scanReceipt}
-          style={({ pressed }) => [styles.scanBtn, pressed && styles.pressed]}>
-          <Icon icon={Camera} size={20} color={Palette.primary} />
-          <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-            영수증으로 자동입력
-          </ThemedText>
+          disabled={isScanning}
+          style={({ pressed }) => [styles.scanBtn, (pressed || isScanning) && styles.pressed]}>
+          {isScanning ? (
+            <>
+              <ActivityIndicator color={Palette.primary} />
+              <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                영수증 인식 중…
+              </ThemedText>
+            </>
+          ) : (
+            <>
+              <Icon icon={Camera} size={20} color={Palette.primary} />
+              <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                영수증으로 자동입력
+              </ThemedText>
+            </>
+          )}
         </Pressable>
 
         <Field label="회원권명" required error={nameError}>
@@ -376,61 +401,24 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
             style={inputStyle('centerName')}
           />
 
-          {/* 주소·장소 검색 → 좌표 (카카오) */}
-          <View style={styles.searchRow}>
-            <TextInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onFocus={() => setFocused('search')}
-              onBlur={() => setFocused(null)}
-              onSubmitEditing={runSearch}
-              returnKeyType="search"
-              placeholder="주소·장소 검색 (예: 강남 피트니스)"
-              placeholderTextColor={Palette.gray300}
-              style={[inputStyle('search'), styles.searchInput]}
-            />
-            <Pressable
-              onPress={runSearch}
-              disabled={searching}
-              style={({ pressed }) => [styles.searchBtn, pressed && styles.pressed]}
-              accessibilityLabel="검색">
-              {searching ? (
-                <ActivityIndicator color={Palette.white} />
-              ) : (
-                <Icon icon={Search} size={20} color={Palette.white} />
-              )}
-            </Pressable>
-          </View>
+          {/* 장소 검색 → 지도 검색 모달 열기 (빈 입력이어도 열림) */}
+          <Pressable
+            onPress={() => setSearchModalOpen(true)}
+            style={({ pressed }) => [styles.searchOpenBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="장소 검색">
+            <Icon icon={Search} size={18} color={Palette.primary} />
+            <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+              지도에서 센터 검색
+            </ThemedText>
+          </Pressable>
 
-          {searchError ? (
-            <View style={styles.fallbackRow}>
-              <ThemedText type="caption" themeColor="textSecondary" style={styles.fallbackText}>
-                {searchError}
-              </ThemedText>
-              <Pressable onPress={runAddressSearch} hitSlop={6}>
-                <ThemedText type="captionBold" style={{ color: Palette.primary }}>
-                  주소로 검색
-                </ThemedText>
-              </Pressable>
+          {/* 선택된 센터 — 지도 미리보기 */}
+          {centerCoord ? (
+            <View style={styles.mapPreview}>
+              <KakaoMap lat={centerCoord.lat} lng={centerCoord.lng} label={centerName || '센터'} height={140} />
             </View>
           ) : null}
-
-          {results.map((r, i) => (
-            <Pressable
-              key={`${r.lat}-${r.lng}-${i}`}
-              onPress={() => pickPlace(r)}
-              style={({ pressed }) => [styles.resultRow, pressed && styles.pressed]}>
-              <Icon icon={MapPin} size={16} color={Palette.gray500} />
-              <View style={styles.resultText}>
-                <ThemedText type="captionBold">{r.name}</ThemedText>
-                {r.address ? (
-                  <ThemedText type="label" themeColor="textSecondary">
-                    {r.address}
-                  </ThemedText>
-                ) : null}
-              </View>
-            </Pressable>
-          ))}
 
           <Pressable
             onPress={setCenterFromGPS}
@@ -479,6 +467,92 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
         }}
         onCancel={() => setPickerOpen(false)}
       />
+
+      {/* 지도 센터 검색 모달 */}
+      <Modal
+        visible={searchModalOpen}
+        animationType="slide"
+        presentationStyle={sheetPresentation}
+        onRequestClose={() => setSearchModalOpen(false)}>
+        <ThemedView style={styles.container}>
+          <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+            <View style={styles.header}>
+              <ThemedText type="h2">센터 검색</ThemedText>
+              <Pressable onPress={() => setSearchModalOpen(false)} hitSlop={8} accessibilityLabel="닫기">
+                <Icon icon={X} size={24} color={Palette.gray500} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+              <View style={styles.searchRow}>
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  onSubmitEditing={runSearch}
+                  returnKeyType="search"
+                  autoFocus
+                  placeholder="주소·장소 검색 (예: 강남 피트니스)"
+                  placeholderTextColor={Palette.gray300}
+                  style={[styles.input, styles.searchInput]}
+                />
+                <Pressable
+                  onPress={runSearch}
+                  disabled={searching}
+                  style={({ pressed }) => [styles.searchBtn, pressed && styles.pressed]}
+                  accessibilityLabel="검색">
+                  {searching ? (
+                    <ActivityIndicator color={Palette.white} />
+                  ) : (
+                    <Icon icon={Search} size={20} color={Palette.white} />
+                  )}
+                </Pressable>
+              </View>
+
+              {searchError ? (
+                <View style={styles.fallbackRow}>
+                  <ThemedText type="caption" themeColor="textSecondary" style={styles.fallbackText}>
+                    {searchError}
+                  </ThemedText>
+                  <Pressable onPress={runAddressSearch} hitSlop={6}>
+                    <ThemedText type="captionBold" style={{ color: Palette.primary }}>
+                      주소로 검색
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {/* 선택 위치 지도 미리보기 */}
+              {centerCoord ? (
+                <View style={styles.mapPreview}>
+                  <KakaoMap lat={centerCoord.lat} lng={centerCoord.lng} label={centerName || '센터'} height={160} />
+                </View>
+              ) : null}
+
+              {results.map((r, i) => (
+                <Pressable
+                  key={`${r.lat}-${r.lng}-${i}`}
+                  onPress={() => pickPlace(r)}
+                  style={({ pressed }) => [styles.resultRow, pressed && styles.pressed]}>
+                  <Icon icon={MapPin} size={16} color={Palette.gray500} />
+                  <View style={styles.resultText}>
+                    <ThemedText type="captionBold">{r.name}</ThemedText>
+                    {r.address ? (
+                      <ThemedText type="label" themeColor="textSecondary">
+                        {r.address}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                </Pressable>
+              ))}
+
+              <Button
+                label={centerCoord ? '이 센터로 설정' : '닫기'}
+                onPress={() => setSearchModalOpen(false)}
+                style={styles.submit}
+              />
+            </ScrollView>
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -498,6 +572,19 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   pressed: { opacity: 0.7 },
+  searchOpenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.button,
+    borderWidth: 1,
+    borderColor: Palette.lineStrong,
+    backgroundColor: Palette.bgSurface,
+  },
+  mapPreview: { marginTop: Spacing.sm, borderRadius: Radius.button, overflow: 'hidden' },
   scanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -544,18 +631,18 @@ const styles = StyleSheet.create({
   fallbackText: { flex: 1 },
   field: { gap: Spacing.sm },
   labelRow: { flexDirection: 'row', alignItems: 'center' },
-  required: { color: Palette.loss },
+  required: { color: Palette.error },
   errorText: { color: Palette.error },
   input: {
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: Palette.lineDefault,
     borderRadius: Radius.small,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     fontSize: 16,
     fontFamily: 'Pretendard',
     color: Palette.gray900,
-    backgroundColor: Palette.gray100,
+    backgroundColor: Palette.bgSurface,
     minHeight: 52,
     justifyContent: 'center',
   },
@@ -567,7 +654,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.sm,
     borderRadius: Radius.small,
-    backgroundColor: Palette.gray100,
+    borderWidth: 1,
+    borderColor: Palette.lineDefault,
+    backgroundColor: Palette.bgSurface,
   },
   segmentActive: { backgroundColor: Palette.primaryLight },
   activeText: { color: Palette.primary },

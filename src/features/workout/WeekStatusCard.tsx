@@ -85,7 +85,7 @@ export function WeekStatusCard({ selectedDate }: { selectedDate?: string }) {
 
 const styles = StyleSheet.create({
   card: {
-    padding: Spacing.md,
+    padding: Spacing.card,
     borderRadius: Radius.card,
     borderWidth: StyleSheet.hairlineWidth,
     gap: Spacing.sm,

@@ -26,6 +26,9 @@ const GOALS: { value: FitnessGoal; label: string }[] = [
   { value: 'habit', label: '습관 형성' },
 ];
 const goalLabel = (g: string | null) => GOALS.find((x) => x.value === g)?.label ?? '-';
+
+// 피해야 할 운동 부위 — exercises.contraindicated_parts 기준. 코치 운동 추천 회피에 사용.
+const AVOID_PARTS = ['목', '어깨', '허리', '무릎', '손목'];
 const genderLabel = (g: Gender | null) => (g === 'M' ? '남자' : g === 'F' ? '여자' : '-');
 const APP_VERSION = '1.0.0 (beta)';
 
@@ -68,11 +71,13 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
   const [eGender, setEGender] = useState<Gender | null>(null);
   const [eHeight, setEHeight] = useState('');
   const [eWeight, setEWeight] = useState('');
+  const [eAvoidParts, setEAvoidParts] = useState<string[]>([]);
   function startInfo() {
     setEAge(profile?.age != null ? String(profile.age) : '');
     setEGender(profile?.gender ?? null);
     setEHeight(profile?.height != null ? String(profile.height) : '');
     setEWeight(profile?.weight != null ? String(profile.weight) : '');
+    setEAvoidParts(profile?.avoid_exercise_parts ?? []);
     setEditInfo(true);
   }
   const saveInfo = useMutation({
@@ -84,6 +89,7 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
           gender: eGender,
           height: eHeight ? Number(eHeight) : null,
           weight: eWeight ? Number(eWeight) : null,
+          avoid_exercise_parts: eAvoidParts,
         })
         .eq('id', uid);
       if (error) throw error;
@@ -185,6 +191,10 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
                     <Row label="성별" value={genderLabel(profile?.gender ?? null)} />
                     <Row label="키" value={profile?.height != null ? `${profile.height} cm` : '-'} />
                     <Row label="몸무게" value={profile?.weight != null ? `${profile.weight} kg` : '-'} />
+                    <Row
+                      label="피해야 할 부위"
+                      value={profile?.avoid_exercise_parts?.length ? profile.avoid_exercise_parts.join(', ') : '없음'}
+                    />
                   </View>
                 ) : (
                   <View style={styles.editWrap}>
@@ -208,6 +218,25 @@ export function MyPanel({ onClose }: { onClose: () => void }) {
                     </Field>
                     <Field label="몸무게 (kg)">
                       <TextInput value={eWeight} onChangeText={(t) => setEWeight(t.replace(/[^0-9.]/g, ''))} keyboardType="numeric" placeholder="예: 58" placeholderTextColor={Palette.gray300} style={styles.input} />
+                    </Field>
+                    <Field label="피해야 할 운동 부위 (선택)">
+                      <View style={styles.goalGrid}>
+                        {AVOID_PARTS.map((p) => {
+                          const on = eAvoidParts.includes(p);
+                          return (
+                            <Pressable
+                              key={p}
+                              onPress={() =>
+                                setEAvoidParts((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]))
+                              }
+                              style={[styles.goalChip, on && styles.segOn]}>
+                              <ThemedText type={on ? 'captionBold' : 'caption'} style={on ? styles.activeText : undefined}>
+                                {p}
+                              </ThemedText>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
                     </Field>
                     <EditActions onCancel={() => setEditInfo(false)} onSave={() => saveInfo.mutate()} saving={saveInfo.isPending} />
                   </View>

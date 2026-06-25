@@ -1,5 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { Apple, ArrowLeft, ArrowUp, CalendarPlus, Camera, Check, Dumbbell, Flame, Sparkles, X } from 'lucide-react-native';
+import { Apple, ArrowLeft, ArrowUp, Calendar, CalendarPlus, Camera, Check, Dumbbell, Flame, History, Sparkles, Trash2, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,14 +22,17 @@ import { Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import { useProfile } from '@/features/auth/useProfile';
-import type { AppResponse, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
+import { deleteSession, loadSessions, saveSession, type ChatSession } from '@/features/coach/chatHistory';
+import type { AppResponse, DietResponse, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
+import { useAddMeal, type MealType } from '@/features/diet/useMeals';
 import { useAiFeedback } from '@/features/coach/useAiFeedback';
 import { useDietSummary } from '@/features/coach/useDietSummary';
 import { pickFoodImage } from '@/features/diet/pickFoodImage';
 import { useHomeActivity } from '@/features/home/useHomeActivity';
-import { useAddSchedule, type ScheduleType } from '@/features/home/useSchedules';
-import { computeRisk, sortByRisk, won } from '@/features/membership/dashboard';
+import { useAddSchedule, useSchedules, type ScheduleType } from '@/features/home/useSchedules';
+import { computeRisk, sortByRisk } from '@/features/membership/dashboard';
 import { useMemberships } from '@/features/membership/useMemberships';
+import { fetchCoachCandidates } from '@/features/workout/exercises';
 import { prepareSessionAudio } from '@/features/workout/start-session';
 import { useGenerateRoutine, type Routine, type RoutineInput } from '@/features/workout/useGenerateRoutine';
 import { useWorkoutSession } from '@/stores/workout-session';
@@ -49,34 +53,26 @@ interface ChatMsg {
 
 // ── Welcome screen option cards ──────────────────────────
 
-const WELCOME_OPTIONS = [
-  {
-    icon: Dumbbell,
-    label: '오늘 운동 추천해줘',
-    desc: '내 수준에 맞는 루틴을 짜드려요',
-    iconColor: Palette.primary,
-    bg: Palette.primaryLight,
-    message: null,
-    navigate: '/workout/coach' as const,
-  },
-  {
-    icon: Apple,
-    label: '식단 질문',
-    desc: '목표에 맞는 식단을 추천해요',
-    iconColor: Palette.gray500,
-    bg: Palette.bgMuted,
-    message: '오늘 식단 추천해줘',
-  },
-  {
-    icon: Camera,
-    label: '식단 사진 분석',
-    desc: '음식 사진으로 칼로리를 분석해요',
-    iconColor: Palette.gray500,
-    bg: Palette.bgMuted,
-    message: null,
-    photoAction: true as const,
-  },
+// 빠른 실행 칩 — 기능 동일, UI만 태그 칩. action으로 동작 분기.
+const WELCOME_OPTIONS: {
+  icon: LucideIcon;
+  label: string;
+  action: 'workout' | 'photo' | 'message';
+  message?: string;
+}[] = [
+  { icon: TrendingUp, label: '회원권 활용도', action: 'message', message: '내 회원권 활용도 어때?' },
+  { icon: Dumbbell, label: '오늘 운동 추천', action: 'workout' },
+  { icon: Apple, label: '식단 추천', action: 'message', message: '오늘 식단 추천해줘' },
+  { icon: Camera, label: '식단 사진 분석', action: 'photo' },
+  { icon: Calendar, label: '내 일정 확인', action: 'message', message: '이번 주 일정 알려줘' },
 ];
+
+/** 히스토리 목록 시각 표기: "6/26 14:41" */
+function fmtSessionTime(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 // ── Workout coach inline flow ─────────────────────────────
 
@@ -153,23 +149,29 @@ function AddToScheduleButton({
 }) {
   const add = useAddSchedule();
   const [added, setAdded] = useState(false);
+  const [failed, setFailed] = useState(false);
   const now = new Date();
   const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+  const color = added ? Palette.profit : failed ? Palette.error : Palette.primary;
   return (
     <Pressable
       onPress={() => {
         if (added || add.isPending) return;
+        setFailed(false);
         logEvent(EVENTS.recommendClick, { type, title });
-        add.mutate({ date: ymd, type, title, payload, source: 'ai' }, { onSuccess: () => setAdded(true) });
+        add.mutate(
+          { date: ymd, type, title, payload, source: 'ai' },
+          { onSuccess: () => setAdded(true), onError: () => setFailed(true) },
+        );
       }}
       disabled={added || add.isPending}
-      style={({ pressed }) => [addSchedStyles.btn, pressed && { opacity: 0.6 }, added && addSchedStyles.done]}
+      style={({ pressed }) => [addSchedStyles.btn, pressed && { opacity: 0.6 }, added && addSchedStyles.done, failed && addSchedStyles.fail]}
       accessibilityRole="button"
       accessibilityLabel={added ? '오늘 일정에 추가됨' : '오늘 일정에 추가'}>
-      <Icon icon={added ? Check : CalendarPlus} size={14} color={added ? Palette.profit : Palette.primary} />
-      <ThemedText type="label" style={{ color: added ? Palette.profit : Palette.primary }}>
-        {added ? '오늘 일정에 추가됨' : '오늘 일정에 추가'}
+      <Icon icon={added ? Check : CalendarPlus} size={14} color={color} />
+      <ThemedText type="label" style={{ color }}>
+        {added ? '오늘 일정에 추가됨' : failed ? '추가 실패 · 다시 시도' : '오늘 일정에 추가'}
       </ThemedText>
     </Pressable>
   );
@@ -187,6 +189,118 @@ const addSchedStyles = StyleSheet.create({
     borderColor: Palette.primary,
   },
   done: { borderColor: Palette.profit },
+  fail: { borderColor: Palette.error },
+});
+
+// ── "오늘 식단으로 기록" — 끼니 선택 후 실제 DB 저장 ────────
+const DIET_TIME_OPTIONS = ['아침', '점심', '저녁', '오늘'] as const;
+type DietTimeOption = typeof DIET_TIME_OPTIONS[number];
+
+function DietLogButton({
+  meals,
+  totalKcal,
+  proteinG,
+}: {
+  meals: DietResponse['body']['meals'];
+  totalKcal: number;
+  proteinG: number;
+}) {
+  const addMeal = useAddMeal();
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [savedTime, setSavedTime] = useState<DietTimeOption | null>(null);
+
+  async function handleSave(time: DietTimeOption) {
+    if (status !== 'idle') return;
+    const toSave = time === '오늘' ? meals : meals.filter((m) => m.time === time);
+    if (!toSave.length) return;
+    setSavedTime(time);
+    setStatus('saving');
+    try {
+      for (const m of toSave) {
+        // protein 비례 추정, carb/fat은 AI 응답에 없어 0으로 저장
+        await addMeal.mutateAsync({
+          mealType: m.time as MealType,
+          name: m.menu,
+          kcal: m.kcal,
+          carb: 0,
+          protein: totalKcal > 0 ? Math.round((m.kcal / totalKcal) * proteinG) : 0,
+          fat: 0,
+          inputMethod: 'manual',
+        });
+      }
+      setStatus('saved');
+    } catch {
+      setStatus('error');
+    }
+  }
+
+  if (status === 'saved') {
+    return (
+      <View style={dietLogStyles.savedRow}>
+        <Icon icon={Check} size={16} color={Palette.profit} />
+        <ThemedText type="captionBold" style={{ color: Palette.profit }}>
+          {savedTime === '오늘' ? '오늘 식단이 기록됐어요!' : `${savedTime} 식단이 기록됐어요!`}
+        </ThemedText>
+      </View>
+    );
+  }
+
+  // 처음부터 끼니 칩을 바로 표시 (클릭 2단계 없음)
+  return (
+    <View style={dietLogStyles.pickerWrap}>
+      <ThemedText type="label" themeColor="textSecondary">
+        {status === 'saving' ? '저장 중…' : '오늘 식단으로 기록'}
+      </ThemedText>
+      <View style={dietLogStyles.chipRow}>
+        {DIET_TIME_OPTIONS.map((t) => {
+          const hasMeals = t === '오늘' ? meals.length > 0 : meals.some((m) => m.time === t);
+          return (
+            <Pressable
+              key={t}
+              onPress={() => handleSave(t)}
+              disabled={!hasMeals || status === 'saving'}
+              style={({ pressed }) => [
+                dietLogStyles.chip,
+                !hasMeals && dietLogStyles.chipDisabled,
+                pressed && { opacity: 0.7 },
+                status === 'saving' && { opacity: 0.4 },
+              ]}
+              accessibilityRole="button">
+              <ThemedText type="captionBold" style={{ color: hasMeals ? Palette.primary : Palette.gray300 }}>
+                {t}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
+      </View>
+      {status === 'error' && (
+        <ThemedText type="label" style={{ color: Palette.error }}>
+          저장에 실패했어요. 다시 시도해주세요.
+        </ThemedText>
+      )}
+    </View>
+  );
+}
+
+const dietLogStyles = StyleSheet.create({
+  pickerWrap: {
+    gap: Spacing.sm, padding: Spacing.md,
+    backgroundColor: Palette.primaryLight,
+    borderRadius: Radius.button, alignSelf: 'stretch',
+  },
+  chipRow: { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap' },
+  chip: {
+    borderWidth: 1, borderColor: Palette.primary,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    backgroundColor: Palette.bgSurface,
+  },
+  chipDisabled: { borderColor: Palette.gray300, backgroundColor: Palette.bgSurface },
+  savedRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
+    padding: Spacing.md, backgroundColor: Palette.successLight,
+    borderRadius: Radius.button, alignSelf: 'stretch',
+  },
 });
 
 function ResponseBody({ response }: { response: AppResponse }) {
@@ -207,12 +321,20 @@ function ResponseBody({ response }: { response: AppResponse }) {
         {items.map((item, i) => (
           <View key={i} style={styles.exerciseRow}>
             <NumCircle n={i + 1} />
-            <ThemedText type="caption" style={{ flex: 1 }}>{item.name}</ThemedText>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="caption">{item.name}</ThemedText>
+              {item.source && item.source !== item.name ? (
+                <ThemedText type="label" themeColor="textSecondary">📚 {item.source}</ThemedText>
+              ) : null}
+            </View>
             <ThemedText type="caption" themeColor="textSecondary">
               {item.sets}세트 × {item.reps}회
             </ThemedText>
           </View>
         ))}
+        {items.some((it) => it.source) ? (
+          <ThemedText type="label" themeColor="textSecondary">📚 운동 라이브러리 기반 추천</ThemedText>
+        ) : null}
         <AddToScheduleButton type="workout" title={`${focus_part} 루틴`} payload={{ items, duration_min }} />
       </View>
     );
@@ -287,7 +409,7 @@ function ResponseBody({ response }: { response: AppResponse }) {
 
 // ── Main component ───────────────────────────────────────
 
-export function CoachChat({ onClose }: { onClose: () => void }) {
+export function CoachChat({ onClose, initialMessage }: { onClose: () => void; initialMessage?: string }) {
   const router = useRouter();
   const { summary } = useDietSummary();
   const { data: home } = useHomeActivity();
@@ -295,13 +417,63 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   const { data: memberships } = useMemberships();
   const aiFeedback = useAiFeedback();
 
-  const [view, setView] = useState<'welcome' | 'chat'>('welcome');
+  const [view, setView] = useState<'welcome' | 'chat' | 'history'>('welcome');
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
+
+  // 채팅 히스토리(로컬 영속화) — 사용자별 키.
+  const userKey = profile?.id ?? 'local';
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
 
   // 코치 진입 이벤트(1회)
   useEffect(() => {
     logEvent(EVENTS.coachOpen);
+  }, []);
+
+  // 대화가 시작되면 세션 id 부여.
+  useEffect(() => {
+    if (!sessionId && messages.some((m) => !m.isLoading && m.text.trim().length > 0)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSessionId(`${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    }
+  }, [messages, sessionId]);
+
+  // 메시지 변동 시 현재 세션을 로컬에 저장(로딩 메시지 제외).
+  useEffect(() => {
+    if (!sessionId) return;
+    const settled = messages.filter((m) => !m.isLoading && (m.text.trim() || m.response || m.wcRoutineResult));
+    if (settled.length === 0) return;
+    const title = messages.find((m) => m.role === 'user' && m.text.trim())?.text.slice(0, 30) ?? '새 대화';
+    void saveSession(userKey, {
+      id: sessionId,
+      title,
+      updatedAt: Date.now(),
+      messages: settled.map((m) => ({ role: m.role, text: m.text, response: m.response, wcRoutineResult: m.wcRoutineResult })),
+    });
+  }, [messages, sessionId, userKey]);
+
+  function openHistory() {
+    void loadSessions(userKey).then(setSessions);
+    setView('history');
+  }
+  function openSession(s: ChatSession) {
+    setMessages(s.messages as ChatMsg[]);
+    setSessionId(s.id);
+    setWcMode(false);
+    setView('chat');
+  }
+  async function removeSession(id: string) {
+    await deleteSession(userKey, id);
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  // initialMessage가 있으면 마운트 직후 자동 전송
+  useEffect(() => {
+    if (!initialMessage) return;
+    const t = setTimeout(() => send(initialMessage), 150);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Workout coach inline flow state
@@ -338,14 +510,40 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     : risk.level === 'warning' ? Palette.warning
     : Palette.gray500;
 
-  const riskBg = !risk ? Palette.bgMuted
-    : risk.level === 'safe' ? Palette.profitLight
-    : Palette.bgSurface;
+  // 일정(캘린더) 컨텍스트 — 오늘 + 앞으로 7일 예정. 챗봇이 중복 추천을 피하고 예정 일정을 참고.
+  const now0 = new Date();
+  const { data: monthSchedules } = useSchedules(now0.getFullYear(), now0.getMonth() + 1);
+  const scheduleCtx = useMemo(() => {
+    const all = monthSchedules ?? [];
+    if (all.length === 0) return null;
+    const ymd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const WD = ['일', '월', '화', '수', '목', '금', '토'];
+    const when = (iso: string) => {
+      const d = new Date(`${iso}T00:00:00`);
+      return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`;
+    };
+    const today = new Date();
+    const todayYmd = ymd(today);
+    const cut = new Date(today);
+    cut.setDate(cut.getDate() + 7);
+    const cutYmd = ymd(cut);
+    const todayItems = all
+      .filter((s) => s.date === todayYmd)
+      .map((s) => ({ when: when(s.date), type: s.type, title: s.title, status: s.status }));
+    const upcoming = all
+      .filter((s) => s.date > todayYmd && s.date <= cutYmd && s.status === 'planned')
+      .map((s) => ({ when: when(s.date), type: s.type, title: s.title }));
+    if (todayItems.length === 0 && upcoming.length === 0) return null;
+    return { today: todayItems, upcoming };
+  }, [monthSchedules]);
 
-  const riskLabel = !risk ? ''
-    : risk.level === 'danger' ? '위험'
-    : risk.level === 'warning' ? '주의'
-    : risk.level === 'safe' ? '안전' : '';
+  // RAG-lite: 운동 라이브러리 후보(회피 부위 제외) — plan 인텐트 grounding + 출처 표시용.
+  const { data: exerciseCandidates } = useQuery({
+    queryKey: ['coach-exercise-candidates', profile?.avoid_exercise_parts],
+    staleTime: 1000 * 60 * 30,
+    queryFn: () => fetchCoachCandidates(profile?.avoid_exercise_parts ?? []),
+  });
 
   function buildContext(): Record<string, unknown> {
     const ctx: Record<string, unknown> = {};
@@ -362,6 +560,8 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     }
     if (home) { ctx.streak_weeks = home.streakWeeks; ctx.week_visits = home.weekVisits; }
     if (risk) { ctx.membership_risk = risk.level; ctx.value_at_risk = risk.valueAtRisk; ctx.remaining_days = risk.remainingDays; }
+    if (scheduleCtx) ctx.schedule = scheduleCtx;
+    if (exerciseCandidates?.length) ctx.exercise_candidates = exerciseCandidates;
     return ctx;
   }
 
@@ -376,10 +576,37 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
   }
 
   function callAI(message: string, questionAnswer?: string) {
+    // 멀티턴 — 직전 대화 최근 6턴. 코치 멘트(text)뿐 아니라 구조화 응답(루틴/식단/사진)의
+    // 실제 내용까지 요약해 history에 넣어야 "두 번째 운동 설명해줘" 같은 후속질문이 이어진다.
+    const history = messages
+      .filter((m) => !m.isLoading)
+      .map((m) => {
+        let text = m.text?.trim() ?? '';
+        const r = m.response;
+        if (r) {
+          if (r.intent === 'plan') {
+            text += ` [추천 루틴 ${r.body.focus_part}: ${r.body.items
+              .map((it, i) => `${i + 1}.${it.name} ${it.sets}x${it.reps}`)
+              .join(', ')}]`;
+          } else if (r.intent === 'diet') {
+            text += ` [추천 식단: ${r.body.meals.map((mm) => `${mm.time} ${mm.menu}`).join(', ')}]`;
+          } else if (r.intent === 'photo') {
+            text += ` [사진 분석: ${r.body.foods.map((f) => f.name).join(', ')} 총 ${r.body.total_kcal}kcal]`;
+          }
+        }
+        if (m.wcRoutineResult) {
+          text += ` [추천 루틴: ${m.wcRoutineResult.exercises
+            .map((e, i) => `${i + 1}.${e.name} ${e.detail}`)
+            .join(', ')}]`;
+        }
+        return { role: m.role, text: text.trim() };
+      })
+      .filter((h) => h.text.length > 0)
+      .slice(-6);
     setMessages((prev) => [...prev, { role: 'coach', text: '', isLoading: true }]);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     aiFeedback.mutate(
-      { userContext: buildContext(), roi: buildRoi(), userMessage: message, questionAnswer },
+      { userContext: buildContext(), roi: buildRoi(), userMessage: message, questionAnswer, history },
       {
         onSuccess: (data) => {
           setMessages((prev) => {
@@ -407,6 +634,33 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     if (view === 'welcome') setView('chat');
     setMessages((prev) => [...prev, { role: 'user', text: q }]);
     callAI(q);
+  }
+
+  // 추천 액션 칩(퀵 리플라이) — 딥링크형은 화면 이동, 그 외는 템플릿 질문 전송.
+  function handleAction(a: FollowupAction) {
+    const { type, label } = a;
+    if (type === 'log_workout' || type === 'view_plan') {
+      onClose();
+      router.navigate('/workout' as never);
+    } else if (type === 'view_diet' || type === 'log_meal') {
+      onClose();
+      router.navigate('/diet' as never);
+    } else if (type === 'book_session') {
+      onClose();
+      router.navigate('/membership' as never);
+    } else {
+      send(label);
+    }
+  }
+
+  // 정적 케이스 버튼 — LLM이 actions를 안 줄 때(미배포 포함) general 응답에 기본 칩 부착.
+  function fallbackActions(intent: string): FollowupAction[] {
+    if (intent !== 'general') return [];
+    return [
+      { type: 'ask_question', label: '오늘 운동 추천' },
+      { type: 'ask_question', label: '이번 주 일정 알려줘' },
+      { type: 'book_session', label: '회원권 보기' },
+    ];
   }
 
   // ── Photo analysis handler ────────────────────────────
@@ -590,6 +844,45 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
 
 
 
+  // ── History screen ────────────────────────────────────
+
+  if (view === 'history') {
+    return (
+      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.topBar}>
+          <Pressable
+            onPress={() => setView(messages.length ? 'chat' : 'welcome')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="뒤로">
+            <Icon icon={ArrowLeft} size={22} color={Palette.gray500} />
+          </Pressable>
+          <ThemedText type="subtitle">이전 대화</ThemedText>
+          <View style={{ width: 22 }} />
+        </View>
+        <ScrollView contentContainerStyle={styles.welcomeBody} showsVerticalScrollIndicator={false}>
+          {sessions.length === 0 ? (
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.disclaimer}>
+              저장된 대화가 없어요.
+            </ThemedText>
+          ) : (
+            sessions.map((s) => (
+              <View key={s.id} style={styles.historyRow}>
+                <Pressable style={styles.historyMain} onPress={() => openSession(s)} accessibilityRole="button">
+                  <ThemedText type="captionBold" numberOfLines={1}>{s.title}</ThemedText>
+                  <ThemedText type="label" themeColor="textSecondary">{fmtSessionTime(s.updatedAt)}</ThemedText>
+                </Pressable>
+                <Pressable onPress={() => removeSession(s.id)} hitSlop={8} accessibilityRole="button" accessibilityLabel="삭제">
+                  <Icon icon={Trash2} size={16} color={Palette.gray500} />
+                </Pressable>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
   // ── Welcome screen ────────────────────────────────────
 
   if (view === 'welcome') {
@@ -600,9 +893,14 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
             <Icon icon={Sparkles} size={13} color={Palette.primary} />
             <ThemedText type="label" style={{ color: Palette.primary }}>AI 피트니스</ThemedText>
           </View>
-          <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
-            <Icon icon={X} size={22} color={Palette.gray500} />
-          </Pressable>
+          <View style={styles.topRight}>
+            <Pressable onPress={openHistory} hitSlop={8} accessibilityRole="button" accessibilityLabel="이전 대화 보기">
+              <Icon icon={History} size={20} color={Palette.gray500} />
+            </Pressable>
+            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
+              <Icon icon={X} size={22} color={Palette.gray500} />
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.welcomeBody} showsVerticalScrollIndicator={false}>
@@ -613,77 +911,45 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
             </View>
             <View style={{ gap: 2 }}>
               <ThemedText type="label" themeColor="textSecondary">안녕하세요!</ThemedText>
-              <ThemedText type="subtitle">회원권 본전 챙기는 피트니스예요</ThemedText>
+              <ThemedText type="subtitle">회원권 활용도를 챙기는 AI 코치예요</ThemedText>
             </View>
           </View>
 
-          {/* ROI card */}
-          {risk && membership ? (
-            <View style={[styles.roiCard, { backgroundColor: riskBg }]}>
-              <View style={styles.roiCardHead}>
-                <ThemedText type="label" themeColor="textSecondary">내 회원권 활용도</ThemedText>
-                {riskLabel ? (
-                  <View style={[styles.riskBadge, { borderColor: riskColor }]}>
-                    <ThemedText type="label" style={{ color: riskColor }}>{riskLabel}</ThemedText>
-                  </View>
-                ) : null}
-              </View>
-              {risk.hasSessions ? (
-                <>
-                  <ThemedText type="h1" themeColor="text">
-                    활용률 {Math.round(risk.sessionFilledRatio * 100)}%
-                  </ThemedText>
-                  <ThemedText type="label" themeColor="textSecondary">
-                    {membership.name} {risk.usedSessions}회 완료 · D-{risk.remainingDays}
-                  </ThemedText>
-                  <View style={styles.progressTrack}>
-                    <View style={[styles.progressFill, {
-                      flex: Math.max(0.001, risk.sessionFilledRatio),
-                      backgroundColor: riskColor,
-                    }]} />
-                    <View style={{ flex: Math.max(0.001, 1 - risk.sessionFilledRatio) }} />
-                  </View>
-                  {risk.valueAtRisk > 0 ? (
-                    <ThemedText type="label" style={{ color: riskColor }}>
-                      ⚠ 지금 페이스면 {won(risk.valueAtRisk)}이 날아져요
-                    </ThemedText>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <ThemedText type="h1" themeColor="text">D-{risk.remainingDays}</ThemedText>
-                  <ThemedText type="label" themeColor="textSecondary">{membership.name}</ThemedText>
-                </>
-              )}
+          {/* 코치 소개 — 첫 진입 시 무엇을 돕는지 안내 */}
+          <View style={styles.introCard}>
+            <ThemedText type="caption" style={styles.introText}>
+              저는 회원권이 그냥 사라지지 않게 옆에서 챙기는 코치예요.{'\n'}이런 걸 도와드려요.
+            </ThemedText>
+            <View style={styles.introList}>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.introText}>· 회원권 활용도·만료 — 얼마 남았고 얼마나 활용했는지</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.introText}>· 오늘 운동 추천 — 내 상황에 맞는 루틴(운동 라이브러리 기반)</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.introText}>· 식단 추천·사진 분석 — 목표에 맞춰</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.introText}>· 내 일정 확인 — 이번 주 뭐가 잡혀있는지</ThemedText>
             </View>
-          ) : null}
+            <ThemedText type="caption" style={styles.introText}>무엇이든 편하게 물어보세요.</ThemedText>
+          </View>
 
-          {/* Option cards */}
+          {/* 빠른 실행 — 태그 칩 (가로 배열·넘치면 줄바꿈) */}
           <ThemedText type="body" style={{ marginTop: Spacing.sm }}>무엇을 도와드릴까요?</ThemedText>
-          <View style={styles.optionsList}>
+          <View style={styles.chipsWrap}>
             {WELCOME_OPTIONS.map((opt) => (
               <Pressable
                 key={opt.label}
-                style={({ pressed }) => [styles.optionCard, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.welcomeChip, pressed && styles.pressed]}
                 onPress={() => {
-                  if ('navigate' in opt) { initWorkoutCoach(); return; }
-                  if ('photoAction' in opt) { setShowPhotoSource(true); return; }
-                  send((opt as { message: string }).message);
+                  if (opt.action === 'workout') initWorkoutCoach();
+                  else if (opt.action === 'photo') setShowPhotoSource(true);
+                  else if (opt.message) send(opt.message);
                 }}
                 accessibilityRole="button">
-                <View style={[styles.optionIconWrap, { backgroundColor: opt.bg }]}>
-                  <Icon icon={opt.icon} size={20} color={opt.iconColor} />
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <ThemedText type="captionBold">{opt.label}</ThemedText>
-                  <ThemedText type="label" themeColor="textSecondary">{opt.desc}</ThemedText>
-                </View>
+                <Icon icon={opt.icon} size={15} color={Palette.primary} />
+                <ThemedText type="captionBold">{opt.label}</ThemedText>
               </Pressable>
             ))}
           </View>
 
           <ThemedText type="label" themeColor="textSecondary" style={styles.disclaimer}>
-            회원님의 운동·회원권 기록을 기반으로 답해요
+            회원님의 운동·회원권 기록을 기반으로 답해요.{'\n'}AI 답변은 제한된 데이터에 근거하니 참고용으로 확인해 주세요.
           </ThemedText>
         </ScrollView>
 
@@ -724,9 +990,14 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Header */}
       <View style={styles.topBar}>
-        <Pressable onPress={() => setView('welcome')} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Icon icon={ArrowLeft} size={22} color={Palette.gray500} />
-        </Pressable>
+        <View style={styles.topRight}>
+          <Pressable onPress={() => setView('welcome')} hitSlop={8} accessibilityRole="button" accessibilityLabel="뒤로">
+            <Icon icon={ArrowLeft} size={22} color={Palette.gray500} />
+          </Pressable>
+          <Pressable onPress={openHistory} hitSlop={8} accessibilityRole="button" accessibilityLabel="이전 대화 보기">
+            <Icon icon={History} size={20} color={Palette.gray500} />
+          </Pressable>
+        </View>
         <View style={styles.topCenter}>
           <View style={styles.pill}>
             <Icon icon={Sparkles} size={13} color={Palette.primary} />
@@ -836,44 +1107,53 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                 <>
                   <ResponseBody response={m.response} />
 
-                  {/* Info box: coach message text */}
-                  <View style={styles.coachInfoBox}>
-                    <ThemedText type="caption" style={{ color: Palette.primary, lineHeight: 22 }}>
+                  {/* 코치 답변 — 검정 글자, 박스 없이(채널톡 스타일) */}
+                  <View style={styles.coachAnswer}>
+                    <ThemedText type="caption" style={styles.coachAnswerText}>
                       {m.text}
                     </ThemedText>
                   </View>
 
-                  {/* Caution */}
+                  {/* Caution — 박스 유지, 텍스트 크기는 답변과 동일(caption) */}
                   {m.response.caution ? (
                     <View style={styles.caution}>
-                      <ThemedText type="label" style={styles.cautionText}>
+                      <ThemedText type="caption" style={styles.cautionText}>
                         ⚠ {m.response.caution}
                       </ThemedText>
                     </View>
                   ) : null}
 
                   {/* Followup button — routes by type.
-                      followup이 구버전 string으로 올 경우도 방어 처리. */}
+                      followup이 구버전 string으로 올 경우도 방어 처리.
+                      diet + log_meal 조합은 DietLogButton으로 대체. */}
                   {m.response.followup && !isThinking ? (() => {
                     const raw = m.response.followup;
                     const followupObj = typeof raw === 'string'
                       ? { type: 'ask_question' as const, label: raw as string }
                       : raw as FollowupAction;
                     if (!followupObj.label) return null;
+
+                    // 맥락화 — 실행형 버튼(기록/보기)은 해당 카드가 있을 때만. general(설명·조회)엔 숨김.
+                    const EXEC_TYPES = ['log_workout', 'view_plan', 'log_meal', 'view_diet'];
+                    if (m.response.intent === 'general' && EXEC_TYPES.includes(followupObj.type)) return null;
+
+                    // 식단 기록 → 끼니 선택 후 실제 DB 저장
+                    if (m.response.intent === 'diet' && followupObj.type === 'log_meal') {
+                      const dietBody = (m.response as DietResponse).body;
+                      return (
+                        <DietLogButton
+                          meals={dietBody.meals}
+                          totalKcal={dietBody.target_kcal}
+                          proteinG={dietBody.protein_g}
+                        />
+                      );
+                    }
+
                     return (
                       <Pressable
                         onPress={() => {
-                          const { type, label } = followupObj;
-                          console.log('[analytics] followup_tap', { type, intent: m.response!.intent });
-                          if (type === 'log_workout' || type === 'view_plan') {
-                            onClose(); router.navigate('/workout' as never);
-                          } else if (type === 'view_diet' || type === 'log_meal') {
-                            onClose(); router.navigate('/diet' as never);
-                          } else if (type === 'book_session') {
-                            onClose(); router.navigate('/membership' as never);
-                          } else {
-                            send(label);
-                          }
+                          console.log('[analytics] followup_tap', { type: followupObj.type, intent: m.response!.intent });
+                          handleAction(followupObj);
                         }}
                         style={({ pressed }) => [styles.followupBtn, pressed && styles.pressed]}
                         accessibilityRole="button">
@@ -881,6 +1161,27 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
                           {followupObj.label}
                         </ThemedText>
                       </Pressable>
+                    );
+                  })() : null}
+
+                  {/* 추천 액션 칩(퀵 리플라이) — actions 우선, 없으면 general 기본 칩. followup과 중복 라벨 제외. */}
+                  {!isThinking ? (() => {
+                    const followLabel = typeof m.response.followup === 'string' ? m.response.followup : m.response.followup?.label;
+                    const chips = (m.response.actions?.length ? m.response.actions : fallbackActions(m.response.intent))
+                      .filter((a) => a.label && a.label !== followLabel);
+                    if (chips.length === 0) return null;
+                    return (
+                      <View style={styles.actionChips}>
+                        {chips.slice(0, 3).map((a, idx) => (
+                          <Pressable
+                            key={`${a.label}-${idx}`}
+                            onPress={() => handleAction(a)}
+                            style={({ pressed }) => [styles.actionChip, pressed && styles.pressed]}
+                            accessibilityRole="button">
+                            <ThemedText type="label" style={{ color: Palette.primary }}>{a.label}</ThemedText>
+                          </Pressable>
+                        ))}
+                      </View>
                     );
                   })() : null}
                 </>
@@ -974,7 +1275,7 @@ export function CoachChat({ onClose }: { onClose: () => void }) {
 // ── Styles ────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: Palette.bgSurface },
 
   // Header
   topBar: {
@@ -987,6 +1288,19 @@ const styles = StyleSheet.create({
     borderBottomColor: Palette.lineDefault,
   },
   topCenter: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.button,
+    borderWidth: 0.5,
+    borderColor: Palette.lineDefault,
+    backgroundColor: Palette.bgSurface,
+  },
+  historyMain: { flex: 1, gap: 2 },
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Palette.primaryLight,
@@ -1013,6 +1327,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   avatarImg: { width: 52, height: 52 },
+  introCard: {
+    backgroundColor: Palette.primaryLight,
+    borderRadius: Radius.card,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  introText: { lineHeight: 22, letterSpacing: -0.3 },
+  introList: { gap: 8, marginVertical: Spacing.sm },
   roiCard: {
     borderRadius: Radius.card, padding: Spacing.md, gap: Spacing.sm,
   },
@@ -1027,18 +1349,20 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.bgSurface,
   },
   progressFill: { height: 6 },
-  optionsList: { gap: Spacing.sm },
-  optionCard: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    backgroundColor: Palette.bgSurface,
-    borderWidth: 0.5, borderColor: Palette.lineDefault,
-    borderRadius: Radius.card, padding: Spacing.md,
+  // 빠른 실행 칩 (흰 배경 · 메인컬러 아이콘 · 가로 wrap)
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  welcomeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.lineDefault,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
-  optionIconWrap: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  disclaimer: { textAlign: 'center', marginTop: Spacing.xs },
+  disclaimer: { textAlign: 'center', marginTop: Spacing.xs, lineHeight: 18 },
 
   // Chat messages
   body: { padding: ScreenPadding, gap: Spacing.sm },
@@ -1072,15 +1396,14 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2,
   },
   exerciseRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  coachInfoBox: {
-    backgroundColor: Palette.primaryLight,
-    borderRadius: Radius.button, padding: Spacing.md, maxWidth: '92%',
-  },
+  // 코치 답변 — 박스 없이 검정 글자(채널톡 스타일)
+  coachAnswer: { maxWidth: '92%', paddingVertical: Spacing.xs },
+  coachAnswerText: { color: Palette.gray900, lineHeight: 22 },
   caution: {
     backgroundColor: Palette.errorLight,
     borderRadius: Radius.small, padding: Spacing.sm, maxWidth: '90%',
   },
-  cautionText: { color: Palette.error },
+  cautionText: { color: Palette.error, lineHeight: 22 },
 
   // Diet card
   dietMetrics: {
@@ -1100,6 +1423,16 @@ const styles = StyleSheet.create({
   photoComment: {
     marginTop: Spacing.xs, paddingTop: Spacing.xs,
     borderTopWidth: 0.5, borderTopColor: Palette.lineDefault,
+  },
+
+  // 추천 액션 칩(퀵 리플라이) — 모든 칩은 흰 배경으로 통일. (새 칩도 이 스타일을 재사용)
+  actionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, alignSelf: 'stretch' },
+  actionChip: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 0.5, borderColor: Palette.primary,
+    backgroundColor: Palette.white,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
   },
 
   // Followup button
@@ -1154,6 +1487,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     flexShrink: 0, borderWidth: 0.5, borderColor: Palette.lineStrong,
+    backgroundColor: Palette.white,
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.full,
   },
   inputBar: {
