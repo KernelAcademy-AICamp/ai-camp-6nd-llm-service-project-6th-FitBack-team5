@@ -1107,17 +1107,17 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
                 <>
                   <ResponseBody response={m.response} />
 
-                  {/* Info box: coach message text */}
-                  <View style={styles.coachInfoBox}>
-                    <ThemedText type="caption" style={{ color: Palette.primary, lineHeight: 22 }}>
+                  {/* 코치 답변 — 검정 글자, 박스 없이(채널톡 스타일) */}
+                  <View style={styles.coachAnswer}>
+                    <ThemedText type="caption" style={styles.coachAnswerText}>
                       {m.text}
                     </ThemedText>
                   </View>
 
-                  {/* Caution */}
+                  {/* Caution — 박스 유지, 텍스트 크기는 답변과 동일(caption) */}
                   {m.response.caution ? (
                     <View style={styles.caution}>
-                      <ThemedText type="label" style={styles.cautionText}>
+                      <ThemedText type="caption" style={styles.cautionText}>
                         ⚠ {m.response.caution}
                       </ThemedText>
                     </View>
@@ -1132,6 +1132,10 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
                       ? { type: 'ask_question' as const, label: raw as string }
                       : raw as FollowupAction;
                     if (!followupObj.label) return null;
+
+                    // 맥락화 — 실행형 버튼(기록/보기)은 해당 카드가 있을 때만. general(설명·조회)엔 숨김.
+                    const EXEC_TYPES = ['log_workout', 'view_plan', 'log_meal', 'view_diet'];
+                    if (m.response.intent === 'general' && EXEC_TYPES.includes(followupObj.type)) return null;
 
                     // 식단 기록 → 끼니 선택 후 실제 DB 저장
                     if (m.response.intent === 'diet' && followupObj.type === 'log_meal') {
@@ -1392,15 +1396,14 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2,
   },
   exerciseRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  coachInfoBox: {
-    backgroundColor: Palette.primaryLight,
-    borderRadius: Radius.button, padding: Spacing.md, maxWidth: '92%',
-  },
+  // 코치 답변 — 박스 없이 검정 글자(채널톡 스타일)
+  coachAnswer: { maxWidth: '92%', paddingVertical: Spacing.xs },
+  coachAnswerText: { color: Palette.gray900, lineHeight: 22 },
   caution: {
     backgroundColor: Palette.errorLight,
     borderRadius: Radius.small, padding: Spacing.sm, maxWidth: '90%',
   },
-  cautionText: { color: Palette.error },
+  cautionText: { color: Palette.error, lineHeight: 22 },
 
   // Diet card
   dietMetrics: {
