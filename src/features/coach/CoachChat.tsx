@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { Apple, ArrowLeft, ArrowUp, Calendar, CalendarPlus, Camera, Check, Dumbbell, Flame, History, Plus, Sparkles, Trash2, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
+import { Apple, ArrowLeft, ArrowUp, Calendar, CalendarPlus, Camera, Check, Dumbbell, Flame, History, Sparkles, Trash2, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -463,13 +463,6 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
     setWcMode(false);
     setView('chat');
   }
-  function newChat() {
-    setMessages([]);
-    setSessionId(null);
-    setWcMode(false);
-    setInput('');
-    setView('welcome');
-  }
   async function removeSession(id: string) {
     await deleteSession(userKey, id);
     setSessions((prev) => prev.filter((s) => s.id !== id));
@@ -843,14 +836,12 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
             <Icon icon={ArrowLeft} size={22} color={Palette.gray500} />
           </Pressable>
           <ThemedText type="subtitle">이전 대화</ThemedText>
-          <Pressable onPress={newChat} hitSlop={8} accessibilityRole="button" accessibilityLabel="새 대화">
-            <Icon icon={Plus} size={22} color={Palette.primary} />
-          </Pressable>
+          <View style={{ width: 22 }} />
         </View>
         <ScrollView contentContainerStyle={styles.welcomeBody} showsVerticalScrollIndicator={false}>
           {sessions.length === 0 ? (
             <ThemedText type="caption" themeColor="textSecondary" style={styles.disclaimer}>
-              저장된 대화가 없어요. 새 대화를 시작해 보세요.
+              저장된 대화가 없어요.
             </ThemedText>
           ) : (
             sessions.map((s) => (
