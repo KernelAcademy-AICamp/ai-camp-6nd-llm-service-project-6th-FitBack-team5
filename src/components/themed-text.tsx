@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
   // 레거시 별칭 → 디자인 토큰 매핑
   default: Typography.body,
   title: Typography.h1,
-  subtitle: Typography.h2,
+  subtitle: Typography.subtitle,
   small: Typography.caption,
   smallBold: Typography.captionBold,
   link: { ...Typography.caption, color: Palette.primary },

@@ -1,0 +1,119 @@
+/**
+ * FitBack Spacing / Radius / Typography Tokens
+ *
+ * 구조: Primitive (raw 수치) → Semantic (var 참조)
+ * 소스: src/constants/theme.ts (Spacing / Radius / Typography)
+ * 그리드: 8pt base. xs=4 / sm=8 / md=16 / lg=24 / xl=32 / xxl=48
+ *
+ * 네이밍 규칙: Figma '/' 구분자 → CSS '-' 변환
+ */
+
+:root {
+  /* ─────────────────────────────────────────────
+     PRIMITIVE — raw 수치
+     ───────────────────────────────────────────── */
+
+  /* Spacing scale (px) */
+  --space-p-2:  2px;
+  --space-p-4:  4px;
+  --space-p-8:  8px;
+  --space-p-12: 12px;
+  --space-p-16: 16px;
+  --space-p-20: 20px;
+  --space-p-24: 24px;
+  --space-p-32: 32px;
+  --space-p-48: 48px;
+  --space-p-64: 64px;
+
+  /* Radius scale (px) */
+  --radius-p-8:   8px;
+  --radius-p-12:  12px;
+  --radius-p-20:  20px;
+  --radius-p-100: 100px;
+
+  /* Font size scale (px) */
+  --font-p-12: 12px;
+  --font-p-14: 14px;
+  --font-p-16: 16px;
+  --font-p-18: 18px;
+  --font-p-20: 20px;
+  --font-p-24: 24px;
+  --font-p-28: 28px;
+  --font-p-32: 32px;
+
+  /* Line height scale (px) */
+  --lh-p-18: 18px;
+  --lh-p-21: 21px;
+  --lh-p-23: 23px;
+  --lh-p-24: 24px;
+  --lh-p-25: 25px;
+  --lh-p-30: 30px;
+  --lh-p-36: 36px;
+  --lh-p-40: 40px;
+
+
+  /* ─────────────────────────────────────────────
+     SEMANTIC — Spacing
+     ───────────────────────────────────────────── */
+
+  --spacing-xs:   var(--space-p-4);   /* Spacing.xs  = 4  */
+  --spacing-sm:   var(--space-p-8);   /* Spacing.sm  = 8  */
+  --spacing-md:   var(--space-p-16);  /* Spacing.md  = 16 */
+  --spacing-lg:   var(--space-p-24);  /* Spacing.lg  = 24 */
+  --spacing-xl:   var(--space-p-32);  /* Spacing.xl  = 32 */
+  --spacing-xxl:  var(--space-p-48);  /* Spacing.xxl = 48 */
+
+  /* Legacy aliases (theme.ts 하위 호환) */
+  --spacing-half:  var(--space-p-2);
+  --spacing-one:   var(--space-p-4);
+  --spacing-two:   var(--space-p-8);
+  --spacing-three: var(--space-p-16);
+  --spacing-four:  var(--space-p-24);
+  --spacing-five:  var(--space-p-32);
+  --spacing-six:   var(--space-p-64);
+
+  /** 전 화면 공통 좌우 여백 */
+  --spacing-screen-pad: var(--space-p-20);
+
+
+  /* ─────────────────────────────────────────────
+     SEMANTIC — Border Radius
+     ───────────────────────────────────────────── */
+
+  --radius-small:  var(--radius-p-8);    /* Radius.small  */
+  --radius-button: var(--radius-p-12);   /* Radius.button */
+  --radius-card:   var(--radius-p-20);   /* Radius.card   */
+  --radius-modal:  var(--radius-p-20);   /* Radius.modal  */
+  --radius-full:   var(--radius-p-100);  /* Radius.full   */
+
+
+  /* ─────────────────────────────────────────────
+     SEMANTIC — Typography
+     ───────────────────────────────────────────── */
+
+  /* Font size */
+  --font-size-display:   var(--font-p-32);  /* Typography.display   */
+  --font-size-display2:  var(--font-p-28);  /* Typography.display2  */
+  --font-size-h1:        var(--font-p-24);  /* Typography.h1        */
+  --font-size-h2:        var(--font-p-20);  /* Typography.h2        */
+  --font-size-subtitle:  var(--font-p-18);  /* Typography.subtitle  */
+  --font-size-body:      var(--font-p-16);  /* Typography.body      */
+  --font-size-caption:   var(--font-p-14);  /* Typography.caption   */
+  --font-size-label:     var(--font-p-12);  /* Typography.label     */
+
+  /* Line height */
+  --line-height-display:  var(--lh-p-40);  /* Typography.display   */
+  --line-height-display2: var(--lh-p-36);  /* Typography.display2  */
+  --line-height-h1:       var(--lh-p-30);  /* Typography.h1        */
+  --line-height-h2:       var(--lh-p-25);  /* Typography.h2        */
+  --line-height-subtitle: var(--lh-p-23);  /* Typography.subtitle  */
+  --line-height-body:     var(--lh-p-24);  /* Typography.body      */
+  --line-height-caption:  var(--lh-p-21);  /* Typography.caption   */
+  --line-height-label:    var(--lh-p-18);  /* Typography.label     */
+
+  /* Font family */
+  --font-family-regular:  'Pretendard', sans-serif;
+  --font-family-medium:   'PretendardMedium', sans-serif;
+  --font-family-semibold: 'PretendardSemiBold', sans-serif;
+  --font-family-bold:     'PretendardBold', sans-serif;
+}

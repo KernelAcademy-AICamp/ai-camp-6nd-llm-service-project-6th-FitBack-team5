@@ -1,4 +1,4 @@
-import Svg, { Line, Path } from 'react-native-svg';
+import Svg, { Circle, G, Line, Path } from 'react-native-svg';
 
 type IconProps = {
   color: string;
@@ -87,6 +87,51 @@ export function IconCalendar({ color, size = 24 }: IconProps) {
       <Path
         d="M2 11H22V20.9C22 21.5075 21.5523 22 21 22H3C2.44772 22 2 21.5075 2 20.9V11ZM17 2.2H21C21.5523 2.2 22 2.69249 22 3.3V8.8H2V3.3C2 2.69249 2.44772 2.2 3 2.2H7V1C7 0.447715 7.44772 0 8 0C8.55228 0 9 0.447715 9 1V2.2H15V1C15 0.447715 15.4477 0 16 0C16.5523 0 17 0.447715 17 1V2.2Z"
         fill={color}
+      />
+    </Svg>
+  );
+}
+
+export function IconArrowChevron({
+  color = '#9CA3AF',
+  size = 20,
+  direction = 'right',
+}: {
+  color?: string;
+  size?: number;
+  direction?: 'left' | 'right';
+}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <G transform={direction === 'left' ? 'translate(20,0) scale(-1,1)' : undefined}>
+        <Path
+          d="M7.5 5L12.5 10L7.5 15"
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </G>
+    </Svg>
+  );
+}
+
+export function IconArrowCircle({
+  size = 36,
+  bgColor = 'rgba(255,255,255,0.2)',
+}: {
+  size?: number;
+  bgColor?: string;
+}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 36 36" fill="none">
+      <Circle cx="18" cy="18" r="18" fill={bgColor} />
+      <Path
+        d="M11 18H23M19.5 14L23 18L19.5 22"
+        stroke="white"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

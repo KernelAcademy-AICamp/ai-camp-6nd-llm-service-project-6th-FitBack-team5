@@ -1,4 +1,4 @@
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { IconBell, IconCalendar, IconMenu } from '@/components/icons';
 import { MaxContentWidth, Palette, Radius, ScreenPadding } from '@/constants/theme';
@@ -9,6 +9,7 @@ interface GnbBarProps {
   onAlarm?: () => void;
   hasAlarm?: boolean;
   showCalendar?: boolean;
+  style?: ViewStyle;
 }
 
 export function GnbBar({
@@ -17,9 +18,10 @@ export function GnbBar({
   onAlarm,
   hasAlarm = false,
   showCalendar = true,
+  style,
 }: GnbBarProps) {
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, style]}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Pressable
@@ -64,8 +66,12 @@ export function GnbBar({
 
 const styles = StyleSheet.create({
   wrap: {
-    width: '100%',
-    backgroundColor: Palette.bgBase,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 1)',
   },
   header: {
     flexDirection: 'row',
@@ -77,7 +83,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   headerActions: { flexDirection: 'row', gap: 20 },
   headerBtn: {
     width: 40,

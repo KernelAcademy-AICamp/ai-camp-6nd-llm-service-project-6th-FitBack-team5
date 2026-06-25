@@ -1,15 +1,20 @@
 import { router } from 'expo-router';
 import {
-  AlarmClock, Calendar, ChevronRight,
-  MoreHorizontal, TrendingUp, X,
+  AlarmClock, Calendar,
+  Info, MoreHorizontal, TrendingUp, X,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CoachTipCard } from '@/components/coach-tip-card';
 import { CountUp } from '@/components/count-up';
 import { GnbBar } from '@/components/gnb-bar';
+import { IconArrowChevron, IconArrowCircle } from '@/components/icons';
+import { RecordCard } from '@/components/record-card';
+
+const GNB_HEIGHT = 52;
 import { sheetPresentation } from '@/components/modal-presentation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -43,8 +48,7 @@ import {
 } from '@/features/membership/dashboard';
 import { useCoach } from '@/features/membership/useCoach';
 import { daysUntil, useMemberships } from '@/features/membership/useMemberships';
-import { summarizePortfolio } from '@/features/membership/portfolio';
-import { buildPortfolioItems, todayGain } from '@/features/membership/PortfolioView';
+import { buildPortfolioItems } from '@/features/membership/PortfolioView';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { useVisitPattern } from '@/features/membership/useVisitPattern';
 import { useTodayWorkoutLog } from '@/features/workout/useTodayWorkoutLog';
@@ -100,13 +104,16 @@ export default function HomeScreen() {
   const { summary: dietSummary } = useDietSummary();
   const user = useCurrentUser();
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [checkInMembershipId, setCheckInMembershipId] = useState<string | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showCoach, setShowCoach] = useState(false);
   const [showMyDrawer, setShowMyDrawer] = useState(false);
   const [showAlarm, setShowAlarm] = useState(false);
   const [showMembershipForm, setShowMembershipForm] = useState(false);
   const [showMembershipList, setShowMembershipList] = useState(false);
+  const [showMembershipActions, setShowMembershipActions] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [activeCard, setActiveCard] = useState(0);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -125,12 +132,17 @@ export default function HomeScreen() {
   );
 
   const items = buildPortfolioItems(list);
-  const psummary = summarizePortfolio(items.map((x) => ({ value: x.value, expired: x.expired })));
-  const recovered = psummary.recovered;
-  const remainingValue = psummary.remaining;
-  const totalPaid = items.filter((x) => !x.expired).reduce((s, x) => s + x.m.cost, 0);
-  const utilization = Math.min(100, Math.round(psummary.progressPct));
-  const effPrice = todayGain(items);
+  const portfolioMap = new Map(items.map((x) => [x.m.id, x]));
+
+  const { width: screenW } = useWindowDimensions();
+  const carouselWidth = Math.min(screenW, MaxContentWidth) - ScreenPadding * 2;
+
+  const carouselItems = [...withRisk].sort((a, b) => {
+    const aExp = a.m.status === 'expired' ? 1 : 0;
+    const bExp = b.m.status === 'expired' ? 1 : 0;
+    if (aExp !== bExp) return aExp - bExp;
+    return daysUntil(a.m.endDate) - daysUntil(b.m.endDate);
+  });
 
   const name = profile?.display_name || '회원';
 
@@ -181,7 +193,7 @@ export default function HomeScreen() {
                   ? `${bannerItem.m.name} · ${formatNumber(bannerItem.risk.remainingSessions ?? 0)}회 남음`
                   : `D-${bannerItem.risk.remainingDays} ${bannerItem.m.name} 만료`}
               </ThemedText>
-              <Icon icon={ChevronRight} size={16} color={Palette.white} />
+              <IconArrowChevron size={16} color={Palette.white} />
             </Pressable>
           ) : null}
 
@@ -200,87 +212,156 @@ export default function HomeScreen() {
               <ThemedText type="body" style={styles.coachGreeting} numberOfLines={1}>
                 {name}님 반가워요!
               </ThemedText>
-              <ThemedText type="subtitle" style={styles.coachMsg} numberOfLines={2}>
-                {coach.data?.headline ?? '오늘도 함께 운동해요!'}
-              </ThemedText>
+              <Text style={styles.coachMsg}>
+                {'함께 오늘 '}
+                <Text style={styles.coachMsgHighlight}>운동</Text>
+                {' 구성해요!'}
+              </Text>
             </View>
-            {/* 화살표 버튼 */}
-            <View style={styles.coachArrow}>
-              <Icon icon={ChevronRight} size={20} color={Palette.white} />
-            </View>
+            <IconArrowCircle />
           </Pressable>
 
-          {/* ── 메인 ROI 카드 ── */}
+          {/* ── 회원권 캐러셀 ── */}
           {list.length > 0 ? (
-            <View style={[styles.membershipCard, Elevation.level1]}>
-              {/* 다크 헤더 */}
-              <View style={styles.membershipCardHeader}>
-                <ThemedText type="caption" style={styles.cardHeaderText}>
-                  회원권 수ㆍ{list.length}개
-                </ThemedText>
-                <Pressable
-                  onPress={() => setShowMembershipList(true)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="전체 회원권 목록">
-                  <Icon icon={MoreHorizontal} size={20} color="rgba(255,255,255,0.7)" />
-                </Pressable>
-              </View>
-              {/* 화이트 바디 */}
-              <View style={styles.membershipCardBody}>
-                {/* 금액 + money 아이콘 행 */}
-                <View style={styles.cardAmountRow}>
-                  <View style={styles.cardAmountLeft}>
-                    {effPrice > 0 ? (
-                      <ThemedText type="body" style={styles.checkInText}>
-                        오늘 출석으로 {wonShort(effPrice)}{' '}
-                        <ThemedText type="body" style={styles.checkInUp}>UP▲</ThemedText>
-                      </ThemedText>
-                    ) : null}
-                    <CountUp value={recovered} format={formatNumber} suffix="원" type="display" style={styles.mainAmount} />
-                  </View>
-                  <Image source={require('../../assets/images/money-icon.png')} style={styles.moneyIcon} resizeMode="contain" />
-                </View>
+            /* shadow wrapper — overflow:visible 유지로 shadow 클리핑 방지 */
+            <View style={[styles.membershipCardShadow, Elevation.level1]}>
+              {/* clip wrapper — border-radius + overflow:hidden으로 자식 클리핑 */}
+              <View style={styles.membershipCardClip}>
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  decelerationRate="fast"
+                  nestedScrollEnabled
+                  onScroll={(e) => {
+                    const page = Math.round(e.nativeEvent.contentOffset.x / carouselWidth);
+                    setActiveCard(Math.max(0, Math.min(page, carouselItems.length - 1)));
+                  }}
+                  scrollEventThrottle={16}
+                >
+                  {carouselItems.map((item) => {
+                    const pItem = portfolioMap.get(item.m.id);
+                    const cardRecovered = pItem?.value.recovered ?? 0;
+                    const cardProgressPct = Math.min(100, Math.round(pItem?.value.progressPct ?? 0));
+                    const cardRemaining = pItem?.value.remaining ?? 0;
+                    const cardEffPrice =
+                      item.m.status !== 'expired' && pItem && !pItem.value.isComplete
+                        ? pItem.value.perVisitValue
+                        : 0;
 
-                {/* 활용도 진행바 (28px, % 텍스트 안에) */}
-                <View style={styles.roiBarTrack}>
-                  {utilization > 0 ? (
-                    <View style={[styles.roiBarFill, { width: `${utilization}%` as any }]}>
-                      <ThemedText type="label" style={styles.roiBarLabel}>{utilization}%</ThemedText>
-                    </View>
-                  ) : null}
-                  {[25, 50, 75].map((mk) => (
-                    <View key={mk} style={[styles.roiBarMarker, { left: `${mk}%` as any }]} />
-                  ))}
-                </View>
+                    return (
+                      <View key={item.m.id} style={[styles.membershipCardInner, { width: carouselWidth }]}>
+                        {/* 다크 헤더 */}
+                        <View style={styles.membershipCardHeader}>
+                          <View style={styles.cardHeaderLeft}>
+                            <View style={styles.cardDaysBadge}>
+                              <ThemedText type="captionBold" style={styles.cardDaysText}>
+                                {item.m.status === 'expired' ? '만료' : `D-${daysUntil(item.m.endDate)}`}
+                              </ThemedText>
+                            </View>
+                            <ThemedText type="caption" style={styles.cardHeaderText} numberOfLines={1}>
+                              {item.m.name}
+                            </ThemedText>
+                          </View>
+                          <Pressable
+                            onPress={() => setShowMembershipList(true)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel="전체 회원권 목록">
+                            <Icon icon={MoreHorizontal} size={20} color="rgba(255,255,255,0.7)" />
+                          </Pressable>
+                        </View>
+                        {/* 화이트 바디 */}
+                        <View style={styles.membershipCardBody}>
+                          <Image
+                            source={require('../../assets/images/main_icon.png')}
+                            style={styles.moneyIcon}
+                            resizeMode="contain"
+                          />
+                          <View style={styles.cardAmountLeft}>
+                            {cardRecovered === 0 ? (
+                              <ThemedText type="body" style={styles.checkInText}>
+                                센터를 방문하여 본전을 찾으세요
+                              </ThemedText>
+                            ) : cardEffPrice > 0 ? (
+                              <ThemedText type="body" style={styles.checkInText}>
+                                오늘 출석으로 {wonShort(cardEffPrice)}{' '}
+                                <ThemedText type="body" style={styles.checkInUp}>UP▲</ThemedText>
+                              </ThemedText>
+                            ) : null}
+                            <View style={styles.amountRow}>
+                              <CountUp value={cardRecovered} format={formatNumber} suffix="원" type="display" style={styles.mainAmount} />
+                              {cardEffPrice > 0 ? (
+                                <Icon icon={Info} size={20} color={Palette.gray400} />
+                              ) : null}
+                            </View>
+                          </View>
 
-                {/* 2개 정보 박스 */}
-                <View style={styles.infoBoxRow}>
-                  <View style={styles.infoBox}>
-                    <ThemedText type="caption" themeColor="textSecondary">목표까지</ThemedText>
-                    <ThemedText type="body" themeColor="text">{wonShort(remainingValue)}</ThemedText>
-                  </View>
-                  <View style={styles.infoBox}>
-                    <ThemedText type="caption" themeColor="textSecondary">결제금액</ThemedText>
-                    <ThemedText type="body" themeColor="text">{wonShort(totalPaid)}</ThemedText>
-                  </View>
-                  <View style={styles.infoBox}>
-                    <ThemedText type="caption" themeColor="textSecondary">이번 주 권장</ThemedText>
-                    <ThemedText type="body" themeColor="text">
-                      {weekVisits}/{recommendedWeekly}회
+                          <View style={styles.roiBarTrack}>
+                            {cardProgressPct > 0 ? (
+                              <View style={[styles.roiBarFill, { width: `${cardProgressPct}%` as any }]}>
+                                <ThemedText type="label" style={styles.roiBarLabel}>{cardProgressPct}%</ThemedText>
+                              </View>
+                            ) : null}
+                            {[25, 50, 75].map((mk) => (
+                              <View key={mk} style={[styles.roiBarMarker, { left: `${mk}%` as any }]} />
+                            ))}
+                          </View>
+
+                          <View style={styles.infoBoxRow}>
+                            <View style={styles.infoBox}>
+                              <ThemedText type="caption" themeColor="textSecondary">남은 방문</ThemedText>
+                              {item.risk.hasSessions ? (
+                                <ThemedText type="body" themeColor="text">
+                                  {item.risk.remainingSessions ?? 0}회{' '}
+                                  <ThemedText type="body" style={styles.infoBoxSub}>
+                                    / {item.m.maxVisits}회
+                                  </ThemedText>
+                                </ThemedText>
+                              ) : (
+                                <ThemedText type="body" themeColor="text">
+                                  {weekVisits}/{recommendedWeekly}회
+                                </ThemedText>
+                              )}
+                            </View>
+                            <View style={styles.infoBox}>
+                              <ThemedText type="caption" themeColor="textSecondary">목표까지</ThemedText>
+                              <ThemedText type="body" themeColor="text">{wonShort(cardRemaining)}</ThemedText>
+                            </View>
+                            <View style={styles.infoBox}>
+                              <ThemedText type="caption" themeColor="textSecondary">원금</ThemedText>
+                              <ThemedText type="body" themeColor="text">{wonShort(item.m.cost)}</ThemedText>
+                            </View>
+                          </View>
+
+                          {carouselItems.length > 1 && (
+                            <View style={styles.pageDots}>
+                              {carouselItems.map((_, i) => (
+                                <View key={i} style={[styles.pageDot, i === activeCard && styles.pageDotActive]} />
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* 고정 출석 버튼 — 카드 안, 캐러셀 밖 */}
+                <View style={styles.membershipCardFooter}>
+                  <Pressable
+                    onPress={() => {
+                      const target = carouselItems[activeCard]?.m.id ?? null;
+                      setCheckInMembershipId(target);
+                      setShowCheckIn(true);
+                    }}
+                    style={({ pressed }) => [styles.utilBtn, pressed && styles.pressed]}
+                    accessibilityRole="button">
+                    <ThemedText type="subtitle" style={styles.utilBtnText}>
+                      지금 출석하기
                     </ThemedText>
-                  </View>
+                  </Pressable>
                 </View>
-
-                {/* 지금 출석하기 버튼 */}
-                <Pressable
-                  onPress={() => setShowCheckIn(true)}
-                  style={({ pressed }) => [styles.utilBtn, pressed && styles.pressed]}
-                  accessibilityRole="button">
-                  <ThemedText type="subtitle" style={styles.utilBtnText}>
-                    지금 출석하기
-                  </ThemedText>
-                </Pressable>
               </View>
             </View>
           ) : !isLoading ? (
@@ -289,10 +370,7 @@ export default function HomeScreen() {
               style={[styles.mainCard, Elevation.level1, styles.emptyCard]}>
               <Icon icon={TrendingUp} size={28} color={Palette.primary} />
               <ThemedText type="subtitle" style={{ textAlign: 'center' }}>
-                아직 등록된 회원권이 없어요
-              </ThemedText>
-              <ThemedText type="caption" themeColor="textSecondary" style={{ textAlign: 'center' }}>
-                회원권을 등록하면 활용도를 분석하고{'\n'}오늘 얼마를 되찾는지 보여드려요.
+                회원권을 등록하여 본전을 찾으세요
               </ThemedText>
               <View style={styles.utilBtn}>
                 <ThemedText type="subtitle" style={styles.utilBtnText}>
@@ -302,91 +380,52 @@ export default function HomeScreen() {
             </Pressable>
           ) : null}
 
-          {/* ── 프로모션 배너 (static) ── */}
-          <Image
-            source={require('../../assets/images/banner.png')}
-            style={styles.promoBanner}
-            resizeMode="cover"
-          />
+          {/* ── AI 코치 팁 카드 ── */}
+          {coach.data && (
+            <CoachTipCard>
+              <ThemedText type="body" style={{ color: Palette.gray700 }}>
+                {coach.data.insight || coach.data.action || coach.data.headline}
+              </ThemedText>
+            </CoachTipCard>
+          )}
 
           {/* ── 내 기록 모아보기 ── */}
           <View style={styles.recordSection}>
             <ThemedText style={styles.sectionTitle}>내 기록 모아보기</ThemedText>
             <View style={styles.recordGrid}>
 
-              {/* 운동 */}
-              <Pressable
-                onPress={() => router.navigate('/workout')}
-                style={({ pressed }) => [styles.recordCard, Elevation.level1, pressed && styles.pressed]}>
-                <View style={styles.recordCardHead}>
-                  <ThemedText style={styles.recordCardLabel}>운동</ThemedText>
-                  <Icon icon={ChevronRight} size={16} color={Palette.gray300} />
-                </View>
-                <ThemedText style={styles.recordValue}>
-                  {todayWorkout?.hasWorkout ? `${todayWorkout.durationMin}분` : '0분'}
-                </ThemedText>
-                {/* 미니 스파크라인 */}
+              <RecordCard
+                label="운동"
+                value={todayWorkout?.hasWorkout ? `${todayWorkout.durationMin}분` : '0분'}
+                onPress={() => router.navigate('/workout')}>
                 <SparkLine days={weekDays} />
                 <ThemedText type="label" style={styles.recordSub}>이번주 {weekWorkouts}회</ThemedText>
-              </Pressable>
+              </RecordCard>
 
-              {/* 식단 */}
-              <Pressable
-                onPress={() => router.navigate('/diet')}
-                style={({ pressed }) => [styles.recordCard, Elevation.level1, pressed && styles.pressed]}>
-                <View style={styles.recordCardHead}>
-                  <ThemedText style={styles.recordCardLabel}>식단</ThemedText>
-                  <Icon icon={ChevronRight} size={16} color={Palette.gray300} />
-                </View>
-                <ThemedText style={styles.recordValue}>
-                  {dietSummary ? `${dietSummary.totalKcal}kcal` : '0kcal'}
-                </ThemedText>
+              <RecordCard
+                label="식단"
+                value={dietSummary ? `${dietSummary.totalKcal}kcal` : '0kcal'}
+                onPress={() => router.navigate('/diet')}>
                 {dietSummary ? (
-                  <View style={styles.recordPill}>
-                    <ThemedText type="label" themeColor="textSecondary">
-                      단백질 · {dietSummary.protein_g}g
-                    </ThemedText>
-                  </View>
+                  <RecordCard.Pill text={`단백질 · ${dietSummary.protein_g}g`} />
                 ) : null}
-              </Pressable>
+              </RecordCard>
 
-              {/* 이번주 기록 */}
-              <Pressable
-                onPress={() => router.navigate('/membership')}
-                style={({ pressed }) => [styles.recordCard, Elevation.level1, pressed && styles.pressed]}>
-                <View style={styles.recordCardHead}>
-                  <ThemedText style={styles.recordCardLabel}>이번주 기록</ThemedText>
-                  <Icon icon={ChevronRight} size={16} color={Palette.gray300} />
-                </View>
-                <ThemedText style={styles.recordValue}>
-                  {weekVisits}번
-                </ThemedText>
-                {weekBadge ? (
-                  <View style={styles.recordStatusBadge}>
-                    <ThemedText style={styles.recordStatusText}>{weekBadge}</ThemedText>
-                  </View>
-                ) : null}
-              </Pressable>
+              <RecordCard
+                label="이번주 기록"
+                value={`${weekVisits}번`}
+                onPress={() => router.navigate('/membership')}>
+                {weekBadge ? <RecordCard.Badge text={weekBadge} /> : null}
+              </RecordCard>
 
-              {/* 회원권 */}
-              <Pressable
-                onPress={() => router.navigate('/membership')}
-                style={({ pressed }) => [styles.recordCard, Elevation.level1, pressed && styles.pressed]}>
-                <View style={styles.recordCardHead}>
-                  <ThemedText style={styles.recordCardLabel}>회원권</ThemedText>
-                  <Icon icon={ChevronRight} size={16} color={Palette.gray300} />
-                </View>
-                <ThemedText style={styles.recordValue}>
-                  {list.length}개
-                </ThemedText>
+              <RecordCard
+                label="회원권"
+                value={`${list.length}개`}
+                onPress={() => setShowMembershipActions(true)}>
                 {expiring[0] ? (
-                  <View style={styles.recordPill}>
-                    <ThemedText type="label" themeColor="textSecondary">
-                      D-{daysUntil(expiring[0].endDate)}
-                    </ThemedText>
-                  </View>
+                  <RecordCard.Pill text={`D-${daysUntil(expiring[0].endDate)}`} />
                 ) : null}
-              </Pressable>
+              </RecordCard>
 
             </View>
           </View>
@@ -402,7 +441,10 @@ export default function HomeScreen() {
         onRequestClose={() => setShowCheckIn(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
+            <CheckInFlow
+              memberships={checkInMembershipId ? list.filter((m) => m.id === checkInMembershipId) : list}
+              onClose={() => { setShowCheckIn(false); setCheckInMembershipId(null); }}
+            />
           </SafeAreaView>
         </ThemedView>
       </Modal>
@@ -488,6 +530,35 @@ export default function HomeScreen() {
         <MyPanel onClose={() => setShowMyDrawer(false)} />
       </Modal>
 
+      {/* 회원권 액션시트 */}
+      <Modal
+        visible={showMembershipActions}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowMembershipActions(false)}>
+        <Pressable style={styles.actionSheetOverlay} onPress={() => setShowMembershipActions(false)}>
+          <View style={styles.actionSheet}>
+            <Pressable
+              style={({ pressed }) => [styles.actionSheetBtn, pressed && styles.pressed]}
+              onPress={() => { setShowMembershipActions(false); router.navigate('/membership'); }}>
+              <ThemedText style={styles.actionSheetBtnText}>회원권 보기</ThemedText>
+            </Pressable>
+            <View style={styles.actionSheetDivider} />
+            <Pressable
+              style={({ pressed }) => [styles.actionSheetBtn, pressed && styles.pressed]}
+              onPress={() => { setShowMembershipActions(false); setShowMembershipForm(true); }}>
+              <ThemedText style={[styles.actionSheetBtnText, { color: Palette.primary }]}>회원권 등록하기</ThemedText>
+            </Pressable>
+            <View style={styles.actionSheetDivider} />
+            <Pressable
+              style={({ pressed }) => [styles.actionSheetBtn, pressed && styles.pressed]}
+              onPress={() => setShowMembershipActions(false)}>
+              <ThemedText style={[styles.actionSheetBtnText, { color: Palette.gray500 }]}>취소</ThemedText>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* 회원권 등록 모달 */}
       <Modal
         visible={showMembershipForm}
@@ -535,8 +606,8 @@ const styles = StyleSheet.create({
   },
   scrollView: { flex: 1 },
   body: {
-    gap: Spacing.md,
     paddingHorizontal: ScreenPadding,
+    paddingTop: GNB_HEIGHT + Spacing.md,
     paddingBottom: BottomTabInset + Spacing.lg,
   },
   pressed: { opacity: 0.75 },
@@ -582,6 +653,7 @@ const styles = StyleSheet.create({
 
   // ── AI 코치 배너 ──
   coachBanner: {
+    marginTop: Spacing.md,
     backgroundColor: Palette.primary,
     borderRadius: Radius.card,
     height: 110,
@@ -603,7 +675,6 @@ const styles = StyleSheet.create({
   characterImage: { width: 52, height: 52 },
   coachTextWrap: { flex: 1, gap: 2 },
   coachGreeting: { color: 'rgba(255,255,255,0.8)' },
-  coachMsg: { color: Palette.white },
   coachArrow: {
     width: 36,
     height: 36,
@@ -614,26 +685,64 @@ const styles = StyleSheet.create({
   },
 
   // ── 메인 ROI 카드 (2층 구조) ──
+  // shadow wrapper: overflow visible → shadow 안 잘림
+  membershipCardShadow: {
+    marginTop: Spacing.md,
+    borderRadius: Radius.card,
+  },
+  // clip wrapper: border-radius + overflow hidden → 자식 클리핑
+  membershipCardClip: {
+    borderRadius: Radius.card,
+    overflow: 'hidden',
+  },
+  // 캐러셀 아이템: shadow·radius 없음 (부모가 처리)
+  membershipCardInner: {
+    backgroundColor: Palette.gray800,
+  },
   membershipCard: {
     borderRadius: Radius.card,
     overflow: 'hidden',
-    backgroundColor: Palette.gray900,
+    backgroundColor: Palette.gray800,
   },
   membershipCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   cardHeaderText: { color: 'rgba(255,255,255,0.7)' },
   membershipCardBody: {
     backgroundColor: Palette.bgSurface,
-    padding: Spacing.md,
-    gap: Spacing.md,
-    borderWidth: 0.5,
+    padding: Spacing.card,
+    gap: Spacing.card,
+    borderTopWidth: 0.5,
+    borderLeftWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderBottomWidth: 0,
+    borderColor: Palette.lineDefault,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  membershipCardFooter: {
+    backgroundColor: Palette.bgSurface,
+    paddingHorizontal: Spacing.card,
+    paddingTop: Spacing.card,
+    paddingBottom: Spacing.card,
+    borderLeftWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderBottomWidth: 0.5,
+    borderTopWidth: 0,
     borderColor: Palette.lineDefault,
   },
+  moneyIcon: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 120,
+    height: 120,
+  },
+
   // emptyCard: 회원권 미등록 시 단일 화이트 카드
   mainCard: {
     backgroundColor: Palette.bgSurface,
@@ -645,11 +754,10 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   emptyCard: { alignItems: 'center', gap: Spacing.md },
-  cardAmountRow: { flexDirection: 'row', alignItems: 'flex-end' },
-  cardAmountLeft: { flex: 1, gap: Spacing.xs },
+  cardAmountLeft: { gap: Spacing.xs, minHeight: 80 },
+  amountRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   checkInText: { color: Palette.gray500 },
   checkInUp: { color: Palette.primary, fontFamily: FontFamily.medium, fontWeight: '500' },
-  moneyIcon: { width: 79, height: 79, alignSelf: 'center' as const },
   mainAmount: { color: Palette.gray900 },
 
   // ROI 진행바 (28px, % 텍스트 안에) — Figma: radius 6, bg #F5F5F8
@@ -706,16 +814,65 @@ const styles = StyleSheet.create({
     letterSpacing: -0.45,
   },
 
-  // ── 프로모션 배너 ──
-  promoBanner: {
-    width: '100%',
-    height: 110,
-    borderRadius: Radius.card,
-    overflow: 'hidden',
+  // ── 코치 배너 메시지 ──
+  coachMsg: {
+    fontSize: 18,
+    fontFamily: FontFamily.bold,
+    fontWeight: '700' as const,
+    letterSpacing: -0.45,
+    color: Palette.white,
+    lineHeight: 23,
+  },
+  coachMsgHighlight: {
+    color: Palette.coachAccent,
+  },
+
+  // ── 페이지 도트 ──
+  pageDots: {
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    paddingVertical: Spacing.xs,
+  },
+  pageDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Palette.gray300,
+  },
+  pageDotActive: {
+    backgroundColor: Palette.primary,
+    width: 16,
+  },
+  cardDotDivider: {
+    height: 1,
+    backgroundColor: Palette.lineDefault,
+    marginHorizontal: -Spacing.md,
+  },
+
+  // ── 카드 헤더 (D-days + 이름) ──
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  cardDaysBadge: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+  },
+  cardDaysText: { color: Palette.white },
+  infoBoxSub: {
+    color: Palette.gray500,
+    fontSize: 14,
+    fontFamily: FontFamily.medium,
+    fontWeight: '500',
   },
 
   // ── 내 기록 모아보기 ──
-  recordSection: { gap: Spacing.sm },
+  recordSection: { marginTop: Spacing.lg, gap: Spacing.sm },
   sectionTitle: {
     color: Palette.gray900,
     fontSize: 18,
@@ -726,7 +883,7 @@ const styles = StyleSheet.create({
   recordGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.sm,
+    gap: Spacing.m,
   },
   recordCard: {
     width: '48%',
@@ -796,6 +953,34 @@ const styles = StyleSheet.create({
   },
   alarmBody: { paddingHorizontal: ScreenPadding, paddingBottom: Spacing.xl, gap: Spacing.sm },
   alarmItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+
+  // ── 회원권 액션시트 ──
+  actionSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+  actionSheet: {
+    backgroundColor: Palette.bgSurface,
+    borderRadius: Radius.card,
+    overflow: 'hidden',
+    ...Elevation.level2,
+  },
+  actionSheetBtn: {
+    paddingVertical: Spacing.lg,
+    alignItems: 'center',
+  },
+  actionSheetBtnText: {
+    fontSize: 16,
+    fontFamily: FontFamily.medium,
+    color: Palette.gray900,
+  },
+  actionSheetDivider: {
+    height: 1,
+    backgroundColor: Palette.lineDefault,
+  },
 
   // ── 토스트 ──
   toastWrap: {

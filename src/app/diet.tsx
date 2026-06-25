@@ -5,7 +5,6 @@ import {
   Camera,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Clock,
   Droplet,
@@ -32,6 +31,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -49,6 +49,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
+import { IconArrowChevron } from '@/components/icons';
+
 // ── 아이콘 (design-system.md §아이콘: Lucide outline, 24px, stroke 1.5) ──────
 // MaterialIcons 이름 → Lucide 컴포넌트 매핑. 이름 문자열은 그대로 두고 Icon 래퍼로 렌더.
 const ICONS = {
@@ -60,7 +62,6 @@ const ICONS = {
   bedtime: Moon,
   bolt: Zap,
   check: Check,
-  'chevron-left': ChevronLeft,
   'chevron-right': ChevronRight,
   close: X,
   'delete-outline': Trash2,
@@ -112,7 +113,12 @@ import {
 import { useTodayWorkoutLog } from '@/features/workout/useTodayWorkoutLog';
 import { pickFoodImage } from '@/features/diet/pickFoodImage';
 import { useRecommend } from '@/features/diet/recommend';
+import { useDailyFeedback } from '@/features/diet/useDailyFeedback';
+import { CoachTipCard } from '@/components/coach-tip-card';
 import { GnbBar } from '@/components/gnb-bar';
+import { MonthCalendar } from '@/features/home/MonthCalendar';
+
+const GNB_HEIGHT = 68; // 52 헤더 + 16 하단 패딩
 import { MyPanel } from '@/features/auth/MyPanel';
 import {
   MEAL_TYPES,
@@ -128,7 +134,9 @@ import {
   useToggleFavorite,
   type FoodFavorite,
 } from '@/features/diet/useFoodFavorites';
-import { Elevation, Palette, Radius, ScreenPadding, Spacing, Typography } from '@/constants/theme';
+import { BottomTabInset, Elevation, Palette, Radius, ScreenPadding, Spacing, Typography } from '@/constants/theme';
+import { CoachChat } from '@/features/coach/CoachChat';
+import { sheetPresentation } from '@/components/modal-presentation';
 
 /**
  * 식단 탭 — design.md 디자인 시스템 적용. UI 가안 구현본.
@@ -1832,13 +1840,13 @@ function CalendarModal({
         <Pressable style={styles.calCard} onPress={() => {}}>
           <View style={styles.calHeader}>
             <Pressable onPress={prev} hitSlop={8} style={styles.calNav}>
-              <Icon name="chevron-left" size={24} color={Palette.gray700} />
+              <IconArrowChevron direction="left" size={24} color={Palette.gray700} />
             </Pressable>
             <Txt variant="h2">
               {view.y}년 {view.m + 1}월
             </Txt>
             <Pressable onPress={next} hitSlop={8} style={styles.calNav}>
-              <Icon name="chevron-right" size={24} color={Palette.gray700} />
+              <IconArrowChevron size={24} color={Palette.gray700} />
             </Pressable>
           </View>
           <View style={styles.calWeekRow}>
@@ -2018,28 +2026,102 @@ export default function DietScreen() {
   const recDeficits = deficitLines.map((d) => ({ label: d.label, g: nextMealG(d.g) }));
   const recommend = useRecommend(recDeficits, recContext);
 
+  const dailyFbContext = workoutCtx.part ? `${PART_LABEL[workoutCtx.part]} 운동` : undefined;
+  const dailyFeedback = useDailyFeedback(totals, target, meals, burnedKcal, dailyFbContext, selectedDate);
+
+  function noLogTimeMsg(): string {
+    const h = new Date().getHours();
+    if (h >= 6 && h < 11) return '아침은 가볍게 삶은 계란 어떨까요?';
+    if (h >= 11 && h < 14) return '점심은 드셔야죠! 어떤 걸 드신지 기록해주세요';
+    if (h >= 18 && h < 22) return '저녁까지 아무것도 안 드셨나요? 바빠도 단백질 위주로 먹어봐요';
+    return '오늘 첫 끼니를 기록하면 핏쌤이 분석해드려요';
+  }
+
   function handleSave(meal: Omit<Meal, 'id' | 'time'>, eatenAt: Date) {
     addMeal.mutate({ ...meal, eatenAt });
   }
 
   const [showMyPanel, setShowMyPanel] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showCoach, setShowCoach] = useState(false);
+  const [coachInitialMsg, setCoachInitialMsg] = useState<string | undefined>(undefined);
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <View style={styles.gnbWrap}>
-          <GnbBar onMenu={() => setShowMyPanel(true)} showCalendar={false} />
-        </View>
+        <GnbBar onMenu={() => setShowMyPanel(true)} onCalendar={() => setShowCalendar(true)} />
         <View style={styles.scrollWrap}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {/* ③+④ 오늘 기록 — 섭취 칼로리 + 끼니별 슬롯 통합 */}
-          <View style={styles.listHeadRow}>
-            <Txt variant="body" weight="700" color={Palette.gray900} style={{ fontSize: 18 }}>
-              오늘 기록
-            </Txt>
-          </View>
+
+          {/* ① 운동 맞춤 식단 가이드 — 게이지 + 매크로 + 버튼 */}
+          <Card style={styles.guideCard}>
+            <View style={styles.guideHead}>
+              <SemiGauge ratio={intakeRatio} status={energyStatus} active={hasLog} />
+              <View style={styles.guideTitleWrap}>
+                <Txt variant="body" color={Palette.gray500}>
+                  {stateHint}
+                </Txt>
+              </View>
+            </View>
+            <View style={styles.macroRow}>
+              {MACRO_META.map((m) => (
+                <MacroProgress
+                  key={m.key}
+                  label={m.label}
+                  value={totals[m.key]}
+                  goal={target[m.key]}
+                  focused={focusMacro === m.key}
+                  caption={focusMacro === m.key && focusMacro ? FOCUS_CAPTION[focusMacro] : undefined}
+                />
+              ))}
+            </View>
+            <View style={styles.guideBtnRow}>
+              <Pressable
+                style={styles.guideOutlineBtn}
+                onPress={() => { setCoachInitialMsg('오늘 식단 추천해줘'); setShowCoach(true); }}>
+                <Txt variant="body" weight="700" color={Palette.primary}>식단 추천</Txt>
+              </Pressable>
+              <Pressable
+                onPress={() => openRecord()}
+                style={({ pressed }) => [
+                  styles.guideFillBtn,
+                  { backgroundColor: pressed ? Palette.primaryPressed : Palette.primary },
+                ]}>
+                <Txt variant="body" weight="700" color="#FFFFFF">식단 등록</Txt>
+                <Icon name="add" size={20} color="#FFFFFF" />
+              </Pressable>
+            </View>
+          </Card>
+
+          {/* ② 핏쌤의 한 마디 — 오늘 식단 AI 피드백 */}
+          <CoachTipCard>
+            {!hasLog ? (
+              <Txt variant="body" color={Palette.gray700}>{noLogTimeMsg()}</Txt>
+            ) : dailyFeedback.isPending ? (
+              <View style={styles.recLoading}>
+                <ActivityIndicator size="small" color={Palette.primary} />
+                <Txt variant="caption" color={Palette.gray500}>오늘 식단을 분석하고 있어요…</Txt>
+              </View>
+            ) : dailyFeedback.data ? (
+              (() => {
+                const { title, body } = splitCoach(dailyFeedback.data);
+                return (
+                  <>
+                    {title ? <Txt variant="body" weight="700" color={Palette.gray900} numberOfLines={2}>{title}</Txt> : null}
+                    {body ? <Txt variant="body" color={Palette.gray700} numberOfLines={2}>{body}</Txt> : null}
+                  </>
+                );
+              })()
+            ) : null}
+          </CoachTipCard>
+
+          {/* ③ 오늘 어떤 거 드셨나요? */}
+          <Txt variant="h2" weight="700" color={Palette.gray900} style={styles.sectionQHeader}>
+            오늘 어떤 거 드셨나요?
+          </Txt>
+
+          {/* ④ 섭취 칼로리 + 끼니별 슬롯 */}
           <Card style={{ gap: 0 }}>
-            {/* 섭취 칼로리 요약 */}
             <View style={styles.kcalHead}>
               <View style={styles.flex1}>
                 <Txt variant="body" color={Palette.gray500}>
@@ -2058,21 +2140,9 @@ export default function DietScreen() {
                   <Icon name="info" size={16} color={Palette.gray300} style={styles.infoIcon} />
                 </View>
               </View>
-              <Pressable
-                onPress={() => setModalOpen(true)}
-                style={({ pressed }) => [
-                  styles.addBtn,
-                  { backgroundColor: pressed ? Palette.primaryPressed : Palette.primary },
-                ]}>
-                <Icon name="add" size={24} color="#FFFFFF" />
-              </Pressable>
             </View>
             <CalorieBar consumed={totals.kcal} goal={calorieGoal} burned={burnedKcal} />
-
-            {/* 구분선 */}
             <View style={styles.sectionDivider} />
-
-            {/* 끼니별 슬롯 */}
             {isLoading ? (
               <View style={styles.listState}>
                 <ActivityIndicator color={Palette.primary} />
@@ -2100,119 +2170,20 @@ export default function DietScreen() {
             )}
           </Card>
 
-          {/* ① 운동 맞춤 식단 가이드 — 운동 대비 섭취 상태 게이지 + 목표 매크로 */}
-          <Card style={styles.guideCard}>
-            {/* 운동 대비 섭취 상태 게이지 + '오늘의 식단' 타이틀 (상단 중앙) */}
-            <View style={styles.guideHead}>
-              <SemiGauge ratio={intakeRatio} status={energyStatus} active={hasLog} />
-              <View style={styles.guideTitleWrap}>
-                <Txt variant="body" color={Palette.gray500}>
-                  {stateHint}
-                </Txt>
-              </View>
-            </View>
-
-            {/* 목표 매크로 (단 → 탄 → 지) */}
-            <View style={styles.macroRow}>
-              {MACRO_META.map((m) => (
-                <MacroProgress
-                  key={m.key}
-                  label={m.label}
-                  value={totals[m.key]}
-                  goal={target[m.key]}
-                  focused={focusMacro === m.key}
-                  caption={focusMacro === m.key && focusMacro ? FOCUS_CAPTION[focusMacro] : undefined}
-                />
-              ))}
-            </View>
-          </Card>
-
-          {/* ② 기록 후: 부족 영양소 기반 AI 식단 추천 */}
-          {hasLog && <Card style={styles.aiRecCard}>
-            {deficitLines.length > 0 ? (
-              // 상태 2 — 부족 영양소(상위 2개) 분석 + 균형 잡힌 추천
-              <>
-                <View style={styles.aiHead}>
-                  <Icon name="auto-awesome" size={16} color={Palette.primary} />
-                  <Txt variant="label" weight="600" color={Palette.primary}>
-                    다음 식단 추천
-                  </Txt>
-                </View>
-                <View style={styles.deficitList}>
-                  {deficitLines.map((d) => (
-                    <View key={d.key} style={styles.deficitRow}>
-                      <Icon name={MACRO_ICON[d.key].icon} size={16} color={Palette.gray500} />
-                      <Txt variant="caption" color={Palette.gray700}>
-                        {d.label}
-                      </Txt>
-                      <Txt variant="caption" weight="700">
-                        {nextMealG(d.g)}g
-                      </Txt>
-                    </View>
-                  ))}
-                </View>
-                {recommend.isPending ? (
-                  <View style={styles.recLoading}>
-                    <ActivityIndicator color={Palette.primary} size="small" />
-                    <Txt variant="caption" color={Palette.gray500}>
-                      추천을 만드는 중…
-                    </Txt>
-                  </View>
-                ) : recommend.isError ? (
-                  <Txt variant="caption" color={Palette.gray500}>
-                    추천을 불러오지 못했어요.
-                  </Txt>
-                ) : (recommend.data ?? []).length === 0 ? (
-                  <Txt variant="caption" color={Palette.gray500}>
-                    추천할 음식이 없어요.
-                  </Txt>
-                ) : (
-                  <View style={styles.foodChipWrap}>
-                    {(recommend.data ?? []).slice(0, 5).map((f, i) => (
-                      <Pressable
-                        key={`${f.name}-${i}`}
-                        onPress={() => addRecommendedFood(f.name, f.amount, f.unit)}
-                        disabled={addingName !== null}
-                        style={styles.foodChip}>
-                        <Txt variant="label" weight="600" color={Palette.gray700}>
-                          {f.name}
-                        </Txt>
-                        <Txt variant="label" color={Palette.gray500}>
-                          {' '}
-                          {f.amount}
-                          {f.unit}
-                        </Txt>
-                        {addingName === f.name ? (
-                          <ActivityIndicator size="small" color={Palette.primary} style={styles.chipAdd} />
-                        ) : (
-                          <Icon name="add" size={15} color={Palette.gray500} style={styles.chipAdd} />
-                        )}
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </>
-            ) : (
-              // 모든 목표 달성
-              <>
-                <View style={styles.aiHead}>
-                  <Icon name="auto-awesome" size={16} color={Palette.primary} />
-                  <Txt variant="label" weight="600" color={Palette.primary}>
-                    다음 식단 추천
-                  </Txt>
-                </View>
-                <Txt variant="body" weight="600">
-                  오늘 목표 영양소를 모두 채웠어요!
-                </Txt>
-              </>
-            )}
-          </Card>}
-
         </ScrollView>
           <FadeTop />
         </View>
 
       </SafeAreaView>
+
+      {/* FAB — AI 코치 */}
+      <Pressable
+        onPress={() => setShowCoach(true)}
+        style={({ pressed }) => [styles.fab, pressed && { opacity: 0.8 }]}
+        accessibilityRole="button"
+        accessibilityLabel="AI 코치 열기">
+        <Image source={require('../../assets/images/Chat_floting.png')} style={{ width: 62, height: 62 }} resizeMode="contain" />
+      </Pressable>
 
       <RecordModal
         visible={modalOpen}
@@ -2237,11 +2208,32 @@ export default function DietScreen() {
         }}
       />
       <Modal
+        visible={showCalendar}
+        animationType="slide"
+        presentationStyle={sheetPresentation}
+        onRequestClose={() => setShowCalendar(false)}>
+        <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+          <MonthCalendar onClose={() => setShowCalendar(false)} />
+        </SafeAreaView>
+      </Modal>
+
+      <Modal
         visible={showMyPanel}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setShowMyPanel(false)}>
         <MyPanel onClose={() => setShowMyPanel(false)} />
+      </Modal>
+
+      <Modal
+        visible={showCoach}
+        animationType="slide"
+        presentationStyle={sheetPresentation}
+        onRequestClose={() => { setShowCoach(false); setCoachInitialMsg(undefined); }}>
+        <CoachChat
+          onClose={() => { setShowCoach(false); setCoachInitialMsg(undefined); }}
+          initialMessage={coachInitialMsg}
+        />
       </Modal>
     </View>
   );
@@ -2250,7 +2242,6 @@ export default function DietScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Palette.bgBase },
   safeArea: { flex: 1, width: '100%', maxWidth: 800, alignSelf: 'center', backgroundColor: Palette.bgBase },
-  gnbWrap: { paddingHorizontal: ScreenPadding },
 
   // 날짜 스트립 (하단 선 없음, 아래 영역과 24px 간격)
   dateStrip: { flexGrow: 0, backgroundColor: Palette.bgBase },
@@ -2298,7 +2289,7 @@ const styles = StyleSheet.create({
   calCell: { width: `${100 / 7}%`, alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.xs },
   calDay: { width: 36, height: 36, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
   // paddingTop = FadeTop 높이(Spacing.md) → 첫 콘텐츠가 그라데이션 아래에서 시작(가림 방지)
-  scroll: { paddingHorizontal: ScreenPadding, paddingTop: Spacing.md, paddingBottom: NAV_HEIGHT + Spacing.xxl + Spacing.md, gap: Spacing.md },
+  scroll: { paddingHorizontal: ScreenPadding, paddingTop: GNB_HEIGHT, paddingBottom: NAV_HEIGHT + Spacing.xxl + Spacing.md },
   flex1: { flex: 1 },
 
   card: {
@@ -2911,5 +2902,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.sm,
     alignItems: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    right: ScreenPadding,
+    bottom: BottomTabInset + Spacing.md,
+    width: 62,
+    height: 62,
+  },
+  guideBtnRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  guideOutlineBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: Radius.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Palette.primary,
+    backgroundColor: 'transparent',
+  },
+  guideFillBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: Radius.button,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+  },
+  sectionQHeader: {
+    fontSize: 18,
+    marginHorizontal: Spacing.xs,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.xs + Spacing.sm,
   },
 });
