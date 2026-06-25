@@ -1,4 +1,4 @@
-import { X } from 'lucide-react-native';
+import { Plus, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { computeRisk, ddayBadge, won, type RiskInfo } from '@/features/membership/dashboard';
 import { MembershipDetail } from '@/features/membership/MembershipDetail';
+import { MembershipForm } from '@/features/membership/MembershipForm';
 import type { PortfolioValue } from '@/features/membership/portfolio';
 import { buildPortfolioItems } from '@/features/membership/PortfolioView';
 import { useMemberships, type Membership } from '@/features/membership/useMemberships';
@@ -27,6 +28,7 @@ export function MembershipListModal({ visible, onClose }: { visible: boolean; on
   const { data: memberships } = useMemberships();
   const { data: stats } = useMonthlyStats();
   const [detail, setDetail] = useState<DetailState>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -47,9 +49,21 @@ export function MembershipListModal({ visible, onClose }: { visible: boolean; on
           <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             <View style={styles.header}>
               <ThemedText type="h2">전체 회원권</ThemedText>
-              <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="닫기">
-                <Icon icon={X} size={24} color={Palette.gray500} />
-              </Pressable>
+              <View style={styles.headerRight}>
+                <Pressable
+                  onPress={() => setShowForm(true)}
+                  style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="회원권 추가">
+                  <Icon icon={Plus} size={16} color={Palette.white} />
+                  <ThemedText type="captionBold" style={styles.addButtonLabel}>
+                    회원권 추가
+                  </ThemedText>
+                </Pressable>
+                <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="닫기">
+                  <Icon icon={X} size={24} color={Palette.gray500} />
+                </Pressable>
+              </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
@@ -115,6 +129,19 @@ export function MembershipListModal({ visible, onClose }: { visible: boolean; on
           </View>
         </View>
       </Modal>
+
+      {/* 회원권 등록 모달 (기존 폼 구조·UI 그대로) */}
+      <Modal
+        visible={showForm}
+        animationType="slide"
+        presentationStyle={sheetPresentation}
+        onRequestClose={() => setShowForm(false)}>
+        <ThemedView style={styles.root}>
+          <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+            <MembershipForm onClose={() => setShowForm(false)} />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
     </>
   );
 }
@@ -129,6 +156,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: ScreenPadding,
     paddingVertical: Spacing.md,
   },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.primary,
+  },
+  addButtonPressed: { backgroundColor: Palette.primaryPressed },
+  addButtonLabel: { color: Palette.white },
   list: { paddingHorizontal: ScreenPadding, paddingBottom: Spacing.xl, gap: Spacing.md },
   itemHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.sm },
   itemName: { flex: 1 },
