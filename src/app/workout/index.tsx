@@ -51,11 +51,6 @@ export default function WorkoutScreen() {
 
           {/* 오늘 운동 요약 카드 */}
           <View style={[styles.topCard, Elevation.level1]}>
-            <Image
-              source={require('../../../assets/images/character.png')}
-              style={styles.mascot}
-              resizeMode="contain"
-            />
             <SelectedDayCard
               date={selectedDate}
               onPressMore={() =>
@@ -214,11 +209,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card,
     padding: Spacing.md,
     overflow: 'hidden',
-  },
-  mascot: {
-    width: 88,
-    height: 88,
-    alignSelf: 'center',
   },
   // 섹션 타이틀
   sectionTitle: {

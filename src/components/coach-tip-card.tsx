@@ -9,7 +9,7 @@ export function CoachTipCard({ children }: { children: ReactNode }) {
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Zap color={Palette.primary} size={16} fill={Palette.primary} />
+        <Zap size={16} color={Palette.primary} strokeWidth={2.5} />
         <ThemedText type="subtitle" style={{ color: Palette.primary }}>
           핏쌤의 한 마디
         </ThemedText>
