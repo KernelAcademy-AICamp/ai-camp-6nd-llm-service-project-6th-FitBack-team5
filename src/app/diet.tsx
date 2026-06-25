@@ -1,3 +1,6 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useLocalSearchParams } from 'expo-router';
 import {
   ArrowDown,
   ArrowLeft,
@@ -27,8 +30,6 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -46,7 +47,6 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
@@ -100,13 +100,18 @@ function Icon({
   color?: string;
   style?: StyleProp<ViewStyle>;
 }) {
-  const C = ICONS[name] as React.ComponentType<IconProps>;
+  const C = ICONS[name] as any;
   return <C size={size} color={color} strokeWidth={1.5} style={style} />;
 }
 
+import { CoachTipCard } from '@/components/coach-tip-card';
+import { GnbBar } from '@/components/gnb-bar';
+import { sheetPresentation } from '@/components/modal-presentation';
+import { BottomTabInset, Elevation, Palette, Radius, ScreenPadding, Spacing, Typography } from '@/constants/theme';
+import { MyPanel } from '@/features/auth/MyPanel';
 import { useProfile } from '@/features/auth/useProfile';
+import { CoachChat } from '@/features/coach/CoachChat';
 import { useAnalyzeImage, useAnalyzeMeal } from '@/features/diet/analyzeMeal';
-import { useMealFeedback } from '@/features/diet/mealFeedback';
 import { useFoodSearch, type FoodSearchResult } from '@/features/diet/foodSearch';
 import {
   PART_LABEL,
@@ -114,16 +119,15 @@ import {
   generateGuide,
   proteinTargetFromProfile,
 } from '@/features/diet/guide';
-import { useTodayWorkoutLog } from '@/features/workout/useTodayWorkoutLog';
+import { useMealFeedback } from '@/features/diet/mealFeedback';
 import { pickFoodImage, prepareImage } from '@/features/diet/pickFoodImage';
 import { useRecommend } from '@/features/diet/recommend';
 import { useDailyFeedback } from '@/features/diet/useDailyFeedback';
-import { CoachTipCard } from '@/components/coach-tip-card';
-import { GnbBar } from '@/components/gnb-bar';
-import { MonthCalendar } from '@/features/home/MonthCalendar';
-
-const GNB_HEIGHT = 68; // 52 헤더 + 16 하단 패딩
-import { MyPanel } from '@/features/auth/MyPanel';
+import {
+  useFoodFavorites,
+  useToggleFavorite,
+  type FoodFavorite,
+} from '@/features/diet/useFoodFavorites';
 import {
   MEAL_TYPES,
   useAddMeal,
@@ -133,14 +137,10 @@ import {
   type Meal,
   type MealType,
 } from '@/features/diet/useMeals';
-import {
-  useFoodFavorites,
-  useToggleFavorite,
-  type FoodFavorite,
-} from '@/features/diet/useFoodFavorites';
-import { BottomTabInset, Elevation, Palette, Radius, ScreenPadding, Spacing, Typography } from '@/constants/theme';
-import { CoachChat } from '@/features/coach/CoachChat';
-import { sheetPresentation } from '@/components/modal-presentation';
+import { MonthCalendar } from '@/features/home/MonthCalendar';
+import { useTodayWorkoutLog } from '@/features/workout/useTodayWorkoutLog';
+
+const GNB_HEIGHT = 68; // 52 헤더 + 16 하단 패딩
 
 /**
  * 식단 탭 — design.md 디자인 시스템 적용. UI 가안 구현본.
@@ -563,7 +563,7 @@ function CameraViewContent({
         <Pressable onPress={takePicture} style={styles.shutterBtn} />
         <View style={styles.galleryArea}>
           <Pressable onPress={onGallery} style={styles.galleryBtn}>
-            <Images size={22} color="#fff" strokeWidth={1.5} />
+            <Icon name="photo-library" size={22} color="#fff" />
           </Pressable>
         </View>
       </View>
