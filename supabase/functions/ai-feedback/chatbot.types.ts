@@ -31,6 +31,8 @@ export interface PlanItem {
   name: string;
   sets: number;
   reps: number;
+  /** RAG-lite: 운동 라이브러리(exercise_candidates)에서 고른 근거 운동명. 못 고르면 생략. */
+  source?: string;
 }
 export interface PlanBody {
   focus_part: string;
@@ -71,6 +73,7 @@ interface BaseResponse {
   coach_message: string;
   caution: string | null;
   followup: FollowupAction; // ⭐ string → FollowupAction (추적 가능한 행동 유도)
+  actions?: FollowupAction[]; // 추천 액션 칩(퀵 리플라이) — 선택, 검증기 비파괴
 }
 
 export interface PlanResponse extends BaseResponse {
