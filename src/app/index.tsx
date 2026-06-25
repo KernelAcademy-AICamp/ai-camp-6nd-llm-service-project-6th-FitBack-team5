@@ -4,7 +4,7 @@ import {
   Menu, MoreHorizontal, TrendingUp, X,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -42,8 +42,7 @@ import {
 } from '@/features/membership/dashboard';
 import { useCoach } from '@/features/membership/useCoach';
 import { daysUntil, useMemberships } from '@/features/membership/useMemberships';
-import { summarizePortfolio } from '@/features/membership/portfolio';
-import { buildPortfolioItems, todayGain } from '@/features/membership/PortfolioView';
+import { buildPortfolioItems } from '@/features/membership/PortfolioView';
 import { useMonthlyStats } from '@/features/membership/useMonthlyStats';
 import { useVisitPattern } from '@/features/membership/useVisitPattern';
 import { useTodayWorkoutLog } from '@/features/workout/useTodayWorkoutLog';
@@ -105,6 +104,9 @@ export default function HomeScreen() {
   const [showAlarm, setShowAlarm] = useState(false);
   const [showMembershipForm, setShowMembershipForm] = useState(false);
   const [showMembershipList, setShowMembershipList] = useState(false);
+  const [checkInId, setCheckInId] = useState<string | null>(null); // 출석 대상 회원권
+  const [roiIdx, setRoiIdx] = useState(0); // ROI 캐러셀 현재 인덱스
+  const [roiCardW, setRoiCardW] = useState(Dimensions.get('window').width - ScreenPadding * 2);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(msg: string) {
@@ -124,12 +126,8 @@ export default function HomeScreen() {
   );
 
   const items = buildPortfolioItems(list);
-  const psummary = summarizePortfolio(items.map((x) => ({ value: x.value, expired: x.expired })));
-  const recovered = psummary.recovered;
-  const remainingValue = psummary.remaining;
-  const totalPaid = items.filter((x) => !x.expired).reduce((s, x) => s + x.m.cost, 0);
-  const utilization = Math.min(100, Math.round(psummary.progressPct));
-  const effPrice = todayGain(items);
+  // 홈 ROI 카드 — 회원권별 캐러셀 데이터(포트폴리오 값 + 위험/만료). list와 동일 순서.
+  const roiCards = list.map((m, i) => ({ m, risk: withRisk[i].risk, value: items[i].value }));
 
   const name = profile?.display_name || '회원';
 
@@ -148,12 +146,12 @@ export default function HomeScreen() {
 
   const weekDays = home?.weekDays ?? [];
   const weekVisits = home?.weekVisits ?? 0;
-  // 권장 페이스 — 활성 기간권 주당 목표 최댓값, 없으면 기본값. (일정 → 활용도 카드로 이동)
+  const weekWorkouts = home?.weekWorkouts ?? 0;
+  // 권장 페이스(P1-1) — 활성 기간권 주당 목표 최댓값, 없으면 기본값.
   const goalFromMembership = list
     .filter((m) => m.type === 'period' && m.status !== 'expired' && m.weeklyGoal)
     .reduce((mx, m) => Math.max(mx, m.weeklyGoal ?? 0), 0);
   const recommendedWeekly = goalFromMembership > 0 ? goalFromMembership : RECOMMENDED_WEEKLY_VISITS;
-  const weekWorkouts = home?.weekWorkouts ?? 0;
   const weekBadge = getWeekBadge(weekVisits);
 
   return (
@@ -240,78 +238,113 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
-          {/* ── 메인 ROI 카드 ── */}
+          {/* ── 메인 ROI 카드 — 회원권별 캐러셀 ── */}
           {list.length > 0 ? (
-            <View style={[styles.membershipCard, Elevation.level1]}>
-              {/* 다크 헤더 */}
-              <View style={styles.membershipCardHeader}>
-                <ThemedText type="caption" style={styles.cardHeaderText}>
-                  회원권 수ㆍ{list.length}개
-                </ThemedText>
-                <Pressable
-                  onPress={() => setShowMembershipList(true)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="전체 회원권 목록">
-                  <Icon icon={MoreHorizontal} size={20} color="rgba(255,255,255,0.7)" />
-                </Pressable>
-              </View>
-              {/* 화이트 바디 */}
-              <View style={styles.membershipCardBody}>
-                {/* 금액 + money 아이콘 행 */}
-                <View style={styles.cardAmountRow}>
-                  <View style={styles.cardAmountLeft}>
-                    {effPrice > 0 ? (
-                      <ThemedText type="body" style={styles.checkInText}>
-                        오늘 출석으로 {wonShort(effPrice)}{' '}
-                        <ThemedText type="body" style={styles.checkInUp}>UP▲</ThemedText>
-                      </ThemedText>
-                    ) : null}
-                    <CountUp value={recovered} format={formatNumber} suffix="원" type="display" style={styles.mainAmount} />
-                  </View>
-                  <Image source={require('../../assets/images/money-icon.png')} style={styles.moneyIcon} resizeMode="contain" />
-                </View>
+            <View onLayout={(e) => setRoiCardW(e.nativeEvent.layout.width)}>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(e) => {
+                  if (roiCardW > 0) setRoiIdx(Math.round(e.nativeEvent.contentOffset.x / roiCardW));
+                }}>
+                {roiCards.map(({ m, risk, value }) => {
+                  const util = Math.min(100, Math.round(value.progressPct));
+                  const expired = risk.remainingDays <= 0;
+                  return (
+                    <View key={m.id} style={[styles.membershipCard, Elevation.level1, { width: roiCardW }]}>
+                      {/* 다크 헤더 — D-day + 회원권명 */}
+                      <View style={styles.membershipCardHeader}>
+                        <View style={styles.roiHeadLeft}>
+                          <View style={styles.ddayBadge}>
+                            <ThemedText type="label" style={styles.ddayBadgeText}>
+                              {expired ? '만료' : `D-${risk.remainingDays}`}
+                            </ThemedText>
+                          </View>
+                          <ThemedText type="caption" style={styles.cardHeaderText} numberOfLines={1}>
+                            {m.name}
+                          </ThemedText>
+                        </View>
+                        <Pressable
+                          onPress={() => setShowMembershipList(true)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel="전체 회원권 목록">
+                          <Icon icon={MoreHorizontal} size={20} color="rgba(255,255,255,0.7)" />
+                        </Pressable>
+                      </View>
+                      {/* 화이트 바디 */}
+                      <View style={styles.membershipCardBody}>
+                        <View style={styles.cardAmountRow}>
+                          <View style={styles.cardAmountLeft}>
+                            {value.perVisitValue > 0 ? (
+                              <ThemedText type="body" style={styles.checkInText}>
+                                오늘 출석으로 {wonShort(value.perVisitValue)}{' '}
+                                <ThemedText type="body" style={styles.checkInUp}>UP▲</ThemedText>
+                              </ThemedText>
+                            ) : null}
+                            <CountUp value={value.recovered} format={formatNumber} suffix="원" type="display" style={styles.mainAmount} />
+                          </View>
+                          <Image source={require('../../assets/images/money-icon.png')} style={styles.moneyIcon} resizeMode="contain" />
+                        </View>
 
-                {/* 활용도 진행바 (28px, % 텍스트 안에) */}
-                <View style={styles.roiBarTrack}>
-                  {utilization > 0 ? (
-                    <View style={[styles.roiBarFill, { width: `${utilization}%` as any }]}>
-                      <ThemedText type="label" style={styles.roiBarLabel}>{utilization}%</ThemedText>
+                        <View style={styles.roiBarTrack}>
+                          {util > 0 ? (
+                            <View style={[styles.roiBarFill, { width: `${util}%` as any }]}>
+                              <ThemedText type="label" style={styles.roiBarLabel}>{util}%</ThemedText>
+                            </View>
+                          ) : null}
+                          {[25, 50, 75].map((mk) => (
+                            <View key={mk} style={[styles.roiBarMarker, { left: `${mk}%` as any }]} />
+                          ))}
+                        </View>
+
+                        <View style={styles.infoBoxRow}>
+                          <View style={styles.infoBox}>
+                            <ThemedText type="caption" themeColor="textSecondary">남은 방문</ThemedText>
+                            <ThemedText type="body" themeColor="text">
+                              {m.maxVisits != null ? `${m.remainingVisits ?? 0}회 / ${m.maxVisits}회` : '무제한'}
+                            </ThemedText>
+                          </View>
+                          <View style={styles.infoBox}>
+                            <ThemedText type="caption" themeColor="textSecondary">목표까지</ThemedText>
+                            <ThemedText type="body" themeColor="text">{wonShort(value.remaining)}</ThemedText>
+                          </View>
+                          <View style={styles.infoBox}>
+                            <ThemedText type="caption" themeColor="textSecondary">결제금액</ThemedText>
+                            <ThemedText type="body" themeColor="text">{wonShort(m.cost)}</ThemedText>
+                          </View>
+                          <View style={styles.infoBox}>
+                            <ThemedText type="caption" themeColor="textSecondary">이번 주 권장</ThemedText>
+                            <ThemedText type="body" themeColor="text">
+                              {weekVisits}/{recommendedWeekly}회
+                            </ThemedText>
+                          </View>
+                        </View>
+
+                        <Pressable
+                          onPress={() => {
+                            setCheckInId(m.id);
+                            setShowCheckIn(true);
+                          }}
+                          style={({ pressed }) => [styles.utilBtn, pressed && styles.pressed]}
+                          accessibilityRole="button">
+                          <ThemedText type="subtitle" style={styles.utilBtnText}>
+                            지금 출석하기
+                          </ThemedText>
+                        </Pressable>
+                      </View>
                     </View>
-                  ) : null}
-                  {[25, 50, 75].map((mk) => (
-                    <View key={mk} style={[styles.roiBarMarker, { left: `${mk}%` as any }]} />
+                  );
+                })}
+              </ScrollView>
+              {roiCards.length > 1 ? (
+                <View style={styles.dotsRow}>
+                  {roiCards.map((c, i) => (
+                    <View key={c.m.id} style={[styles.dot, i === roiIdx && styles.dotActive]} />
                   ))}
                 </View>
-
-                {/* 2개 정보 박스 */}
-                <View style={styles.infoBoxRow}>
-                  <View style={styles.infoBox}>
-                    <ThemedText type="caption" themeColor="textSecondary">목표까지</ThemedText>
-                    <ThemedText type="body" themeColor="text">{wonShort(remainingValue)}</ThemedText>
-                  </View>
-                  <View style={styles.infoBox}>
-                    <ThemedText type="caption" themeColor="textSecondary">결제금액</ThemedText>
-                    <ThemedText type="body" themeColor="text">{wonShort(totalPaid)}</ThemedText>
-                  </View>
-                  <View style={styles.infoBox}>
-                    <ThemedText type="caption" themeColor="textSecondary">이번 주 권장</ThemedText>
-                    <ThemedText type="body" themeColor="text">
-                      {weekVisits}/{recommendedWeekly}회
-                    </ThemedText>
-                  </View>
-                </View>
-
-                {/* 지금 출석하기 버튼 */}
-                <Pressable
-                  onPress={() => setShowCheckIn(true)}
-                  style={({ pressed }) => [styles.utilBtn, pressed && styles.pressed]}
-                  accessibilityRole="button">
-                  <ThemedText type="subtitle" style={styles.utilBtnText}>
-                    지금 출석하기
-                  </ThemedText>
-                </Pressable>
-              </View>
+              ) : null}
             </View>
           ) : !isLoading ? (
             <Pressable
@@ -432,7 +465,14 @@ export default function HomeScreen() {
         onRequestClose={() => setShowCheckIn(false)}>
         <ThemedView style={styles.modalRoot}>
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-            <CheckInFlow memberships={list} onClose={() => setShowCheckIn(false)} />
+            <CheckInFlow
+              memberships={list}
+              initialMembershipId={checkInId ?? undefined}
+              onClose={() => {
+                setShowCheckIn(false);
+                setCheckInId(null);
+              }}
+            />
           </SafeAreaView>
         </ThemedView>
       </Modal>
@@ -655,6 +695,17 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   cardHeaderText: { color: 'rgba(255,255,255,0.7)' },
+  roiHeadLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
+  ddayBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  ddayBadgeText: { color: Palette.white, fontWeight: '700' },
+  dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: Spacing.sm },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Palette.gray300 },
+  dotActive: { width: 18, backgroundColor: Palette.primary },
   membershipCardBody: {
     backgroundColor: Palette.bgSurface,
     padding: Spacing.md,
@@ -707,10 +758,11 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.lineStrong,
   },
 
-  // 2개 정보 박스
-  infoBoxRow: { flexDirection: 'row', gap: Spacing.sm },
+  // 정보 박스 (2×2 래핑)
+  infoBoxRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   infoBox: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '47%',
     backgroundColor: Palette.gray50,
     borderRadius: Radius.button,
     padding: Spacing.sm,

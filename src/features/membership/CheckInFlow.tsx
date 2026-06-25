@@ -150,10 +150,24 @@ function ModeRow({
   );
 }
 
-export function CheckInFlow({ memberships, onClose }: { memberships: Membership[]; onClose: () => void }) {
-  const single = memberships.length === 1;
-  const [step, setStep] = useState<Step>(single ? 'prepare' : 'select');
-  const [selectedId, setSelectedId] = useState<string | null>(single ? memberships[0].id : null);
+export function CheckInFlow({
+  memberships,
+  onClose,
+  initialMembershipId,
+}: {
+  memberships: Membership[];
+  onClose: () => void;
+  initialMembershipId?: string;
+}) {
+  // 회원권 1개거나 특정 회원권 지정 진입이면 센터가기(select)를 건너뛰고 준비물부터 시작.
+  const presetId =
+    initialMembershipId && memberships.some((m) => m.id === initialMembershipId)
+      ? initialMembershipId
+      : memberships.length === 1
+        ? memberships[0].id
+        : null;
+  const [step, setStep] = useState<Step>(presetId ? 'prepare' : 'select');
+  const [selectedId, setSelectedId] = useState<string | null>(presetId);
   const [visitId, setVisitId] = useState<string | null>(null);
   const [phone, setPhone] = useState(false);
   const [clothes, setClothes] = useState(false);

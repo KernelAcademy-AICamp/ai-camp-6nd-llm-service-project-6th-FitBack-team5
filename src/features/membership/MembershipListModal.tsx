@@ -6,8 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { sheetPresentation } from '@/components/modal-presentation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Card, Icon } from '@/components/ui';
+import { Button, Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
+import { CheckInFlow } from '@/features/membership/CheckInFlow';
 import { computeRisk, ddayBadge, won, type RiskInfo } from '@/features/membership/dashboard';
 import { MembershipDetail } from '@/features/membership/MembershipDetail';
 import { MembershipForm } from '@/features/membership/MembershipForm';
@@ -29,6 +30,7 @@ export function MembershipListModal({ visible, onClose }: { visible: boolean; on
   const { data: stats } = useMonthlyStats();
   const [detail, setDetail] = useState<DetailState>(null);
   const [showForm, setShowForm] = useState(false);
+  const [checkInId, setCheckInId] = useState<string | null>(null); // 지금 출석하기 대상 회원권
 
   const list = memberships ?? [];
   const visitsOf = (id: string) => stats?.byMembership[id] ?? 0;
@@ -100,6 +102,14 @@ export function MembershipListModal({ visible, onClose }: { visible: boolean; on
                     <ThemedText type="caption" themeColor="textSecondary">
                       {value.perVisitValue > 0 ? `회당 ${won(value.perVisitValue)} · ` : ''}활용도 {pct}%
                     </ThemedText>
+                    {!expired ? (
+                      <Button
+                        label="지금 출석하기"
+                        variant="secondary"
+                        onPress={() => setCheckInId(m.id)}
+                        style={styles.checkInBtn}
+                      />
+                    ) : null}
                   </Card>
                 );
               })}
@@ -142,6 +152,28 @@ export function MembershipListModal({ visible, onClose }: { visible: boolean; on
           </SafeAreaView>
         </ThemedView>
       </Modal>
+
+      {/* 지금 출석하기 — 선택 회원권으로 센터가기 건너뛰고 준비물부터 */}
+      <Modal
+        visible={!!checkInId}
+        animationType="slide"
+        presentationStyle={sheetPresentation}
+        onRequestClose={() => setCheckInId(null)}>
+        <ThemedView style={styles.root}>
+          <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+            {checkInId ? (
+              <CheckInFlow
+                memberships={list}
+                initialMembershipId={checkInId}
+                onClose={() => {
+                  setCheckInId(null);
+                  onClose(); // 출석 완료(홈으로) → 목록 모달도 닫아 홈으로 복귀
+                }}
+              />
+            ) : null}
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
     </>
   );
 }
@@ -171,6 +203,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: ScreenPadding, paddingBottom: Spacing.xl, gap: Spacing.md },
   itemHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.sm },
   itemName: { flex: 1 },
+  checkInBtn: { marginTop: Spacing.sm },
   expiredCard: { opacity: 0.5 },
   dday: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.full },
   // 세부 정보 — 화면 정중앙 팝업
