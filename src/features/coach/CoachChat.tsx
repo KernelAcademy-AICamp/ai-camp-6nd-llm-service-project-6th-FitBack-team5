@@ -899,10 +899,10 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
               저는 회원권이 그냥 사라지지 않게 옆에서 챙기는 코치예요.{'\n'}이런 걸 도와드려요.
             </ThemedText>
             <View style={styles.introList}>
-              <ThemedText type="caption" themeColor="textSecondary">· 회원권 활용도·만료 — 얼마 남았고 얼마나 활용했는지</ThemedText>
-              <ThemedText type="caption" themeColor="textSecondary">· 오늘 운동 추천 — 내 상황에 맞는 루틴(운동 라이브러리 기반)</ThemedText>
-              <ThemedText type="caption" themeColor="textSecondary">· 식단 추천·사진 분석 — 목표에 맞춰</ThemedText>
-              <ThemedText type="caption" themeColor="textSecondary">· 내 일정 확인 — 이번 주 뭐가 잡혀있는지</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.introText}>· 회원권 활용도·만료 — 얼마 남았고 얼마나 활용했는지</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.introText}>· 오늘 운동 추천 — 내 상황에 맞는 루틴(운동 라이브러리 기반)</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.introText}>· 식단 추천·사진 분석 — 목표에 맞춰</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.introText}>· 내 일정 확인 — 이번 주 뭐가 잡혀있는지</ThemedText>
             </View>
             <ThemedText type="caption" style={styles.introText}>무엇이든 편하게 물어보세요.</ThemedText>
           </View>
@@ -927,7 +927,7 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
           </View>
 
           <ThemedText type="label" themeColor="textSecondary" style={styles.disclaimer}>
-            회원님의 운동·회원권 기록을 기반으로 답해요
+            회원님의 운동·회원권 기록을 기반으로 답해요.{'\n'}AI 답변은 제한된 데이터에 근거하니 참고용으로 확인해 주세요.
           </ThemedText>
         </ScrollView>
 
@@ -1307,8 +1307,8 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.sm,
   },
-  introText: { lineHeight: 20 },
-  introList: { gap: 4 },
+  introText: { lineHeight: 22, letterSpacing: -0.3 },
+  introList: { gap: 8 },
   roiCard: {
     borderRadius: Radius.card, padding: Spacing.md, gap: Spacing.sm,
   },
@@ -1336,7 +1336,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
   },
-  disclaimer: { textAlign: 'center', marginTop: Spacing.xs },
+  disclaimer: { textAlign: 'center', marginTop: Spacing.xs, lineHeight: 18 },
 
   // Chat messages
   body: { padding: ScreenPadding, gap: Spacing.sm },
