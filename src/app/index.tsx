@@ -187,7 +187,7 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView edges={Platform.select({ web: ['bottom'] as const, default: undefined })} style={styles.safeArea}>
+      <SafeAreaView edges={Platform.select({ web: ['bottom'] as const, default: [] as const })} style={styles.safeArea}>
           {/* ── 헤더 (스크롤 밖 고정) ── */}
           <GnbBar
             onMenu={() => setShowMyDrawer(true)}

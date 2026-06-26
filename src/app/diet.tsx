@@ -625,15 +625,6 @@ function CameraViewContent({
   );
 }
 
-// "200g", "1개(150g)", "150" 등에서 g 수치 추출. 파싱 실패 시 null(→ 100g 기본값 사용).
-function parseServingGrams(servingSize: string | null | undefined): number | null {
-  if (!servingSize) return null;
-  const match = servingSize.match(/(\d+(?:\.\d+)?)\s*g/i) ?? servingSize.match(/(\d+(?:\.\d+)?)/);
-  if (!match) return null;
-  const g = parseFloat(match[1]);
-  return Number.isFinite(g) && g > 0 ? g : null;
-}
-
 function RecordModal({
   visible,
   initialMealType,
@@ -676,7 +667,7 @@ function RecordModal({
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [unit, setUnit] = useState<'인분' | 'g'>('인분');
   const [showUnitPicker, setShowUnitPicker] = useState(false);
-  const [servingGrams, setServingGrams] = useState<number | null>(null); // null = 100g 기본값
+  const [isSearchPicked, setIsSearchPicked] = useState(false); // 검색으로 선택 시 g 전용
   const [showNutrDetail, setShowNutrDetail] = useState(false);
   const feedback = useMealFeedback();
   const feedbackRequested = useRef(false); // 리뷰 진입당 1회만 요청(편집 중 재호출 방지)
@@ -685,8 +676,8 @@ function RecordModal({
   const feedbackContext = focusMacro === 'protein' ? '근력 운동 회복' : focusMacro === 'carb' ? '유산소 운동 회복' : undefined;
 
   // 수량 반영 스케일값 — 편집 중엔 draft 그대로, 아닐 때는 baseNutrition × multiplier
-  // unit='인분': 1인분=servingGrams(없으면 100g) 기준. unit='g': quantity/100
-  const unitMultiplier = unit === 'g' ? quantity / 100 : quantity * ((servingGrams ?? 100) / 100);
+  // unit='인분': AI가 추정한 1인분 기준(×quantity). unit='g': quantity/100
+  const unitMultiplier = unit === 'g' ? quantity / 100 : quantity;
   const scaledKcal    = baseNutrition && !editingReview ? Math.round(baseNutrition.kcal     * unitMultiplier) : (draft?.kcal     ?? 0);
   const scaledCarb    = baseNutrition && !editingReview ? Math.round(baseNutrition.carb     * unitMultiplier) : (draft?.carb     ?? 0);
   const scaledProtein = baseNutrition && !editingReview ? Math.round(baseNutrition.protein  * unitMultiplier) : (draft?.protein  ?? 0);
@@ -705,7 +696,7 @@ function RecordModal({
     if (!editingReview && draft) {
       setDraft({ ...draft, kcal: scaledKcal, carb: scaledCarb, protein: scaledProtein, fat: scaledFat });
       setBaseNutrition(null);
-      setServingGrams(null);
+      setIsSearchPicked(false);
       setQuantity(1);
       setUnit('인분');
     }
@@ -735,7 +726,7 @@ function RecordModal({
     setEditingReview(false);
     setQuantity(1);
     setBaseNutrition(null);
-    setServingGrams(null);
+    setIsSearchPicked(false);
     setUnit('인분');
     setShowUnitPicker(false);
     feedbackRequested.current = false;
@@ -754,7 +745,7 @@ function RecordModal({
     setEditingReview(false);
     setQuantity(1);
     setBaseNutrition(null);
-    setServingGrams(null);
+    setIsSearchPicked(false);
     setCapturedImageUri(null);
     setOptimisticFav(null);
     setMealTime(new Date());
@@ -787,7 +778,7 @@ function RecordModal({
     setEditingReview(false);
     setQuantity(1);
     setBaseNutrition(null);
-    setServingGrams(null);
+    setIsSearchPicked(false);
     setCapturedImageUri(null);
     setOptimisticFav(null);
     setMealTime(new Date());
@@ -892,8 +883,9 @@ function RecordModal({
 
   function pickFood(food: FoodSearchResult) {
     setBaseNutrition({ kcal: food.kcal, carb: food.carb, protein: food.protein, fat: food.fat });
-    setServingGrams(parseServingGrams(food.servingSize));
-    setQuantity(1);
+    setIsSearchPicked(true);
+    setUnit('g');
+    setQuantity(100);
     setDraft({
       mealType,
       name: food.name,
@@ -1082,34 +1074,37 @@ function RecordModal({
                       </Pressable>
                     </View>
                     <View style={{ position: 'relative' }}>
-                      <Pressable onPress={() => setShowUnitPicker((v) => !v)} style={styles.stepperUnit}>
-                        <Txt variant="body" color={Palette.gray700}>
-                          {unit === '인분' && servingGrams ? `인분 (${servingGrams}g)` : unit}
-                        </Txt>
-                        <Icon name={showUnitPicker ? 'arrow-upward' : 'keyboard-arrow-down'} size={18} color={Palette.gray500} />
-                      </Pressable>
-                      {showUnitPicker && (
-                        <View style={[styles.unitDropdown, { position: 'absolute', top: 36, right: 0, zIndex: 999 }]}>
-                          {(['인분', 'g'] as const).map((u) => (
-                            <Pressable
-                              key={u}
-                              onPress={() => {
-                                if (u !== unit) {
-                                  const sg = servingGrams ?? 100;
-                                  setQuantity(u === 'g'
-                                    ? Math.max(10, Math.round(quantity * sg / 10) * 10)
-                                    : Math.max(1, Math.round(quantity / sg)));
-                                  setUnit(u);
-                                }
-                                setShowUnitPicker(false);
-                              }}
-                              style={[styles.unitOption, u === unit && { backgroundColor: Palette.primaryLight }]}>
-                              <Txt variant="body" color={u === unit ? Palette.primary : Palette.gray700}>
-                                {u === '인분' && servingGrams ? `인분 (${servingGrams}g)` : u}
-                              </Txt>
-                            </Pressable>
-                          ))}
+                      {isSearchPicked ? (
+                        <View style={styles.stepperUnit}>
+                          <Txt variant="body" color={Palette.gray700}>g</Txt>
                         </View>
+                      ) : (
+                        <>
+                          <Pressable onPress={() => setShowUnitPicker((v) => !v)} style={styles.stepperUnit}>
+                            <Txt variant="body" color={Palette.gray700}>{unit}</Txt>
+                            <Icon name={showUnitPicker ? 'arrow-upward' : 'keyboard-arrow-down'} size={18} color={Palette.gray500} />
+                          </Pressable>
+                          {showUnitPicker && (
+                            <View style={[styles.unitDropdown, { position: 'absolute', top: 36, right: 0, zIndex: 999 }]}>
+                              {(['인분', 'g'] as const).map((u) => (
+                                <Pressable
+                                  key={u}
+                                  onPress={() => {
+                                    if (u !== unit) {
+                                      setQuantity(u === 'g'
+                                        ? Math.max(10, Math.round(quantity * 100 / 10) * 10)
+                                        : Math.max(1, Math.round(quantity / 100)));
+                                      setUnit(u);
+                                    }
+                                    setShowUnitPicker(false);
+                                  }}
+                                  style={[styles.unitOption, u === unit && { backgroundColor: Palette.primaryLight }]}>
+                                  <Txt variant="body" color={u === unit ? Palette.primary : Palette.gray700}>{u}</Txt>
+                                </Pressable>
+                              ))}
+                            </View>
+                          )}
+                        </>
                       )}
                     </View>
                   </View>
