@@ -1086,12 +1086,12 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
                 <>
                   <ResponseBody response={m.response} />
 
-                  {/* 코치 답변 — 검정 글자, 박스 없이(채널톡 스타일) */}
-                  <View style={styles.coachAnswer}>
-                    <ThemedText type="caption" style={styles.coachAnswerText}>
-                      {m.text}
-                    </ThemedText>
-                  </View>
+                  {/* 코치 답변 — 핏쌤 말풍선(컬러 버블·흰 글씨)로 통일 */}
+                  {m.text ? (
+                    <View style={[styles.bubble, styles.coachBubble]}>
+                      <ThemedText type="body" style={{ color: Palette.white }}>{m.text}</ThemedText>
+                    </View>
+                  ) : null}
 
                   {/* Caution — 박스 유지, 텍스트 크기는 답변과 동일(caption) */}
                   {m.response.caution ? (
@@ -1373,9 +1373,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2,
   },
   exerciseRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  // 코치 답변 — 박스 없이 검정 글자(채널톡 스타일)
-  coachAnswer: { maxWidth: '92%', paddingVertical: Spacing.xs },
-  coachAnswerText: { color: Palette.gray900, lineHeight: 22 },
   caution: {
     backgroundColor: Palette.errorLight,
     borderRadius: Radius.small, padding: Spacing.sm, maxWidth: '90%',

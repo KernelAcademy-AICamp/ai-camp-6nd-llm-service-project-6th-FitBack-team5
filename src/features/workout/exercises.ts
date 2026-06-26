@@ -138,7 +138,8 @@ export async function fetchCoachCandidates(avoidParts: string[]): Promise<CoachC
   for (const p of avoidParts) {
     q = q.not('contraindicated_parts', 'cs', `{${p}}`);
   }
-  const { data, error } = await q.limit(40);
+  // 코치 입력 토큰 절감 — 실제 루틴엔 ~5개만 쓰이므로 후보는 12개로 제한(RAG-lite 충분)
+  const { data, error } = await q.limit(12);
   if (error) throw error;
   return (data ?? []) as CoachCandidate[];
 }
