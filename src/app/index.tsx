@@ -290,7 +290,7 @@ export default function HomeScreen() {
                         {/* 화이트 바디 */}
                         <View style={styles.membershipCardBody}>
                           <Image
-                            source={require('../../assets/images/main_icon.png')}
+                            source={require('../../assets/images/icon/main_icon.png')}
                             style={styles.moneyIcon}
                             resizeMode="contain"
                           />

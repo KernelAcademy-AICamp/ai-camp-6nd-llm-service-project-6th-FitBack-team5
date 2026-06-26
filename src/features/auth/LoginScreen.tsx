@@ -124,7 +124,7 @@ export function LoginScreen() {
         />
         <View style={styles.landingCenter}>
           <Image
-            source={require('../../../assets/images/favicon.png')}
+            source={require('../../../assets/images/icon/favicon.png')}
             style={styles.faviconImg}
             resizeMode="contain"
           />

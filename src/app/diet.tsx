@@ -380,11 +380,13 @@ function CalorieBar({ consumed, goal, burned }: { consumed: number; goal: number
         <View style={[styles.calMarker, { left: '100%' }]} />
       </View>
       <View style={styles.calLabels}>
-        <View style={[styles.calLabelAnchor, { left: `${(beforePos * 100).toFixed(1)}%` as DimensionValue }]}>
-          <Txt variant="label" color={Palette.gray400} style={styles.calLabelCentered}>
-            활동 전
-          </Txt>
-        </View>
+        {burned > 0 && beforePos < 0.8 && (
+          <View style={[styles.calLabelAnchor, { left: `${(beforePos * 100).toFixed(1)}%` as DimensionValue }]}>
+            <Txt variant="label" color={Palette.gray400} style={styles.calLabelCentered}>
+              활동 전
+            </Txt>
+          </View>
+        )}
         <Txt variant="label" color={Palette.gray400} style={styles.calLabelRight}>
           활동 후
         </Txt>
@@ -417,12 +419,17 @@ function PrimaryButton({
   );
 }
 
+const MORNING_ICON = require('../../assets/images/icon/morning_icon.png') as number;
+const LUNCH_ICON = require('../../assets/images/icon/lunch_icon.png') as number;
+const NIGHT_ICON = require('../../assets/images/icon/night_icon.png') as number;
+const DESSERT_ICON = require('../../assets/images/icon/dessert_icon.png') as number;
+
 // 끼니별 아이콘·색 (배경 없이 아이콘 틴트만)
-const MEAL_VISUAL: Record<MealType, { icon: IconName; tint: string }> = {
-  아침: { icon: 'wb-twilight', tint: Palette.tintOrange },
-  점심: { icon: 'wb-sunny', tint: Palette.tintYellow },
-  저녁: { icon: 'bedtime', tint: Palette.tintPurple },
-  간식: { icon: 'egg', tint: Palette.tintOrange },
+const MEAL_VISUAL: Record<MealType, { icon: IconName; tint: string; image?: number }> = {
+  아침: { icon: 'wb-twilight', tint: Palette.bgBase, image: MORNING_ICON },
+  점심: { icon: 'wb-sunny', tint: Palette.bgBase, image: LUNCH_ICON },
+  저녁: { icon: 'bedtime', tint: Palette.bgBase, image: NIGHT_ICON },
+  간식: { icon: 'egg', tint: Palette.bgBase, image: DESSERT_ICON },
 };
 
 // 끼니 슬롯 카드 — 2×2 그리드. 탭하면 그 끼니로 기록 추가/상세 진입.
@@ -442,8 +449,12 @@ function MealSlot({ type, meals, onPress }: { type: MealType; meals: Meal[]; onP
 
       {/* 아이콘 영역 */}
       <View style={styles.slotIconWrap}>
-        <View style={[styles.slotIconCircle, { backgroundColor: v.tint + '22' }]}>
-          <Icon name={v.icon} size={34} color={v.tint} />
+        <View style={[styles.slotIconCircle, { backgroundColor: v.tint }]}>
+          {v.image ? (
+            <Image source={v.image} style={{ width: 34, height: 34 }} resizeMode="contain" />
+          ) : (
+            <Icon name={v.icon} size={34} color={v.tint} />
+          )}
         </View>
       </View>
 
@@ -614,6 +625,15 @@ function CameraViewContent({
   );
 }
 
+// "200g", "1개(150g)", "150" 등에서 g 수치 추출. 파싱 실패 시 null(→ 100g 기본값 사용).
+function parseServingGrams(servingSize: string | null | undefined): number | null {
+  if (!servingSize) return null;
+  const match = servingSize.match(/(\d+(?:\.\d+)?)\s*g/i) ?? servingSize.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const g = parseFloat(match[1]);
+  return Number.isFinite(g) && g > 0 ? g : null;
+}
+
 function RecordModal({
   visible,
   initialMealType,
@@ -656,6 +676,7 @@ function RecordModal({
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [unit, setUnit] = useState<'인분' | 'g'>('인분');
   const [showUnitPicker, setShowUnitPicker] = useState(false);
+  const [servingGrams, setServingGrams] = useState<number | null>(null); // null = 100g 기본값
   const [showNutrDetail, setShowNutrDetail] = useState(false);
   const feedback = useMealFeedback();
   const feedbackRequested = useRef(false); // 리뷰 진입당 1회만 요청(편집 중 재호출 방지)
@@ -664,8 +685,8 @@ function RecordModal({
   const feedbackContext = focusMacro === 'protein' ? '근력 운동 회복' : focusMacro === 'carb' ? '유산소 운동 회복' : undefined;
 
   // 수량 반영 스케일값 — 편집 중엔 draft 그대로, 아닐 때는 baseNutrition × multiplier
-  // unit='인분': multiplier=quantity / unit='g': multiplier=quantity/100 (1인분≈100g 기준)
-  const unitMultiplier = unit === 'g' ? quantity / 100 : quantity;
+  // unit='인분': 1인분=servingGrams(없으면 100g) 기준. unit='g': quantity/100
+  const unitMultiplier = unit === 'g' ? quantity / 100 : quantity * ((servingGrams ?? 100) / 100);
   const scaledKcal    = baseNutrition && !editingReview ? Math.round(baseNutrition.kcal     * unitMultiplier) : (draft?.kcal     ?? 0);
   const scaledCarb    = baseNutrition && !editingReview ? Math.round(baseNutrition.carb     * unitMultiplier) : (draft?.carb     ?? 0);
   const scaledProtein = baseNutrition && !editingReview ? Math.round(baseNutrition.protein  * unitMultiplier) : (draft?.protein  ?? 0);
@@ -684,6 +705,7 @@ function RecordModal({
     if (!editingReview && draft) {
       setDraft({ ...draft, kcal: scaledKcal, carb: scaledCarb, protein: scaledProtein, fat: scaledFat });
       setBaseNutrition(null);
+      setServingGrams(null);
       setQuantity(1);
       setUnit('인분');
     }
@@ -713,6 +735,7 @@ function RecordModal({
     setEditingReview(false);
     setQuantity(1);
     setBaseNutrition(null);
+    setServingGrams(null);
     setUnit('인분');
     setShowUnitPicker(false);
     feedbackRequested.current = false;
@@ -731,6 +754,7 @@ function RecordModal({
     setEditingReview(false);
     setQuantity(1);
     setBaseNutrition(null);
+    setServingGrams(null);
     setCapturedImageUri(null);
     setOptimisticFav(null);
     setMealTime(new Date());
@@ -763,6 +787,7 @@ function RecordModal({
     setEditingReview(false);
     setQuantity(1);
     setBaseNutrition(null);
+    setServingGrams(null);
     setCapturedImageUri(null);
     setOptimisticFav(null);
     setMealTime(new Date());
@@ -867,6 +892,7 @@ function RecordModal({
 
   function pickFood(food: FoodSearchResult) {
     setBaseNutrition({ kcal: food.kcal, carb: food.carb, protein: food.protein, fat: food.fat });
+    setServingGrams(parseServingGrams(food.servingSize));
     setQuantity(1);
     setDraft({
       mealType,
@@ -921,10 +947,10 @@ function RecordModal({
                     style={[
                       styles.mealChip,
                       selected
-                        ? { backgroundColor: Palette.primaryLight, borderColor: Palette.primary }
+                        ? { backgroundColor: Palette.primary, borderColor: Palette.primary }
                         : { backgroundColor: Palette.bgSurface, borderColor: Palette.lineDefault },
                     ]}>
-                    <Txt variant="caption" weight="600" color={selected ? Palette.primary : Palette.gray700}>{t}</Txt>
+                    <Txt variant="body" weight="600" color={selected ? Palette.white : Palette.gray700}>{t}</Txt>
                   </Pressable>
                 );
               })}
@@ -993,7 +1019,7 @@ function RecordModal({
             )}
 
             {/* ③ 통합 카드 — 음식 + 영양 */}
-            <View style={styles.reviewFoodCard}>
+            <View style={[styles.reviewFoodCard, { marginTop: Spacing.lg }]}>
               <View style={styles.reviewFoodTop}>
                 <View style={styles.reviewFoodImg}>
                   {capturedImageUri ? (
@@ -1057,7 +1083,9 @@ function RecordModal({
                     </View>
                     <View style={{ position: 'relative' }}>
                       <Pressable onPress={() => setShowUnitPicker((v) => !v)} style={styles.stepperUnit}>
-                        <Txt variant="body" color={Palette.gray700}>{unit}</Txt>
+                        <Txt variant="body" color={Palette.gray700}>
+                          {unit === '인분' && servingGrams ? `인분 (${servingGrams}g)` : unit}
+                        </Txt>
                         <Icon name={showUnitPicker ? 'arrow-upward' : 'keyboard-arrow-down'} size={18} color={Palette.gray500} />
                       </Pressable>
                       {showUnitPicker && (
@@ -1067,13 +1095,18 @@ function RecordModal({
                               key={u}
                               onPress={() => {
                                 if (u !== unit) {
-                                  setQuantity(u === 'g' ? Math.max(10, Math.round(quantity * 100 / 10) * 10) : Math.max(1, Math.round(quantity / 100)));
+                                  const sg = servingGrams ?? 100;
+                                  setQuantity(u === 'g'
+                                    ? Math.max(10, Math.round(quantity * sg / 10) * 10)
+                                    : Math.max(1, Math.round(quantity / sg)));
                                   setUnit(u);
                                 }
                                 setShowUnitPicker(false);
                               }}
                               style={[styles.unitOption, u === unit && { backgroundColor: Palette.primaryLight }]}>
-                              <Txt variant="body" color={u === unit ? Palette.primary : Palette.gray700}>{u}</Txt>
+                              <Txt variant="body" color={u === unit ? Palette.primary : Palette.gray700}>
+                                {u === '인분' && servingGrams ? `인분 (${servingGrams}g)` : u}
+                              </Txt>
                             </Pressable>
                           ))}
                         </View>
@@ -1218,25 +1251,26 @@ function RecordModal({
                   showsVerticalScrollIndicator={false}
                   style={styles.tabForm}>
                   {favData.map((f) => (
-                    <Pressable
-                      key={f.id}
-                      onPress={() => pickFood({ ...f, servingSize: f.servingSize ?? null })}
-                      style={styles.searchItem}>
-                      <View style={styles.flex1}>
+                    <View key={f.id} style={styles.searchItem}>
+                      <Pressable
+                        onPress={() => pickFood({ ...f, servingSize: f.servingSize ?? null })}
+                        style={styles.flex1}>
                         <Txt variant="body" weight="600">{f.name}</Txt>
                         <Txt variant="caption" color={Palette.gray500}>
                           탄 {f.carb}g · 단 {f.protein}g · 지 {f.fat}g
                           {f.servingSize ? ` · 1회 ${f.servingSize}` : ''}
                         </Txt>
-                      </View>
+                      </Pressable>
                       <Pressable
                         hitSlop={8}
                         onPress={() => toggleFavorite.mutate({ food: { ...f, servingSize: f.servingSize ?? null }, favorites: favData })}
                         style={styles.starBtn}>
                         <Icon name="star" size={18} color={Palette.primary} />
                       </Pressable>
-                      <Txt variant="body" weight="600" color={Palette.primary}>{f.kcal} kcal</Txt>
-                    </Pressable>
+                      <Pressable onPress={() => pickFood({ ...f, servingSize: f.servingSize ?? null })}>
+                        <Txt variant="body" weight="600" color={Palette.primary}>{f.kcal} kcal</Txt>
+                      </Pressable>
+                    </View>
                   ))}
                 </ScrollView>
               ) : (
@@ -1269,8 +1303,8 @@ function RecordModal({
                 </View>
                 <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                   {searchResults.map((f, i) => (
-                    <Pressable key={`${f.name}-${i}`} onPress={() => pickFood(f)} style={styles.searchItem}>
-                      <View style={styles.flex1}>
+                    <View key={`${f.name}-${i}`} style={styles.searchItem}>
+                      <Pressable onPress={() => pickFood(f)} style={styles.flex1}>
                         <Txt variant="body" weight="600">
                           {f.name}
                         </Txt>
@@ -1278,7 +1312,7 @@ function RecordModal({
                           100g 기준 · 탄 {f.carb}g · 단 {f.protein}g · 지 {f.fat}g
                           {f.servingSize ? ` · 1회 ${f.servingSize}` : ''}
                         </Txt>
-                      </View>
+                      </Pressable>
                       <Pressable
                         hitSlop={8}
                         onPress={() => toggleFavorite.mutate({ food: f, favorites: favData })}
@@ -1289,10 +1323,12 @@ function RecordModal({
                           color={isFavorited(f.name) ? Palette.primary : Palette.gray300}
                         />
                       </Pressable>
-                      <Txt variant="body" weight="600" color={Palette.primary}>
-                        {f.kcal} kcal
-                      </Txt>
-                    </Pressable>
+                      <Pressable onPress={() => pickFood(f)}>
+                        <Txt variant="body" weight="600" color={Palette.primary}>
+                          {f.kcal} kcal
+                        </Txt>
+                      </Pressable>
+                    </View>
                   ))}
                   {search.isFetching && (
                     <View style={styles.searchEmpty}>
@@ -2123,7 +2159,6 @@ export default function DietScreen() {
               </View>
             </View>
             <CalorieBar consumed={totals.kcal} goal={calorieGoal} burned={burnedKcal} />
-            <View style={styles.sectionDivider} />
             {isLoading ? (
               <View style={styles.listState}>
                 <ActivityIndicator color={Palette.primary} />
@@ -2558,10 +2593,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
+    marginTop: Spacing.card,
   },
   slotCard: {
     width: '48.5%',
-    minHeight: 168,
     backgroundColor: Palette.bgSurface,
     borderRadius: Radius.card,
     borderWidth: 1,
@@ -2580,7 +2615,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  slotIconWrap: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
+  slotIconWrap: { justifyContent: 'flex-start', alignItems: 'flex-start' },
   slotIconCircle: {
     width: 56,
     height: 56,
@@ -2827,8 +2862,8 @@ const styles = StyleSheet.create({
   stepperUnit: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 40,
     paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
     borderWidth: 1,
     borderColor: Palette.lineDefault,
     borderRadius: Radius.button,

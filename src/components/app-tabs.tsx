@@ -12,7 +12,7 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>홈</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
+          src={require('@/assets/images/icon/favicon.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
@@ -20,7 +20,7 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="diet">
         <NativeTabs.Trigger.Label>식단</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
+          src={require('@/assets/images/icon/favicon.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
@@ -28,7 +28,7 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="workout">
         <NativeTabs.Trigger.Label>운동</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
+          src={require('@/assets/images/icon/favicon.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
