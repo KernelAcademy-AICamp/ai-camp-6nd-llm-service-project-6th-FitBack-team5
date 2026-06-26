@@ -42,7 +42,7 @@ export function LoginScreen() {
   // 이메일 인증 링크 결과 처리(웹): 만료·무효면 안내 후 URL 정리.
   // 정상 토큰은 supabase가 detectSessionInUrl로 자동 처리해 로그인됨.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (Platform.OS !== 'web') return;
     const hash = window.location.hash || '';
     if (!hash.includes('error')) return;
     const params = new URLSearchParams(hash.replace(/^#/, ''));
@@ -71,7 +71,7 @@ export function LoginScreen() {
     setSubmitting(true);
     if (isSignup) {
       // 확인 메일 링크가 우리 앱(현재 도메인)으로 돌아오게 지정. 웹만 origin 사용.
-      const emailRedirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const emailRedirectTo = Platform.OS === 'web' ? window.location.origin : undefined;
       const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
       if (error) {
         setErrorMessage(error.message);
