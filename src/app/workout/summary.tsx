@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,12 +10,15 @@ import {
   BottomTabInset,
   MaxContentWidth,
   Palette,
+  Radius,
   ScreenPadding,
   Spacing,
 } from '@/constants/theme';
+import { CenterDayCard, CenterDayFeedback, CenterWeekStatusCard } from '@/features/membership/CenterRecords';
 import { DayWorkoutList } from '@/features/workout/DayWorkoutList';
 import { SelectedDayFeedback } from '@/features/workout/SelectedDayCard';
 import { WeekStatusCard } from '@/features/workout/WeekStatusCard';
+import { WorkoutDateStrip } from '@/features/workout/WorkoutDateStrip';
 function todayIso(): string {
   const d = new Date();
   const m = `${d.getMonth() + 1}`.padStart(2, '0');
@@ -26,7 +30,8 @@ export default function WorkoutSummaryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
   const initial = typeof params.date === 'string' && params.date ? params.date : todayIso();
-  const selectedDate = initial;
+  const [selectedDate, setSelectedDate] = useState<string>(initial);
+  const [tab, setTab] = useState<'center' | 'home'>('center');
 
   return (
     <ThemedView style={styles.container}>
@@ -44,9 +49,42 @@ export default function WorkoutSummaryScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <WeekStatusCard selectedDate={selectedDate} />
-          <DayWorkoutList date={selectedDate} />
-          <SelectedDayFeedback date={selectedDate} />
+          <WorkoutDateStrip selected={selectedDate} onSelect={setSelectedDate} />
+
+          <View style={styles.tabs}>
+            <Pressable
+              onPress={() => setTab('center')}
+              style={[styles.tab, tab === 'center' && styles.tabActive]}>
+              <ThemedText
+                type="smallBold"
+                style={{ color: tab === 'center' ? Palette.white : Palette.gray500 }}>
+                센터
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setTab('home')}
+              style={[styles.tab, tab === 'home' && styles.tabActive]}>
+              <ThemedText
+                type="smallBold"
+                style={{ color: tab === 'home' ? Palette.white : Palette.gray500 }}>
+                홈트
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          {tab === 'home' ? (
+            <>
+              <WeekStatusCard selectedDate={selectedDate} />
+              <DayWorkoutList date={selectedDate} />
+              <SelectedDayFeedback date={selectedDate} />
+            </>
+          ) : (
+            <>
+              <CenterWeekStatusCard selectedDate={selectedDate} />
+              <CenterDayCard date={selectedDate} />
+              <CenterDayFeedback date={selectedDate} />
+            </>
+          )}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -79,5 +117,21 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: BottomTabInset + Spacing.lg,
     gap: Spacing.md,
+  },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: Palette.bgMuted,
+    borderRadius: Radius.full,
+    padding: 4,
+    gap: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: Palette.primary,
   },
 });

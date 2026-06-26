@@ -22,7 +22,7 @@ import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import { useProfile } from '@/features/auth/useProfile';
 import { deleteSession, loadSessions, saveSession, type ChatSession } from '@/features/coach/chatHistory';
-import type { AppResponse, DietResponse, FollowupAction, RoiInfo } from '@/features/coach/chatbot.types';
+import type { AppResponse, DietResponse, FollowupAction, PlanBody, RoiInfo } from '@/features/coach/chatbot.types';
 import { useAddMeal, type MealType } from '@/features/diet/useMeals';
 import { useAiFeedback } from '@/features/coach/useAiFeedback';
 import { useDietSummary } from '@/features/coach/useDietSummary';
@@ -86,6 +86,30 @@ const WC_STEPS: readonly WcStep[] = [
 ];
 function buildWcInput(a: Partial<Record<WcStepKey, string>>, easier: boolean): RoutineInput {
   return { goal: a.goal ?? '체력 향상', equipment: a.equipment ?? '매트', condition: a.condition ?? '보통', bodyPart: a.bodyPart ?? '없음', duration: a.duration ?? '15분', easier };
+}
+
+/** 챗봇 추천 plan(자유형) → complete.tsx 가 기대하는 최소 Routine 으로 변환. TTS 스크립트는 비운다(기록 전용). */
+function planToRoutine(body: PlanBody): Routine {
+  return {
+    id: 'coach-plan',
+    title: `${body.focus_part} 루틴`,
+    meta: `${body.duration_min || 0}분`,
+    intro: '',
+    exercises: body.items.map((it) => ({
+      name: it.name,
+      detail: `${it.reps}회 × ${it.sets}세트`,
+      description: '',
+      caution: '',
+      earlyReps: [],
+      middleReps: [],
+      finalReps: [],
+      timeScripts: [],
+      halfwayEncouragement: '',
+      repScripts: [],
+      isStretch: false,
+      videoUrl: null,
+    })),
+  };
 }
 
 // ── Helpers ──────────────────────────────────────────────
@@ -496,6 +520,8 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
   const { mutate: generateRoutine, isPending: routinePending } = useGenerateRoutine();
   const setSessionRoutine = useWorkoutSession((s) => s.setRoutine);
+  const startWorkoutSession = useWorkoutSession((s) => s.startSession);
+  const setSessionCompletedCount = useWorkoutSession((s) => s.setCompletedCount);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -638,9 +664,22 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
   }
 
   // 추천 액션 칩(퀵 리플라이) — 딥링크형은 화면 이동, 그 외는 템플릿 질문 전송.
-  function handleAction(a: FollowupAction) {
+  function handleAction(a: FollowupAction, planBody?: PlanBody) {
     const { type, label } = a;
-    if (type === 'log_workout' || type === 'view_plan') {
+    if (type === 'log_workout') {
+      // 추천 루틴을 완료 기록 작성 화면(/workout/complete)으로 미리 채워 진입 → 사용자가 저장.
+      if (planBody && planBody.items.length > 0) {
+        const routine = planToRoutine(planBody);
+        setSessionRoutine(routine);
+        startWorkoutSession();
+        setSessionCompletedCount(routine.exercises.length); // 추천 루틴을 '완료'로 표시
+        onClose();
+        router.navigate('/workout/complete' as never);
+      } else {
+        onClose();
+        router.navigate('/workout' as never);
+      }
+    } else if (type === 'view_plan') {
       onClose();
       router.navigate('/workout' as never);
     } else if (type === 'view_diet' || type === 'log_meal') {
@@ -1132,7 +1171,8 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
                       <Pressable
                         onPress={() => {
                           console.log('[analytics] followup_tap', { type: followupObj.type, intent: m.response!.intent });
-                          handleAction(followupObj);
+                          const planBody = m.response!.intent === 'plan' ? m.response!.body : undefined;
+                          handleAction(followupObj, planBody);
                         }}
                         style={({ pressed }) => [styles.followupBtn, pressed && styles.pressed]}
                         accessibilityRole="button">
