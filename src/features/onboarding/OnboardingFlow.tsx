@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Icon } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
+import { EVENTS, logEvent } from '@/features/analytics/events';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
 import { NumberWheelPicker } from '@/features/membership/NumberWheelPicker';
 import { useCompleteOnboarding, type FitnessGoal } from '@/features/onboarding/useCompleteOnboarding';
@@ -65,7 +66,12 @@ export function OnboardingFlow() {
         membership: null, // 회원권은 온보딩 이후 홈에서 등록
         goal,
       },
-      { onSuccess: () => setStep('done') },
+      {
+        onSuccess: () => {
+          logEvent(EVENTS.onboardingComplete);
+          setStep('done');
+        },
+      },
     );
   }
 

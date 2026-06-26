@@ -197,6 +197,14 @@ export function CheckInFlow({
   const scrollRef = useRef<ScrollView>(null);
   const [modeSectionY, setModeSectionY] = useState(0);
 
+  // 체크인 시도 1회 기록(퍼널 — 첫 핵심 행동). 모달 진입 1회만 발화.
+  const checkinStartedRef = useRef(false);
+  useEffect(() => {
+    if (checkinStartedRef.current) return;
+    checkinStartedRef.current = true;
+    logEvent(EVENTS.checkinStarted, { preset: !!presetId });
+  }, [presetId]);
+
   const { mutate, isPending, error } = useCreateVisit();
   const { data: center } = useCenter(selectedId);
   const { data: route, isLoading: routeLoading } = useRoute(
