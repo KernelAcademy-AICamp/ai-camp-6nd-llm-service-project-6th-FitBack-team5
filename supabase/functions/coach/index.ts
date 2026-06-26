@@ -42,41 +42,53 @@ const SYSTEM = `당신은 FitBack의 AI 운동 코치다. 사용자를 평가하
 - insight: 데이터 기반 해석 한 문장, 30자 이내 (방문 패턴/페이스/손익 중 가장 의미 있는 것)
 - action: 구체적인 다음 행동 1문장 (가능하면 수치 포함: "이번 주 N회", "회당 N원")`;
 
-const SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    headline: { type: 'string' },
-    insight: { type: 'string' },
-    action: { type: 'string' },
-  },
-  required: ['headline', 'insight', 'action'],
+interface CoachTip { headline: string; insight: string; action: string }
+
+const FALLBACK: CoachTip = {
+  headline: '오늘 한 걸음부터',
+  insight: '기록을 보며 이번 주 페이스를 맞춰봐요.',
+  action: '이번 주 한 번 더 센터에 다녀와요.',
 };
+
+/** 모델 텍스트 → CoachTip. 코드펜스/잡텍스트 방어 + 실패 시 폴백(절대 throw 안 함). */
+function parseTip(raw: string): CoachTip {
+  try {
+    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    const s = cleaned.indexOf('{');
+    const e = cleaned.lastIndexOf('}');
+    const o = JSON.parse(s >= 0 && e > s ? cleaned.slice(s, e + 1) : cleaned);
+    if (typeof o.headline === 'string' && typeof o.insight === 'string' && typeof o.action === 'string') {
+      return { headline: o.headline, insight: o.insight, action: o.action };
+    }
+  } catch {
+    // 파싱 실패 → 폴백
+  }
+  return FALLBACK;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
   try {
     const payload = await req.json();
+    // 표준 Messages API — output_config(비표준) 제거. JSON은 프롬프트로 강제 + parseTip으로 방어.
     const msg = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       system: SYSTEM,
-      // deno 런타임 통과용 — 최신 SDK의 output_config 구조화 출력
-      // deno-lint-ignore no-explicit-any
-      output_config: { format: { type: 'json_schema', schema: SCHEMA } } as any,
       messages: [
         {
           role: 'user',
-          content: `다음은 한 사용자의 회원권/방문/운동 데이터다. 이번 주 추천을 만들어줘.\n\n${JSON.stringify(payload)}`,
+          content: `다음은 한 사용자의 회원권/방문/운동 데이터다. 이번 주 추천을 만들어줘.\n\n${JSON.stringify(payload)}\n\n반드시 JSON 객체 하나만 출력: {"headline","insight","action"}. 코드펜스·설명 없이.`,
         },
       ],
     });
-    const text = msg.content.find((b) => b.type === 'text');
-    const out = text && 'text' in text ? JSON.parse(text.text) : null;
-    if (!out) return json({ error: 'empty response' }, 502);
-    return json(out);
+    const block = msg.content.find((b) => b.type === 'text');
+    const raw = block && 'text' in block ? block.text : '';
+    return json(parseTip(raw));
   } catch (e) {
-    return json({ error: String((e as Error)?.message ?? e) }, 500);
+    // Anthropic 호출 실패(인증·크레딧·네트워크 등) — 앱이 깨지지 않게 폴백 팁 반환(500 금지).
+    console.error('[coach] error:', String((e as Error)?.message ?? e));
+    return json(FALLBACK);
   }
 });
