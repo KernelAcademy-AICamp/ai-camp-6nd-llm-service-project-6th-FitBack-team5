@@ -74,6 +74,42 @@ export function CenterDayCard({ date }: { date: string }) {
   );
 }
 
+/** "HH:MM" → "H시 MM분" (홈트 AI 피드백 시각 포맷과 동일). */
+function hmLabel(hhmm: string): string {
+  const [h, m] = hhmm.split(':');
+  return `${Number(h)}시 ${m}분`;
+}
+
+/**
+ * 센터 탭 AI 피드백 카드 — 홈트(SelectedDayFeedback)와 동일한 구조.
+ * 센터 운동은 별도 LLM 저장이 없어, 세션 데이터로 동일 형식의 요약을 클라에서 구성한다.
+ */
+export function CenterDayFeedback({ date }: { date: string }) {
+  const { data: workouts, isLoading } = useDayCenterWorkouts(date);
+  if (isLoading || !workouts || workouts.length === 0) return null;
+
+  return (
+    <ThemedView
+      type="backgroundElement"
+      style={[styles.feedbackCard, { borderColor: Palette.lineDefault }, Elevation.level1]}>
+      <View style={[styles.feedbackBadge, { backgroundColor: Palette.primaryLight }]}>
+        <ThemedText type="smallBold" style={{ color: Palette.primary }}>
+          💬 AI 피드백 ({formatDateKo(date)})
+        </ThemedText>
+      </View>
+      {workouts.map((w) => (
+        <ThemedText key={w.id} type="default">
+          <ThemedText type="default" style={{ color: Palette.primary }}>
+            {hmLabel(w.time)}
+          </ThemedText>
+          {' : '}
+          {`운동 ${w.itemCount}개로 구성된 ${w.bodyPart} ${w.exerciseType} 루틴을 ${w.durationMin}분간 완료했어요.`}
+        </ThemedText>
+      ))}
+    </ThemedView>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
     padding: Spacing.md,
@@ -101,5 +137,17 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     gap: Spacing.xs,
+  },
+  feedbackCard: {
+    padding: Spacing.card,
+    borderRadius: Radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
+  },
+  feedbackBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.small,
   },
 });

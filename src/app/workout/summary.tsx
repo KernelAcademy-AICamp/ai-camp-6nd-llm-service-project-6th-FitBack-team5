@@ -14,7 +14,7 @@ import {
   ScreenPadding,
   Spacing,
 } from '@/constants/theme';
-import { CenterDayCard, CenterWeekStatusCard } from '@/features/membership/CenterRecords';
+import { CenterDayCard, CenterDayFeedback, CenterWeekStatusCard } from '@/features/membership/CenterRecords';
 import { DayWorkoutList } from '@/features/workout/DayWorkoutList';
 import { SelectedDayFeedback } from '@/features/workout/SelectedDayCard';
 import { WeekStatusCard } from '@/features/workout/WeekStatusCard';
@@ -82,6 +82,7 @@ export default function WorkoutSummaryScreen() {
             <>
               <CenterWeekStatusCard selectedDate={selectedDate} />
               <CenterDayCard date={selectedDate} />
+              <CenterDayFeedback date={selectedDate} />
             </>
           )}
         </ScrollView>
