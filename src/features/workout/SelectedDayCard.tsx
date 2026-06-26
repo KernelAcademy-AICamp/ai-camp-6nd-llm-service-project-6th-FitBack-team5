@@ -38,7 +38,7 @@ export function SelectedDayCard({
 
   const header = (
     <View style={styles.summaryHeader}>
-      <ThemedText type="subtitle">오늘의 홈트 요약</ThemedText>
+      <ThemedText type="subtitle">오늘의 운동 요약</ThemedText>
       {onPressMore ? (
         <Pressable
           onPress={onPressMore}
