@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { Apple, ArrowLeft, ArrowUp, Calendar, CalendarPlus, Camera, Check, Dumbbell, Flame, History, Sparkles, Trash2, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
+import { Apple, ArrowLeft, ArrowUp, Calendar, CalendarPlus, Camera, Check, Dumbbell, History, Sparkles, Trash2, TrendingUp, X, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -167,10 +167,10 @@ function AddToScheduleButton({
       disabled={added || add.isPending}
       style={({ pressed }) => [addSchedStyles.btn, pressed && { opacity: 0.6 }, added && addSchedStyles.done, failed && addSchedStyles.fail]}
       accessibilityRole="button"
-      accessibilityLabel={added ? '오늘 일정에 추가됨' : '오늘 일정에 추가'}>
+      accessibilityLabel={added ? '일정에 넣었어요' : '일정에 넣기(예정)'}>
       <Icon icon={added ? Check : CalendarPlus} size={14} color={color} />
       <ThemedText type="label" style={{ color }}>
-        {added ? '오늘 일정에 추가됨' : failed ? '추가 실패 · 다시 시도' : '오늘 일정에 추가'}
+        {added ? '일정에 넣었어요(예정)' : failed ? '추가 실패 · 다시 시도' : '일정에 넣기(예정)'}
       </ThemedText>
     </Pressable>
   );
@@ -510,11 +510,6 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
     [membership, home?.weekVisits]
   );
 
-  const riskColor = !risk ? Palette.gray500
-    : risk.level === 'danger' ? Palette.loss
-    : risk.level === 'safe' ? Palette.profit
-    : risk.level === 'warning' ? Palette.warning
-    : Palette.gray500;
 
   // 일정(캘린더) 컨텍스트 — 오늘 + 앞으로 7일 예정. 챗봇이 중복 추천을 피하고 예정 일정을 참고.
   const now0 = new Date();
@@ -1008,29 +1003,8 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
             <Icon icon={Sparkles} size={13} color={Palette.primary} />
             <ThemedText type="label" style={{ color: Palette.primary }}>핏쌤</ThemedText>
           </View>
-          {home && home.streakWeeks > 0 ? (
-            <View style={styles.streakBadge}>
-              <Icon icon={Flame} size={12} color={Palette.warning} />
-              <ThemedText type="label" themeColor="textSecondary">연속 {home.streakWeeks}주</ThemedText>
-            </View>
-          ) : null}
         </View>
-        {risk && risk.remainingDays > 0 ? (
-          <View style={[styles.roiChip, {
-            backgroundColor: risk.level === 'safe' ? Palette.profitLight : Palette.bgMuted,
-            borderColor: riskColor,
-          }]}>
-            {risk.hasSessions ? (
-              <ThemedText type="label" style={{ color: riskColor }}>
-                {Math.round(risk.sessionFilledRatio * 100)}% · D-{risk.remainingDays}
-              </ThemedText>
-            ) : (
-              <ThemedText type="label" style={{ color: riskColor }}>D-{risk.remainingDays}</ThemedText>
-            )}
-          </View>
-        ) : (
-          <View style={{ width: 22 }} />
-        )}
+        <View style={{ width: 22 }} />
       </View>
 
       {/* Messages */}
@@ -1112,12 +1086,12 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
                 <>
                   <ResponseBody response={m.response} />
 
-                  {/* 코치 답변 — 검정 글자, 박스 없이(채널톡 스타일) */}
-                  <View style={styles.coachAnswer}>
-                    <ThemedText type="caption" style={styles.coachAnswerText}>
-                      {m.text}
-                    </ThemedText>
-                  </View>
+                  {/* 코치 답변 — 핏쌤 말풍선(컬러 버블·흰 글씨)로 통일 */}
+                  {m.text ? (
+                    <View style={[styles.bubble, styles.coachBubble]}>
+                      <ThemedText type="body" style={{ color: Palette.white }}>{m.text}</ThemedText>
+                    </View>
+                  ) : null}
 
                   {/* Caution — 박스 유지, 텍스트 크기는 답변과 동일(caption) */}
                   {m.response.caution ? (
@@ -1163,7 +1137,7 @@ export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { on
                         style={({ pressed }) => [styles.followupBtn, pressed && styles.pressed]}
                         accessibilityRole="button">
                         <ThemedText type="captionBold" style={{ color: Palette.white }}>
-                          {followupObj.label}
+                          {followupObj.type === 'log_workout' ? '운동 완료 기록' : followupObj.label}
                         </ThemedText>
                       </Pressable>
                     );
@@ -1399,9 +1373,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2,
   },
   exerciseRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  // 코치 답변 — 박스 없이 검정 글자(채널톡 스타일)
-  coachAnswer: { maxWidth: '92%', paddingVertical: Spacing.xs },
-  coachAnswerText: { color: Palette.gray900, lineHeight: 22 },
   caution: {
     backgroundColor: Palette.errorLight,
     borderRadius: Radius.small, padding: Spacing.sm, maxWidth: '90%',

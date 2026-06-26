@@ -29,8 +29,8 @@ interface ChatbotRequest {
   history?: { role: string; text: string }[]; // 멀티턴 — 직전 대화(최근 N턴)
 }
 
-/** Claude 호출 → raw 텍스트 반환 */
-async function callClaude(userPayload: string): Promise<string> {
+/** Claude 호출 → raw 텍스트 + 재시도 가능 여부 반환 */
+async function callClaude(userPayload: string): Promise<{ text: string; retryable: boolean }> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -42,15 +42,21 @@ async function callClaude(userPayload: string): Promise<string> {
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
       temperature: 0.4,
-      system: SYSTEM_PROMPT,
+      // 시스템 프롬프트는 매 호출 동일 → 프롬프트 캐싱(ephemeral)으로 입력 토큰 비용 절감
+      system: [
+        { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+      ],
       messages: [{ role: "user", content: userPayload }],
     }),
   });
   const data = await res.json();
-  return (data?.content ?? [])
+  const text = (data?.content ?? [])
     .filter((b: { type: string }) => b.type === "text")
     .map((b: { text: string }) => b.text)
     .join("\n");
+  // 4xx(크레딧 부족·잘못된 요청)는 재시도해도 같은 실패 → 재시도 안 함. 429·5xx·네트워크만 재시도.
+  const retryable = res.ok || res.status === 429 || res.status >= 500;
+  return { text, retryable };
 }
 
 /**
@@ -61,10 +67,11 @@ async function callClaude(userPayload: string): Promise<string> {
 async function getValidatedResponse(payload: string): Promise<ChatbotResponse> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const raw = await callClaude(payload);
+      const { text: raw, retryable } = await callClaude(payload);
       const result = validateChatbotResponse(raw);
       if (result.ok) return result.data;
       console.error(`[ai-feedback] 검증 실패(시도 ${attempt}): ${result.error}`);
+      if (!retryable) break; // 비재시도성 오류(4xx)면 즉시 폴백 — 재시도 토큰 낭비 방지
     } catch (err) {
       console.error(`[ai-feedback] 호출 실패(시도 ${attempt}): ${(err as Error).message}`);
     }
