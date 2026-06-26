@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "FItBack",
+    "name": "FitBack",
     "slug": "FItBack",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/favicon.png",
     "scheme": "fitback",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -12,12 +12,18 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/favicon.png",
+        "backgroundColor": "#E6F4FE"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.CAMERA"
+      ],
+      "package": "com.fitback.app"
     },
     "web": {
       "output": "static",
@@ -42,14 +48,42 @@
           "cameraPermission": "음식을 촬영해 식단을 기록하기 위해 카메라 권한이 필요해요."
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "음식을 촬영해 식단을 기록하기 위해 카메라 권한이 필요해요."
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-audio",
       "expo-video",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "fitback-mobile",
+          "organization": "fitback-wt"
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "be74960d-3be0-4cdd-8daf-b7c94a334601"
+      }
+    },
+    "owner": "fitback-team",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/be74960d-3be0-4cdd-8daf-b7c94a334601"
     }
   }
 }

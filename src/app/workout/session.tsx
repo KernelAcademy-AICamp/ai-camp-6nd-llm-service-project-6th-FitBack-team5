@@ -1036,11 +1036,13 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   // 오디오 코칭 카드 — 진행바 + 재생 버튼 + AI 말풍선.
+  // 배경색 명시: Android elevation 이 배경 없으면 회색 fill 로 렌더됨.
   audioCard: {
     width: '100%',
     padding: Spacing.md,
     borderRadius: Radius.card,
     borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: Palette.bgSurface,
     gap: Spacing.sm,
   },
   audioHeaderRow: {

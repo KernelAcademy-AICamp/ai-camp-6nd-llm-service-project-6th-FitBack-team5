@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { ArrowRight, Wrench } from 'lucide-react-native';
 import { useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CoachTipCard } from '@/components/coach-tip-card';
@@ -42,7 +42,7 @@ export default function WorkoutScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <GnbBar onMenu={() => setShowMyPanel(true)} onCalendar={() => setShowCalendar(true)} />
         <ScrollView
           style={styles.scroll}
@@ -51,11 +51,6 @@ export default function WorkoutScreen() {
 
           {/* 오늘 운동 요약 카드 */}
           <View style={[styles.topCard, Elevation.level1]}>
-            <Image
-              source={require('../../../assets/images/character.png')}
-              style={styles.mascot}
-              resizeMode="contain"
-            />
             <SelectedDayCard
               date={selectedDate}
               onPressMore={() =>
@@ -205,7 +200,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: ScreenPadding,
     paddingTop: GNB_HEIGHT,
-    paddingBottom: BottomTabInset + Spacing.lg,
+    // 네이티브: NativeTabs 자체 inset 처리 → BottomTabInset 불필요. 웹: fixed 탭바 보정.
+    paddingBottom: (Platform.OS === 'web' ? BottomTabInset : 0) + Spacing.lg,
   },
   // 오늘 운동 요약 카드
   topCard: {
@@ -213,11 +209,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card,
     padding: Spacing.md,
     overflow: 'hidden',
-  },
-  mascot: {
-    width: 88,
-    height: 88,
-    alignSelf: 'center',
   },
   // 섹션 타이틀
   sectionTitle: {

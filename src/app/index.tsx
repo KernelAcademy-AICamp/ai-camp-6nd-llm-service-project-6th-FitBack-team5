@@ -3,7 +3,8 @@ import {
   AlarmClock, Calendar,
   Info, MoreHorizontal, TrendingUp, X,
 } from 'lucide-react-native';
-import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ const GNB_HEIGHT = 52;
 import { sheetPresentation } from '@/components/modal-presentation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { LineBar } from '@/components/line-bar';
 import { Card, Icon } from '@/components/ui';
 import {
   BottomTabInset,
@@ -70,7 +72,7 @@ function getWeekBadge(visits: number): string | null {
 function CharacterImage() {
   return (
     <Image
-      source={require('../../assets/images/Chat.png')}
+      source={require('../../assets/images/chat_main.png')}
       style={styles.characterImage}
       resizeMode="contain"
     />
@@ -114,6 +116,11 @@ export default function HomeScreen() {
   const [showMembershipActions, setShowMembershipActions] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [activeCard, setActiveCard] = useState(0);
+  const [dismissedAlarmKey, setDismissedAlarmKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('alarm_dismissed_key').then((v) => setDismissedAlarmKey(v));
+  }, []);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -137,25 +144,34 @@ export default function HomeScreen() {
   const { width: screenW } = useWindowDimensions();
   const carouselWidth = Math.min(screenW, MaxContentWidth) - ScreenPadding * 2;
 
-  const carouselItems = [...withRisk].sort((a, b) => {
-    const aExp = a.m.status === 'expired' ? 1 : 0;
-    const bExp = b.m.status === 'expired' ? 1 : 0;
-    if (aExp !== bExp) return aExp - bExp;
-    return daysUntil(a.m.endDate) - daysUntil(b.m.endDate);
-  });
+  const carouselItems = [...withRisk]
+    .filter((x) => x.m.status !== 'expired')
+    .sort((a, b) => daysUntil(a.m.endDate) - daysUntil(b.m.endDate));
 
   const name = profile?.display_name || '회원';
 
   const expiring = list
     .filter((m) => m.status === 'expiring')
     .sort((a, b) => daysUntil(a.endDate) - daysUntil(b.endDate));
-  const bannerItem = expiring[0] ? withRisk.find((x) => x.m.id === expiring[0].id) ?? null : null;
+  const bannerItemRaw = expiring[0] ? withRisk.find((x) => x.m.id === expiring[0].id) ?? null : null;
 
   const today = new Date();
   const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const { data: monthSchedules } = useSchedules(today.getFullYear(), today.getMonth() + 1);
   const todayPlans = (monthSchedules ?? []).filter((s) => s.date === todayYmd && s.status === 'planned');
-  const hasAlarm = expiring.length > 0 || todayPlans.length > 0;
+
+  const alarmKey = bannerItemRaw
+    ? `${bannerItemRaw.m.id}-${todayYmd}`
+    : todayPlans.length > 0 ? `plans-${todayYmd}` : null;
+  const alarmRead = alarmKey !== null && dismissedAlarmKey === alarmKey;
+  const hasAlarm = (expiring.length > 0 || todayPlans.length > 0) && !alarmRead;
+  const bannerItem = alarmRead ? null : bannerItemRaw;
+
+  function dismissAlarm() {
+    if (!alarmKey) return;
+    setDismissedAlarmKey(alarmKey);
+    void AsyncStorage.setItem('alarm_dismissed_key', alarmKey);
+  }
 
   const coach = useCoach({ withRisk, summary, monthly: stats, pattern: visitPattern });
 
@@ -176,7 +192,7 @@ export default function HomeScreen() {
           <GnbBar
             onMenu={() => setShowMyDrawer(true)}
             onCalendar={() => setShowCalendar(true)}
-            onAlarm={() => setShowAlarm(true)}
+            onAlarm={() => { dismissAlarm(); setShowAlarm(true); }}
             hasAlarm={hasAlarm}
           />
 
@@ -185,7 +201,7 @@ export default function HomeScreen() {
           {/* ── 만료 임박 알림 배너 ── */}
           {bannerItem ? (
             <Pressable
-              onPress={() => router.navigate('/membership')}
+              onPress={() => { dismissAlarm(); router.navigate('/membership'); }}
               style={({ pressed }) => [styles.expiryBanner, pressed && styles.pressed]}>
               <Icon icon={AlarmClock} size={16} color={Palette.white} />
               <ThemedText type="captionBold" style={styles.expiryBannerText} numberOfLines={1}>
@@ -222,7 +238,7 @@ export default function HomeScreen() {
           </Pressable>
 
           {/* ── 회원권 캐러셀 ── */}
-          {list.length > 0 ? (
+          {carouselItems.length > 0 ? (
             /* shadow wrapper — overflow:visible 유지로 shadow 클리핑 방지 */
             <View style={[styles.membershipCardShadow, Elevation.level1]}>
               {/* clip wrapper — border-radius + overflow:hidden으로 자식 클리핑 */}
@@ -300,7 +316,7 @@ export default function HomeScreen() {
                           <View style={styles.roiBarTrack}>
                             {cardProgressPct > 0 ? (
                               <View style={[styles.roiBarFill, { width: `${cardProgressPct}%` as any }]}>
-                                <ThemedText type="label" style={styles.roiBarLabel}>{cardProgressPct}%</ThemedText>
+                                <ThemedText type="bodySemibold" style={styles.roiBarLabel}>{cardProgressPct}%</ThemedText>
                               </View>
                             ) : null}
                             {[25, 50, 75].map((mk) => (
@@ -312,21 +328,21 @@ export default function HomeScreen() {
                             <View style={styles.infoBox}>
                               <ThemedText type="caption" themeColor="textSecondary">남은 방문</ThemedText>
                               {item.risk.hasSessions ? (
-                                <ThemedText type="body" themeColor="text">
+                                <ThemedText type="bodySemibold" themeColor="text">
                                   {item.risk.remainingSessions ?? 0}회{' '}
                                   <ThemedText type="body" style={styles.infoBoxSub}>
                                     / {item.m.maxVisits}회
                                   </ThemedText>
                                 </ThemedText>
                               ) : (
-                                <ThemedText type="body" themeColor="text">
+                                <ThemedText type="bodySemibold" themeColor="text">
                                   {weekVisits}/{recommendedWeekly}회
                                 </ThemedText>
                               )}
                             </View>
                             <View style={styles.infoBox}>
                               <ThemedText type="caption" themeColor="textSecondary">목표까지</ThemedText>
-                              <ThemedText type="body" themeColor="text">{wonShort(cardRemaining)}</ThemedText>
+                              <ThemedText type="bodySemibold" themeColor="text">{wonShort(cardRemaining)}</ThemedText>
                             </View>
                             <View style={styles.infoBox}>
                               <ThemedText type="caption" themeColor="textSecondary">결제금액</ThemedText>
@@ -346,6 +362,8 @@ export default function HomeScreen() {
                     );
                   })}
                 </ScrollView>
+
+                <LineBar style={{ marginVertical: 0 }} />
 
                 {/* 고정 출석 버튼 — 카드 안, 캐러셀 밖 */}
                 <View style={styles.membershipCardFooter}>
@@ -653,26 +671,23 @@ const styles = StyleSheet.create({
 
   // ── AI 코치 배너 ──
   coachBanner: {
-    marginTop: Spacing.md,
+    marginTop: 20,
     backgroundColor: Palette.primary,
     borderRadius: Radius.card,
     height: 110,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    gap: Spacing.md,
+    paddingHorizontal: 20,
+    gap: 8,
     overflow: 'hidden',
   },
   coachAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: Radius.full,
-    backgroundColor: Palette.primaryLight,
-    overflow: 'hidden',
+    width: 72,
+    height: 72,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  characterImage: { width: 52, height: 52 },
+  characterImage: { width: 72, height: 72 },
   coachTextWrap: { flex: 1, gap: 2 },
   coachGreeting: { color: 'rgba(255,255,255,0.8)' },
   coachArrow: {
@@ -690,10 +705,11 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     borderRadius: Radius.card,
   },
-  // clip wrapper: border-radius + overflow hidden → 자식 클리핑
+  // clip wrapper: radius + overflow hidden으로 자식 클리핑
   membershipCardClip: {
     borderRadius: Radius.card,
     overflow: 'hidden',
+    backgroundColor: Palette.bgSurface,
   },
   // 캐러셀 아이템: shadow·radius 없음 (부모가 처리)
   membershipCardInner: {
@@ -764,7 +780,7 @@ const styles = StyleSheet.create({
   roiBarTrack: {
     height: 28,
     borderRadius: 6,
-    backgroundColor: Palette.gray50,
+    backgroundColor: Palette.bgMuted,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -791,9 +807,9 @@ const styles = StyleSheet.create({
   infoBoxRow: { flexDirection: 'row', gap: Spacing.sm },
   infoBox: {
     flex: 1,
-    backgroundColor: Palette.gray50,
+    backgroundColor: Palette.bgMuted,
     borderRadius: Radius.button,
-    padding: Spacing.sm,
+    padding: Spacing.ms,
     gap: Spacing.xs,
   },
 

@@ -25,14 +25,20 @@
   --color-p-blue-400: #6892FF;
 
   /* Neutral */
-  --color-p-gray-900: #222C43;
-  --color-p-gray-700: #374151;
+  --color-p-gray-900: #111827;
+  --color-p-gray-800: #222C43;
+  --color-p-gray-700: #313E5B;
   --color-p-gray-500: #6B7280;
   --color-p-gray-400: #999999;
   --color-p-gray-300: #D1D5DB;
-  --color-p-gray-100: #F3F4F6;
+  --color-p-gray-200: #E7E9F1;
+  --color-p-gray-100: #F5F5F9;
   --color-p-gray-50:  #F2F2F7;
   --color-p-white:    #FFFFFF;
+
+  /* Surface */
+  --color-p-surface-page:  #F5F5F9;
+  --color-p-surface-muted: #F5F5F8;
 
   /* Green */
   --color-p-green-500: #22C55E;
@@ -67,9 +73,9 @@
   --color-brand-secondary:       var(--color-p-blue-400);
 
   /* Background */
-  --color-bg-base:    var(--color-p-gray-50);
+  --color-bg-base:    var(--color-p-surface-page);
   --color-bg-surface: var(--color-p-white);
-  --color-bg-muted:   var(--color-p-gray-100);
+  --color-bg-muted:   var(--color-p-surface-muted);
 
   /* State */
   --color-state-success:       var(--color-p-green-500);
@@ -81,7 +87,7 @@
   /* ROI 손익 — ROI 화면 전용 */
   --color-roi-profit:       var(--color-p-indigo-400);
   --color-roi-profit-light: var(--color-p-indigo-50);
-  --color-roi-loss:         var(--color-p-gray-900);
+  --color-roi-loss:         var(--color-p-gray-800);
   --color-roi-loss-light:   var(--color-p-gray-50);
 
   /* Text */
@@ -93,10 +99,12 @@
 
   /* Neutral scale */
   --color-neutral-900: var(--color-p-gray-900);
+  --color-neutral-800: var(--color-p-gray-800);
   --color-neutral-700: var(--color-p-gray-700);
   --color-neutral-500: var(--color-p-gray-500);
   --color-neutral-400: var(--color-p-gray-400);
   --color-neutral-300: var(--color-p-gray-300);
+  --color-neutral-200: var(--color-p-gray-200);
   --color-neutral-100: var(--color-p-gray-100);
   --color-neutral-50:  var(--color-p-gray-50);
   --color-neutral-0:   var(--color-p-white);

@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { sheetPresentation } from '@/components/modal-presentation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Button, Icon } from '@/components/ui';
+import { Button, Icon, Input } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { formatNumber } from '@/features/membership/dashboard';
 import { DateWheelPicker } from '@/features/membership/DateWheelPicker';
@@ -98,8 +98,6 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
   const [pickerOpen, setPickerOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [focused, setFocused] = useState<string | null>(null);
-
   const { mutate, isPending, error } = useCreateMembership();
   const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
 
@@ -124,12 +122,6 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
     touched.maxVisits && showVisits && !visitsOk ? '횟수를 1 이상 입력해 주세요. (필수)' : null;
   const goalError =
     touched.weeklyGoal && showGoal && !goalOk ? '주당 목표 방문을 1 이상 입력해 주세요. (필수)' : null;
-
-  const inputStyle = (key: string, hasError?: boolean) => [
-    styles.input,
-    focused === key && styles.inputFocused,
-    hasError && styles.inputError,
-  ];
 
   async function scanReceipt() {
     if (isScanning) return;
@@ -271,33 +263,23 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
         </Pressable>
 
         <Field label="회원권명" required error={nameError}>
-          <TextInput
+          <Input
             value={name}
             onChangeText={setName}
-            onFocus={() => setFocused('name')}
-            onBlur={() => {
-              setFocused(null);
-              touch('name');
-            }}
+            onBlur={() => touch('name')}
             placeholder="예: 강남 PT 30회"
-            placeholderTextColor={Palette.gray300}
-            style={inputStyle('name', !!nameError)}
+            style={nameError ? { borderColor: Palette.error } : undefined}
           />
         </Field>
 
         <Field label="비용 (원)" required error={costError}>
-          <TextInput
+          <Input
             value={cost ? formatNumber(Number(cost)) : ''}
             onChangeText={(t) => setCost(t.replace(/[^0-9]/g, ''))}
-            onFocus={() => setFocused('cost')}
-            onBlur={() => {
-              setFocused(null);
-              touch('cost');
-            }}
+            onBlur={() => touch('cost')}
             keyboardType="numeric"
             placeholder="예: 360,000"
-            placeholderTextColor={Palette.gray300}
-            style={inputStyle('cost', !!costError)}
+            style={costError ? { borderColor: Palette.error } : undefined}
           />
         </Field>
 
@@ -356,49 +338,35 @@ export function MembershipForm({ onClose, onSuccess }: { onClose: () => void; on
 
         {showVisits && (
           <Field label={type === 'session' ? '계약 횟수' : '횟수'} required error={visitsError}>
-            <TextInput
+            <Input
               value={maxVisits}
               onChangeText={setMaxVisits}
-              onFocus={() => setFocused('maxVisits')}
-              onBlur={() => {
-                setFocused(null);
-                touch('maxVisits');
-              }}
+              onBlur={() => touch('maxVisits')}
               keyboardType="numeric"
               placeholder="예: 30"
-              placeholderTextColor={Palette.gray300}
-              style={inputStyle('maxVisits', !!visitsError)}
+              style={visitsError ? { borderColor: Palette.error } : undefined}
             />
           </Field>
         )}
 
         {showGoal && (
           <Field label="주당 목표 방문" required error={goalError}>
-            <TextInput
+            <Input
               value={weeklyGoal}
               onChangeText={setWeeklyGoal}
-              onFocus={() => setFocused('weeklyGoal')}
-              onBlur={() => {
-                setFocused(null);
-                touch('weeklyGoal');
-              }}
+              onBlur={() => touch('weeklyGoal')}
               keyboardType="numeric"
               placeholder="예: 2 (일주일에 2번)"
-              placeholderTextColor={Palette.gray300}
-              style={inputStyle('weeklyGoal', !!goalError)}
+              style={goalError ? { borderColor: Palette.error } : undefined}
             />
           </Field>
         )}
 
         <Field label="센터 (선택)">
-          <TextInput
+          <Input
             value={centerName}
             onChangeText={setCenterName}
-            onFocus={() => setFocused('centerName')}
-            onBlur={() => setFocused(null)}
             placeholder="센터 이름"
-            placeholderTextColor={Palette.gray300}
-            style={inputStyle('centerName')}
           />
 
           {/* 장소 검색 → 지도 검색 모달 열기 (빈 입력이어도 열림) */}

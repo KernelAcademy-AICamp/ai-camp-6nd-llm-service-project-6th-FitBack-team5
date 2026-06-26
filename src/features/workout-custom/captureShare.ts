@@ -10,13 +10,23 @@ import type { RefObject } from 'react';
 import { Alert, Platform, type View } from 'react-native';
 
 const FILENAME = 'fitback-workout.png';
+// 갤러리 폴더(앨범) — Android 는 DCIM/Pictures 아래 동명 폴더 생성, iOS 는 Photos 앨범으로 묶임.
+const ALBUM_NAME = 'FitBack';
 
 type CardRef = RefObject<View | null>;
 
-async function captureToUri(ref: CardRef): Promise<string> {
+function timestampedFileName(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const time = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  return `fitback-오운완-${date}-${time}.png`;
+}
+
+async function captureToUri(ref: CardRef, fileName?: string): Promise<string> {
   if (!ref.current) throw new Error('카드 영역을 찾지 못했어요.');
   const { captureRef } = await import('react-native-view-shot');
-  return captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
+  return captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile', fileName });
 }
 
 async function captureToDataUrl(ref: CardRef): Promise<string> {
@@ -62,14 +72,22 @@ export async function saveCardImage(ref: CardRef): Promise<void> {
   }
 
   const MediaLibrary = await import('expo-media-library');
-  const perm = await MediaLibrary.requestPermissionsAsync();
+  // writeOnly=true: Android 13+ 의 "어느 사진 접근 허용?" 피커 UI 를 건너뛰고 쓰기 권한만 즉시 요청.
+  const perm = await MediaLibrary.requestPermissionsAsync(true);
   if (!perm.granted) {
     Alert.alert('권한 필요', '사진 저장을 위해 갤러리 접근 권한이 필요해요.');
     return;
   }
-  const uri = await captureToUri(ref);
-  await MediaLibrary.saveToLibraryAsync(uri);
-  Alert.alert('저장 완료', '갤러리에 이미지가 저장됐어요.');
+  const uri = await captureToUri(ref, timestampedFileName());
+  // FitBack 앨범 안에 저장 — 없으면 새로 생성, 있으면 그대로 추가.
+  const album = await MediaLibrary.Album.get(ALBUM_NAME);
+  if (album) {
+    await MediaLibrary.Asset.create(uri, album);
+  } else {
+    const asset = await MediaLibrary.Asset.create(uri);
+    await MediaLibrary.Album.create(ALBUM_NAME, [asset]);
+  }
+  Alert.alert('저장 완료', `갤러리의 '${ALBUM_NAME}' 앨범에 저장됐어요.`);
 }
 
 function downloadDataUrlOnWeb(dataUrl: string) {

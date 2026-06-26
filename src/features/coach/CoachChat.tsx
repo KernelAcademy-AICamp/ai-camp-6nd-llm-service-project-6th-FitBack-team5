@@ -11,14 +11,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 
 const CHARACTER = require('../../../assets/images/Chat.png') as number;
 
 import { ThemedText } from '@/components/themed-text';
-import { Icon } from '@/components/ui';
+import { Icon, Input } from '@/components/ui';
 import { Palette, Radius, ScreenPadding, Spacing } from '@/constants/theme';
 import { EVENTS, logEvent } from '@/features/analytics/events';
 import { useProfile } from '@/features/auth/useProfile';
@@ -409,7 +408,7 @@ function ResponseBody({ response }: { response: AppResponse }) {
 
 // ── Main component ───────────────────────────────────────
 
-export function CoachChat({ onClose, initialMessage }: { onClose: () => void; initialMessage?: string }) {
+export function CoachChat({ onClose, initialMessage, initialCoachMessage }: { onClose: () => void; initialMessage?: string; initialCoachMessage?: string }) {
   const router = useRouter();
   const { summary } = useDietSummary();
   const { data: home } = useHomeActivity();
@@ -470,9 +469,16 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
 
   // initialMessage가 있으면 마운트 직후 자동 전송
   useEffect(() => {
-    if (!initialMessage) return;
-    const t = setTimeout(() => send(initialMessage), 150);
-    return () => clearTimeout(t);
+    if (initialCoachMessage) {
+      const msgs: ChatMsg[] = [];
+      if (initialMessage) msgs.push({ role: 'user', text: initialMessage });
+      msgs.push({ role: 'coach', text: initialCoachMessage });
+      setMessages(msgs);
+      setView('chat');
+    } else if (initialMessage) {
+      const t = setTimeout(() => send(initialMessage), 150);
+      return () => clearTimeout(t);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -813,15 +819,14 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
 
   const inputBar = (
     <View style={styles.inputBar}>
-      <TextInput
+      <Input
         value={input}
         onChangeText={setInput}
         placeholder={isThinking ? 'AI 코치가 답변 중이에요…' : '무엇이든 물어보세요'}
-        placeholderTextColor={Palette.gray300}
-        style={styles.textInput}
         onSubmitEditing={() => send(input)}
         returnKeyType="send"
         editable={!isThinking}
+        style={{ flex: 1, width: undefined }}
       />
       <Pressable
         onPress={() => send(input)}
@@ -886,7 +891,7 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
         <View style={styles.topBar}>
           <View style={styles.pill}>
             <Icon icon={Sparkles} size={13} color={Palette.primary} />
-            <ThemedText type="label" style={{ color: Palette.primary }}>AI 피트니스</ThemedText>
+            <ThemedText type="label" style={{ color: Palette.primary }}>핏쌤</ThemedText>
           </View>
           <View style={styles.topRight}>
             <Pressable onPress={openHistory} hitSlop={8} accessibilityRole="button" accessibilityLabel="이전 대화 보기">
@@ -996,7 +1001,7 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
         <View style={styles.topCenter}>
           <View style={styles.pill}>
             <Icon icon={Sparkles} size={13} color={Palette.primary} />
-            <ThemedText type="label" style={{ color: Palette.primary }}>AI 피트니스</ThemedText>
+            <ThemedText type="label" style={{ color: Palette.primary }}>핏쌤</ThemedText>
           </View>
         </View>
         <View style={{ width: 22 }} />
@@ -1011,7 +1016,7 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
             return (
               <View key={i} style={styles.userLine}>
                 <View style={[styles.bubble, styles.userBubble]}>
-                  <ThemedText type="caption" style={{ color: Palette.primary }}>{m.text}</ThemedText>
+                  <ThemedText type="body" style={{ color: Palette.primary }}>{m.text}</ThemedText>
                 </View>
               </View>
             );
@@ -1026,7 +1031,7 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
                   <View style={styles.coachAvatar}>
                     <Image source={CHARACTER} style={styles.coachAvatarImg} resizeMode="contain" />
                   </View>
-                  <ThemedText type="label" themeColor="textSecondary">피트니스</ThemedText>
+                  <ThemedText type="label" themeColor="textSecondary">핏쌤</ThemedText>
                 </View>
               )}
 
@@ -1035,7 +1040,7 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
                 <View style={[styles.bubble, styles.coachBubble]}>
                   {m.isLoading
                     ? <TypingIndicator />
-                    : <ThemedText type="caption" style={{ color: Palette.white }}>{m.text}</ThemedText>
+                    : <ThemedText type="body" style={{ color: Palette.white }}>{m.text}</ThemedText>
                   }
                 </View>
               )}
@@ -1186,12 +1191,10 @@ export function CoachChat({ onClose, initialMessage }: { onClose: () => void; in
             </View>
             {wcShowCustom ? (
               <View style={{ gap: Spacing.sm }}>
-                <TextInput
-                  style={styles.wcCustomInput}
+                <Input
                   value={wcCustomText}
                   onChangeText={setWcCustomText}
                   placeholder="직접 입력해주세요"
-                  placeholderTextColor={Palette.gray300}
                   onSubmitEditing={() => { if (wcCustomText.trim()) wcHandleSelect(wcCustomText.trim()); }}
                   returnKeyType="done"
                   autoFocus
@@ -1467,11 +1470,6 @@ const styles = StyleSheet.create({
   inputBar: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     paddingHorizontal: ScreenPadding, paddingTop: Spacing.sm, paddingBottom: Spacing.md,
-  },
-  textInput: {
-    flex: 1, backgroundColor: Palette.gray100, borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-    fontSize: 14, color: Palette.gray900,
   },
   sendBtn: {
     width: 38, height: 38, borderRadius: Radius.full,

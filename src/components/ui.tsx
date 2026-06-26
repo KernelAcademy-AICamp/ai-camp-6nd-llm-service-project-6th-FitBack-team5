@@ -1,15 +1,19 @@
 /**
  * FitBack 공용 UI 컴포넌트 — docs/design-system.md §9 기준.
- * Button / Card / Icon / ProgressBar / Chip.
+ * Button / Card / Icon / ProgressBar / Chip / Input.
  */
 import type { LucideIcon } from 'lucide-react-native';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
+  TextInput,
   View,
   type StyleProp,
+  type TextInputProps,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 
@@ -32,25 +36,28 @@ export function Icon({
 }
 
 // ── 버튼 ──────────────────────────────────────────────────
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
 
 const BTN_BG: Record<ButtonVariant, string> = {
   primary: Palette.primary,
   secondary: Palette.gray100,
   ghost: 'transparent',
   danger: Palette.loss,
+  outline: Palette.white,
 };
 const BTN_FG: Record<ButtonVariant, string> = {
   primary: Palette.white,
   secondary: Palette.gray900,
   ghost: Palette.primary,
   danger: Palette.white,
+  outline: Palette.primary,
 };
 const BTN_PRESSED: Record<ButtonVariant, string> = {
   primary: Palette.primaryPressed,
   secondary: Palette.gray300,
   ghost: Palette.primaryLight,
   danger: '#C01840',
+  outline: Palette.primaryLight,
 };
 
 export function Button({
@@ -77,9 +84,10 @@ export function Button({
       disabled={off}
       style={({ pressed }) => [
         styles.btn,
-        variant === 'primary' ? styles.btnPrimary : styles.btnSecondary,
+        variant === 'primary' || variant === 'outline' ? styles.btnPrimary : styles.btnSecondary,
         { backgroundColor: pressed && !off ? BTN_PRESSED[variant] : BTN_BG[variant] },
         variant === 'ghost' && styles.btnGhost,
+        variant === 'outline' && styles.btnOutline,
         off && styles.btnDisabled,
         style,
       ]}
@@ -152,6 +160,31 @@ export function Chip({
   );
 }
 
+// ── Input ────────────────────────────────────────────────
+export function Input({
+  style,
+  textStyle,
+  ...props
+}: TextInputProps & { style?: StyleProp<ViewStyle>; textStyle?: StyleProp<TextStyle> }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View
+      style={[
+        styles.inputWrapper,
+        focused && styles.inputWrapperFocused,
+        style,
+      ]}>
+      <TextInput
+        style={[styles.inputText, textStyle]}
+        placeholderTextColor={Palette.gray500}
+        onFocus={(e) => { setFocused(true); props.onFocus?.(e); }}
+        onBlur={(e) => { setFocused(false); props.onBlur?.(e); }}
+        {...props}
+      />
+    </View>
+  );
+}
+
 // ── Progress (트랙 위 채움) ───────────────────────────────
 export function ProgressBar({
   ratio,
@@ -190,6 +223,7 @@ const styles = StyleSheet.create({
   btnPrimary: { height: 52 },
   btnSecondary: { height: 44 },
   btnGhost: { paddingHorizontal: Spacing.sm },
+  btnOutline: { borderWidth: 1, borderColor: Palette.primary },
   btnDisabled: { opacity: 0.4 },
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
 
@@ -212,4 +246,26 @@ const styles = StyleSheet.create({
   },
 
   track: { width: '100%', overflow: 'hidden' },
+
+  inputWrapper: {
+    width: '100%',
+    height: 48,
+    backgroundColor: Palette.bgSurface,
+    borderRadius: Radius.button,
+    borderWidth: 1,
+    borderColor: Palette.gray300,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+  },
+  inputWrapperFocused: {
+    borderColor: Palette.primary,
+  },
+  inputText: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontFamily: 'PretendardMedium',
+    letterSpacing: -0.4,
+    color: Palette.gray900,
+    padding: 0,
+  },
 });
