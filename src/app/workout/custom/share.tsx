@@ -5,7 +5,8 @@
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Download, Share2 } from 'lucide-react-native';
 import { useRef, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -13,6 +14,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button, Icon } from '@/components/ui';
 import {
   BottomTabInset,
+  Elevation,
   MaxContentWidth,
   Palette,
   Radius,
@@ -75,7 +77,7 @@ export default function ShareScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           <Pressable
             onPress={handleClose}
@@ -130,7 +132,7 @@ export default function ShareScreen() {
               <Image
                 source={require('../../../../assets/images/character.png')}
                 style={styles.illust}
-                resizeMode="contain"
+                contentFit="contain"
                 accessibilityLabel="오운완 캐릭터"
               />
             </View>
@@ -169,7 +171,7 @@ export default function ShareScreen() {
           <View style={styles.ctaWrap}>
             <Button
               label="이미지 저장"
-              variant="secondary"
+              variant="outline"
               icon={Download}
               loading={saving}
               onPress={handleSave}
@@ -204,7 +206,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: ScreenPadding,
-    paddingBottom: Spacing.xxl + BottomTabInset,
+    // 네이티브: NativeTabs 자체 inset 처리 → BottomTabInset 불필요. 웹: fixed 탭바 보정.
+    paddingBottom: Spacing.xxl + (Platform.OS === 'web' ? BottomTabInset : 0),
   },
 
   card: {
@@ -212,6 +215,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card,
     padding: Spacing.lg,
     marginTop: Spacing.lg,
+    ...Elevation.level1,
   },
   cardHead: {
     flexDirection: 'row',

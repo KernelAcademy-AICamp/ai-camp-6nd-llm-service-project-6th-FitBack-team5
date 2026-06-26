@@ -217,6 +217,34 @@ function resumeActiveAudio(): void {
   }
 }
 
+// Android는 expo-speech의 pause/resume 미지원 → stop 후 resume 시 재발화. 그 폴백을 위해
+// 현재 native Speech 발화를 보관.
+//   - suppressed: tts.pause/tts.stop 으로 인해 Speech.stop 을 우리가 부른 경우. expo-speech 가
+//     그때 자동 트리거하는 onDone 이 phase 진행 콜백으로 새는 걸 막는다.
+//   - tts.stop 은 utterance 자체를 null 로 (resume 으로 부활하면 안 됨)
+//   - tts.pause(Android) 는 utterance 를 유지 (resume 이 같은 text/opts 로 재발화)
+type NativeUtterance = { text: string; opts?: SpeakOptions; suppressed: boolean };
+let currentNativeUtterance: NativeUtterance | null = null;
+
+function nativeSpeak(text: string, opts?: SpeakOptions): void {
+  const u: NativeUtterance = { text, opts, suppressed: false };
+  currentNativeUtterance = u;
+  Speech.speak(text, {
+    language: 'ko-KR',
+    rate: opts?.rate ?? 1.0,
+    onDone: () => {
+      if (currentNativeUtterance === u) currentNativeUtterance = null;
+      if (u.suppressed) return;
+      opts?.onDone?.();
+    },
+    onError: () => {
+      if (currentNativeUtterance === u) currentNativeUtterance = null;
+      if (u.suppressed) return;
+      (opts?.onError ?? opts?.onDone)?.();
+    },
+  });
+}
+
 export const tts: Tts = {
   speak(text, opts) {
     const trimmed = text?.trim();
@@ -228,12 +256,7 @@ export const tts: Tts = {
       webSpeak(trimmed, opts);
       return;
     }
-    Speech.speak(trimmed, {
-      language: 'ko-KR',
-      rate: opts?.rate ?? 1.0,
-      onDone: opts?.onDone,
-      onError: opts?.onError ?? opts?.onDone,
-    });
+    nativeSpeak(trimmed, opts);
   },
   stop() {
     stopActiveAudio();
@@ -241,7 +264,13 @@ export const tts: Tts = {
       webStop();
       return;
     }
-    Speech.stop();
+    // 활성 Speech 발화가 있을 때만 stop. cached MP3 만 재생 중일 땐 Speech API 가
+    // 안드로이드 오디오 세션을 건드릴 수 있어 호출 안 함.
+    if (currentNativeUtterance) {
+      currentNativeUtterance.suppressed = true;
+      currentNativeUtterance = null;
+      Speech.stop();
+    }
   },
   pause() {
     pauseActiveAudio();
@@ -255,13 +284,16 @@ export const tts: Tts = {
       }
       return;
     }
-    // expo-speech: 일부 안드로이드에서 resume 미지원. 안전한 폴백으로 stop 후 처음부터 재발화는
-    // 호출자가 결정. 일단 표준 pause 만 호출.
-    try {
-      Speech.pause();
-    } catch {
-      // 무시
+    if (!currentNativeUtterance) return; // cached MP3 경로는 pauseActiveAudio 가 끝
+    if (Platform.OS === 'android') {
+      // Android: Speech.pause 미지원 → stop. resume 시 currentNativeUtterance 로 재발화.
+      // suppressed=true 로 자동 onDone 이 상위 콜백(phase 진행)으로 새는 것을 막는다.
+      currentNativeUtterance.suppressed = true;
+      Speech.stop();
+      return;
     }
+    // iOS: 진짜 pause. Promise rejection 도 같이 무시.
+    void Promise.resolve(Speech.pause()).catch(() => {});
   },
   resume() {
     resumeActiveAudio();
@@ -275,11 +307,15 @@ export const tts: Tts = {
       }
       return;
     }
-    try {
-      Speech.resume();
-    } catch {
-      // 무시
+    if (!currentNativeUtterance) return; // cached MP3 경로는 resumeActiveAudio 가 끝
+    if (Platform.OS === 'android') {
+      // Android: pause 가 stop 이었으므로 resume 은 큐를 처음부터 다시 발화.
+      // (Android TTS 엔진은 native pause 자체를 지원 안 함 → 위치 보존 불가능)
+      const { text, opts } = currentNativeUtterance;
+      nativeSpeak(text, opts);
+      return;
     }
+    void Promise.resolve(Speech.resume()).catch(() => {});
   },
 };
 
@@ -403,7 +439,8 @@ function nativePlayAudioUrl(
     activeNativePlayerStopper = stopThisPlayer;
     activeNativePlayerPauser = pauseThisPlayer;
     activeNativePlayerResumer = resumeThisPlayer;
-    player.playbackRate = rate;
+    // expo-audio v56: playbackRate 는 read-only 프로퍼티. 반드시 setter 메서드 사용.
+    player.setPlaybackRate(rate);
     player.addListener('playbackStatusUpdate', (status) => {
       if (status.didJustFinish) finish(onDone);
       // status.isLoaded === false 인 채 시간이 흘러도 어차피 외부 fallback timer 가 처리.

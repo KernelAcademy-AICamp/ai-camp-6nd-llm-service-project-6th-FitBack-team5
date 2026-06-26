@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +15,13 @@ import { useProfile } from '@/features/auth/useProfile';
 import { OnboardingFlow } from '@/features/onboarding/OnboardingFlow';
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/stores/auth';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  environment: __DEV__ ? 'development' : (process.env.EXPO_PUBLIC_SENTRY_ENV ?? 'preview'),
+  enabled: !__DEV__ && !!process.env.EXPO_PUBLIC_SENTRY_DSN,
+  tracesSampleRate: 0.1,
+});
 
 // 라이트 전용 (디자인 시스템: 웜 오프화이트 배경)
 const FitBackTheme = {
@@ -90,7 +98,7 @@ function SplashScreen({ opacity }: { opacity: Animated.Value }) {
   );
 }
 
-export default function TabLayout() {
+export default Sentry.wrap(function TabLayout() {
   const [fontsLoaded] = useFonts({
     Pretendard: require('@/assets/fonts/Pretendard-Regular.otf'),
     PretendardMedium: require('@/assets/fonts/Pretendard-Medium.otf'),
@@ -126,7 +134,7 @@ export default function TabLayout() {
       <AppShell />
     </QueryClientProvider>
   );
-}
+});
 
 const loadingStyles = StyleSheet.create({
   container: {
