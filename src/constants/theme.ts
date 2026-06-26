@@ -186,5 +186,7 @@ export const Elevation: Record<'level1' | 'level2' | 'sticky', ViewStyle> = {
   }) as ViewStyle,
 };
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80, web: 54 }) ?? 0;
+// 웹: 탭바가 position:absolute로 콘텐츠 위에 겹침 → 54px 보정 필요
+// 네이티브: 탭바가 flex layout 안에서 콘텐츠 아래에 위치 → 보정 불필요
+export const BottomTabInset = Platform.select({ web: 54 }) ?? 0;
 export const MaxContentWidth = 800;
