@@ -72,6 +72,9 @@
     "web": "expo start --web",
     "build:web": "expo export --platform web",
     "lint": "expo lint",
+    "preflight": "node ./scripts/check-lock.js",
+    "build:dev": "npm run preflight && eas build --profile development --platform android",
+    "build:preview": "npm run preflight && eas build --profile preview --platform android",
     "db:build": "node ./scripts/build-setup-sql.js",
     "db:push": "node ./scripts/build-setup-sql.js && node ./scripts/db-push.js"
   },
