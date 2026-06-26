@@ -52,35 +52,47 @@ function rangeText(days: { date: string }[]): string {
   return `(${fmt(days[0].date)} ~ ${fmt(days[days.length - 1].date)})`;
 }
 
-export function WeekStatusCard({ selectedDate }: { selectedDate?: string }) {
-  const { data, isLoading } = useThisWeekWorkouts(selectedDate);
-
+/** 주간 현황 카드 표시부 — 데이터 주입형(홈트/센터 공용). */
+export function WeekStatusView({
+  title,
+  days,
+  isLoading,
+}: {
+  title: string;
+  days?: WeekDay[];
+  isLoading: boolean;
+}) {
   return (
     <ThemedView
       type="backgroundElement"
       style={[styles.card, { borderColor: Palette.lineDefault }, Elevation.level1]}>
       <View style={styles.titleRow}>
-        <ThemedText type="smallBold">이번 주 홈트 현황</ThemedText>
-        {data && (
+        <ThemedText type="smallBold">{title}</ThemedText>
+        {days && (
           <ThemedText type="label" themeColor="textSecondary">
-            {rangeText(data)}
+            {rangeText(days)}
           </ThemedText>
         )}
       </View>
 
-      {isLoading || !data ? (
+      {isLoading || !days ? (
         <ThemedText type="small" themeColor="textSecondary">
           기록을 불러오는 중…
         </ThemedText>
       ) : (
         <View style={styles.row}>
-          {data.map((d) => (
+          {days.map((d) => (
             <DayCell key={d.date} d={d} />
           ))}
         </View>
       )}
     </ThemedView>
   );
+}
+
+export function WeekStatusCard({ selectedDate }: { selectedDate?: string }) {
+  const { data, isLoading } = useThisWeekWorkouts(selectedDate);
+  return <WeekStatusView title="이번 주 홈트 현황" days={data} isLoading={isLoading} />;
 }
 
 const styles = StyleSheet.create({
