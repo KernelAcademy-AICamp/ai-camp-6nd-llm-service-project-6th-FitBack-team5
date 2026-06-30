@@ -32,7 +32,7 @@ const FitBackTheme = {
 function AppShell() {
   useAuthBootstrap();
   const status = useAuthStore((s) => s.status);
-  const { data: profile, isLoading: profileLoading } = useProfile();
+  const { data: profile, isLoading: profileLoading, isError: profileError } = useProfile();
 
   if (status === 'loading') {
     return (
@@ -46,8 +46,8 @@ function AppShell() {
     return <LoginScreen />;
   }
 
-  // 프로필 로딩 중 — 깜빡임 방지
-  if (profileLoading) {
+  // 프로필 로딩 중 — 깜빡임 방지 (에러 시엔 스피너 해제하고 탭 진입)
+  if (profileLoading && !profileError) {
     return (
       <View style={loadingStyles.container}>
         <ActivityIndicator color={Palette.primary} />

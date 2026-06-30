@@ -31,12 +31,13 @@ export function useProfile() {
   return useQuery<Profile | null>({
     queryKey: ['profile', user?.id],
     enabled: !!user,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!user) return null;
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
+        .abortSignal(signal)
         .single();
       if (error) throw error;
       return data as Profile;
